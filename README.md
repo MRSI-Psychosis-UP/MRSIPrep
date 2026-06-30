@@ -1,7 +1,6 @@
 # *MRSIPrep*: A Robust Preprocessing Pipeline for Whole-Brain MRSI Data
 
-*MRSIPrep* is a preprocessing and derivative-generation pipeline for already
-quantified whole-brain MRSI maps, run as a BIDS App via Docker.
+
 
 [![Docker Pulls](https://img.shields.io/docker/pulls/fedlucchetti/mrsiprep)](https://hub.docker.com/r/fedlucchetti/mrsiprep)
 [![Documentation Status](https://app.readthedocs.org/projects/mrsiprep/badge/?version=latest)](https://mrsiprep.readthedocs.io/en/latest/)
@@ -9,11 +8,11 @@ quantified whole-brain MRSI maps, run as a BIDS App via Docker.
 
 ## About
 
-`MRSIPrep` does not perform spectral fitting. It expects quantified MRSI maps,
-quality maps, and T1w images as input. Its default light mode normalizes MRSI
+*MRSIPrep* is a preprocessing and derivative-generation pipeline for already
+quantified whole-brain MRSI maps, run as a BIDS App via Docker. Its default light mode normalizes MRSI
 maps and uses fast SynthSeg cortical parcellation for parcelwise anatomical
 coverage and CRLB reporting. Full mode adds SynthSeg+FAST tissue maps,
-PETPVC, and Chimera/MNI-atlas regional profile extraction.
+PETPVC, and Chimera/MNI-atlas regional profile extraction for metabolic connectivty computation.
 
 **Full documentation, installation, and usage instructions are on
 [Read the Docs](https://mrsiprep.readthedocs.io/en/latest/).**
