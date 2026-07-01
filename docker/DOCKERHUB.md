@@ -30,13 +30,15 @@ docker run --rm \
   /data /out participant \
   --participant-label S001 \
   --session-label V1 \
-  --mode light \
+  --mode mni-norm \
   --nthreads 8
 ```
 
-`mrsiprep` does not perform spectral fitting; it expects quantified MRSI
-maps, quality maps (CRLB/SNR/linewidth), and T1w images already in BIDS
-layout. Use `--validate-only` to check inputs before an expensive batch run.
+*MRSIPrep* is a preprocessing and derivative-generation pipeline for already
+quantified whole-brain MRSI maps, run as a BIDS App via Docker. Its default light mode normalizes MRSI
+maps and uses fast SynthSeg cortical parcellation for parcelwise anatomical
+coverage and CRLB reporting. `parc-con` mode adds SynthSeg+FAST tissue maps,
+PETPVC, and Chimera/MNI-atlas regional profile extraction for metabolic connectivty computation.
 
 ## License
 

@@ -21,7 +21,7 @@ docker run --rm \
   /data /out participant \
   --participant-label S001 \
   --session-label V1 \
-  --mode light \
+  --mode mni-norm \
   --nthreads 8
 ```
 

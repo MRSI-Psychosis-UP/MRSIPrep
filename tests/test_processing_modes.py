@@ -59,7 +59,7 @@ class ProcessingModeTests(unittest.TestCase):
                 no_pvc=False,
                 mrsi_parcel_dir=root / "mrsi_parcel",
                 bids_dir=root / "dataset",
-                processing_mode="full",
+                processing_mode="parc-con",
                 chimera_grow=2,
             )
             parcels = ParcellationResult(atlas_mrsi=atlas, labels=labels, mode="chimera", atlas_name="chimeraLFMIHIFIS", scale="3")

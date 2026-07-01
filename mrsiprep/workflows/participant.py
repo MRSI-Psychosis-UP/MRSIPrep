@@ -98,7 +98,7 @@ def _gather_input_availability(config, subject: str, session: str | None) -> dic
         transforms[stage] = bool(stage_paths and all(path.exists() for path in stage_paths))
 
     freesurfer_status: bool | None = None
-    if config.processing_mode == "full" and config.parcellation_mode == "chimera":
+    if config.processing_mode == "parc-con" and config.parcellation_mode == "chimera":
         raw_t1 = layout.raw_t1(subject, session)
         if raw_t1 is not None:
             fs_subject = freesurfer_subject_id(raw_t1)
@@ -199,7 +199,7 @@ def _render_preflight_table(config, summaries: list[dict], debug: Debug) -> None
             missing_items.append("SNR")
         if "linewidth" in config.quality_metrics and not row["fwhm"]:
             missing_items.append("FWHM")
-        if config.processing_mode == "full" and config.tissue_backend == "existing" and "red" in row["tissue"]:
+        if config.processing_mode == "parc-con" and config.tissue_backend == "existing" and "red" in row["tissue"]:
             missing_items.append("Tissue")
 
         if missing_items:
@@ -340,7 +340,7 @@ def validate_participant_inputs(config) -> list[RecordingStatus]:
 def _validate_backend_inputs(config, subject: str, session: str | None) -> None:
     layout = BIDSLayout(config.bids_dir)
     raw_t1 = layout.raw_t1(subject, session)
-    if config.processing_mode == "light" and raw_t1 is None:
+    if config.processing_mode == "mni-norm" and raw_t1 is None:
         raise FileNotFoundError(f"Missing raw T1w required for light-mode SynthSeg parcellation: sub-{subject} ses-{session}")
     if config.tissue_backend == "synthseg-fast" and raw_t1 is None:
         raise FileNotFoundError(f"Missing raw T1w required for {config.tissue_backend}: sub-{subject} ses-{session}")
@@ -361,12 +361,12 @@ def _step_tissue_segmentation(config, subject, session, raw_t1, t1_path, debug):
     p3_override = None
     brain_mask_override = None
     with debug.step("Tissue segmentation"):
-        if config.processing_mode == "light":
+        if config.processing_mode == "mni-norm":
             synthseg_brain, synthseg_mask = extract_t1_synthseg(config, subject, session, raw_t1)
             if config.registration_t1_target == "brain":
                 t1_path = synthseg_brain
                 brain_mask_override = synthseg_mask
-        elif config.processing_mode == "full" and config.tissue_backend == "synthseg-fast":
+        elif config.processing_mode == "parc-con" and config.tissue_backend == "synthseg-fast":
             if raw_t1 is None:
                 raise FileNotFoundError(f"Missing raw T1w required for SynthSeg+FAST segmentation: sub-{subject} ses-{session}")
             precomputed_tissue_t1 = segment_t1_synthseg_fast(config, subject, session, raw_t1)
@@ -394,7 +394,7 @@ def _step_registration(config, subject, session, mrsi, anat, debug):
 
 
 def _step_tissue_probmaps(config, subject, session, anat, mrsi, registration, precomputed_tissue_t1, debug):
-    if config.processing_mode != "full":
+    if config.processing_mode != "parc-con":
         return None
     with debug.step("Tissue probability maps in MRSI space"):
         return run_tissue_workflow(
@@ -414,7 +414,7 @@ def _step_pvc(config, subject, session, mrsi, tissue, debug):
     mrsi.preproc_maps unchanged when full-mode PVC is not applicable."""
     corrected_maps = mrsi.preproc_maps
     tissue_4d = None
-    if config.processing_mode == "full" and not config.no_pvc:
+    if config.processing_mode == "parc-con" and not config.no_pvc:
         assert tissue is not None
         with debug.step("Partial volume correction"):
             tissue_4d = create_tissue_4d(config, subject, session, tissue.mrsi, mrsi.reference)
@@ -479,10 +479,10 @@ def _step_synthseg_parcellation_qc(config, subject, session, raw_t1, mrsi, regis
 
 def _step_parcellation(config, subject, session, raw_t1, mrsi, anat, registration, preliminary_parcels, debug):
     """Returns (parcels, qc_report_parcellation). parcels defaults to the
-    preliminary SynthSeg parcellation outside full mode."""
+    preliminary SynthSeg parcellation outside parc-con mode."""
     parcels = preliminary_parcels
     qc_report_parcellation = None
-    if config.processing_mode == "full":
+    if config.processing_mode == "parc-con":
         with debug.step("Parcellation"):
             parcels = run_parcellation_workflow(
                 config,
@@ -531,7 +531,7 @@ def _step_connectivity(config, subject, session, regional, parcels, corrected_ma
 
 
 def _step_metprofiles(config, subject, session, corrected_maps, mrsi, parcels, regional, anat):
-    if config.processing_mode != "full":
+    if config.processing_mode != "parc-con":
         return None
     return export_metprofile_npz(
         config,
@@ -573,7 +573,7 @@ def run_single_recording(config, subject: str, session: str | None) -> dict:
     registration = _step_registration(config, subject, session, mrsi, anat, debug)
     tissue = _step_tissue_probmaps(config, subject, session, anat, mrsi, registration, precomputed_tissue_t1, debug)
 
-    dseg_for_qc = synthseg_native_labels_path(config, subject, session) if config.processing_mode == "full" and config.tissue_backend == "synthseg-fast" else None
+    dseg_for_qc = synthseg_native_labels_path(config, subject, session) if config.processing_mode == "parc-con" and config.tissue_backend == "synthseg-fast" else None
     qc_report_tissue = write_tissue_qc_report(config, subject, session, raw_t1, dseg_for_qc, tissue.t1 if tissue is not None else None)
 
     corrected_maps, tissue_4d = _step_pvc(config, subject, session, mrsi, tissue, debug)

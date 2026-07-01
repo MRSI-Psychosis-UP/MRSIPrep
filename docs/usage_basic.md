@@ -11,17 +11,17 @@ docker run --rm \
   /data /out participant \
   --participant-label S001 \
   --session-label V1 \
-  --mode light \
+  --mode mni-norm \
   --output-spaces T1w MNI152NLin2009cAsym \
   --synthseg-mode fast \
   --nthreads 8
 ```
 
-Light mode registers the imported MRSI signal maps to a SynthSeg-extracted
+`mni-norm` registers the imported MRSI signal maps to a SynthSeg-extracted
 T1w image, writes the requested T1w/MNI maps without filtering or PVC, and
 runs SynthSeg with cortical parcellation. Its parcel QC table reports the
 percentage of each anatomical T1w parcel covered by MRSI, parcelwise CRLB,
-and valid-voxel fractions. Light mode does not run FAST, PETPVC, Chimera, or
+and valid-voxel fractions. `mni-norm` does not run FAST, PETPVC, Chimera, or
 `recon-all`.
 
 SynthSeg-based brain extraction always retains the whole brain (GM, WM,
@@ -47,7 +47,7 @@ starting an expensive batch run.
 
 The preflight table shows, per recording: T1w reference, MRSI file count,
 CRLB/SNR/FWHM quality map availability, brainmask, tissue files, a
-FreeSurfer column (shown only in full mode with Chimera parcellation,
+FreeSurfer column (shown only in parc-con mode with Chimera parcellation,
 indicating whether a valid prior `recon-all` output already exists and will
 be reused), and the MRSI→T1/T1→MNI transform status.
 
@@ -60,7 +60,7 @@ docker run --rm \
   fedlucchetti/mrsiprep:cpu \
   /data /out participant \
   --participants participants.tsv \
-  --mode full \
+  --mode parc-con \
   --verbose 1 \
   --nthreads 8 \
   --nproc 4
@@ -93,11 +93,11 @@ summary before any recordings are processed — e.g. on a 32-core machine,
 `--nproc 4 --nthreads 10` (40 threads) is coerced down to `--nthreads 8` (32
 threads).
 
-Light mode requires `mri_synthseg` and ANTs. Full mode with the default
+`mni-norm` requires `mri_synthseg` and ANTs. `parc-con` with the default
 `synthseg-fast` tissue backend additionally requires FSL `fast`, PETPVC, and
 (for Chimera parcellation) `recon-all` and a valid `FS_LICENSE`.
 
-## Tissue backends (full mode)
+## Tissue backends (parc-con mode)
 
 ```bash
 docker run --rm \
@@ -107,7 +107,7 @@ docker run --rm \
   /data /out participant \
   --participant-label S001 \
   --session-label V1 \
-  --mode full \
+  --mode parc-con \
   --tissue-backend existing
 ```
 
@@ -131,7 +131,7 @@ docker run --rm \
   /data /out participant \
   --participant-label S001 \
   --session-label V1 \
-  --mode full \
+  --mode parc-con \
   --tissue-backend none
 ```
 
@@ -161,10 +161,10 @@ docker run --rm \
 
 | Argument | Choices / Default | Description |
 | --- | --- | --- |
-| `--mode` (alias `--processing-mode`) | `light`, `full` / `light` | `light`: SynthSeg extraction + parcellation only, no FAST/PVC/Chimera/`recon-all`. `full`: adds tissue probability maps, PVC, and Chimera/MNI-atlas parcellation. |
-| `--tissue-backend` | `synthseg-fast`, `existing`, `none` / `synthseg-fast` | How GM/WM/CSF probability maps are produced in full mode. `synthseg-fast` segments with SynthSeg+FAST; `existing` reuses precomputed CAT12 maps from `derivatives/skullstrip`/`derivatives/cat12`; `none` disables tissue segmentation and PVC entirely. |
+| `--mode` (alias `--processing-mode`) | `mni-norm`, `parc-con` / `mni-norm` | `mni-norm`: SynthSeg extraction + parcellation only, no FAST/PVC/Chimera/`recon-all`. `parc-con`: adds tissue probability maps, PVC, and Chimera/MNI-atlas parcellation. |
+| `--tissue-backend` | `synthseg-fast`, `existing`, `none` / `synthseg-fast` | How GM/WM/CSF probability maps are produced in parc-con mode. `synthseg-fast` segments with SynthSeg+FAST; `existing` reuses precomputed CAT12 maps from `derivatives/skullstrip`/`derivatives/cat12`; `none` disables tissue segmentation and PVC entirely. |
 | `--synthseg-mode` | `fast`, `standard`, `robust` / `robust` | SynthSeg accuracy/speed trade-off; `fast` and `robust` are never combined. SynthSeg thread count is taken from `--nthreads`. |
-| `--registration-t1-target` | `brain-csf`, `brain`, `raw` / `brain-csf` (full mode), `brain` (light mode) | Which T1w variant MRSI is registered to. |
+| `--registration-t1-target` | `brain-csf`, `brain`, `raw` / `brain-csf` (parc-con mode), `brain` (mni-norm mode) | Which T1w variant MRSI is registered to. |
 | `--csf-pv-threshold` | `0.95` | CSF partial-volume threshold used when building registration masks. |
 | `--fs-subjects-dir` | none | Existing FreeSurfer `SUBJECTS_DIR` to reuse/write into (used by Chimera parcellation). |
 
@@ -174,7 +174,7 @@ docker run --rm \
 | --- | --- | --- |
 | `--no-filter` | off | Disable biharmonic spike-repair filtering of MRSI maps. |
 | `--spikepc` | `99.0` | Percentile threshold used for spike detection. |
-| `--no-pvc` | off | Disable partial-volume correction (full mode only; always disabled in light mode). |
+| `--no-pvc` | off | Disable partial-volume correction (parc-con mode only; always disabled in mni-norm mode). |
 
 ### Performance, logging, and control flow
 
@@ -207,7 +207,7 @@ docker run --rm \
 <out>/mrsiprep/sub-*/ses-*/transforms/     ANTs MRSI→T1w and T1w→MNI transforms
 <out>/chimera/sub-*/ses-*/anat/              raw Chimera atlas outputs (one scheme/scale per file)
 <out>/mrsiprep/sub-*/ses-*/connectomics/   matrices, nodes, and edges
-<out>/mrsi_parcel/sub-*/ses-*/mrsi/        full-mode metabolite profile NPZ files
+<out>/mrsi_parcel/sub-*/ses-*/mrsi/        parc-con mode metabolite profile NPZ files
 <out>/mrsiprep/logs/                       full-detail timestamped run logs (independent of --verbose)
 ```
 

@@ -35,7 +35,7 @@ def validate_recording(config: MRSIPrepConfig, subject: str, session: str | None
     if missing_quality:
         raise ValidationError(f"Missing quality maps for sub-{subject} ses-{session}: {', '.join(missing_quality)}")
 
-    if config.processing_mode == "full" and config.tissue_backend == "existing":
+    if config.processing_mode == "parc-con" and config.tissue_backend == "existing":
         missing_pv = []
         for index in (1, 2, 3):
             pv = layout.cat12_probseg(subject, session, index)

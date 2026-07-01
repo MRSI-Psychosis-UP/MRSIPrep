@@ -9,11 +9,12 @@ quantified whole-brain MRSI maps, run as a BIDS App via Docker.
 
 ## About
 
-`MRSIPrep` does not perform spectral fitting. It expects quantified MRSI
-maps, quality maps, and T1w images as input, and produces BIDS-organized
-derivatives: filtered/normalized MRSI maps, tissue probability maps,
-anatomical parcellations, and regional metabolite tables. It is derived from
-the implementation in `MRSI-Metabolic-Connectome` and preserves the CHUV
+*MRSIPrep* is a preprocessing and derivative-generation pipeline for already
+quantified whole-brain MRSI maps, run as a BIDS App via Docker. Its default `mni-norm` mode normalizes MRSI
+maps and uses fast SynthSeg cortical parcellation for parcelwise anatomical
+coverage and CRLB reporting. `parc-con` mode adds SynthSeg+FAST tissue maps,
+PETPVC, and Chimera/MNI-atlas regional profile extraction for metabolic connectivity computation.
+It is derived from the implementation in `MRSI-Metabolic-Connectome` and preserves the CHUV
 academic non-commercial research license.
 
 ## What it uses
@@ -31,16 +32,16 @@ academic non-commercial research license.
 
 MRSIPrep runs in one of two modes, selected with `--mode`:
 
-- **Light mode** — registers MRSI maps to a SynthSeg-extracted T1w image,
+- **`mni-norm`** (MNI normalization, default) — registers MRSI maps to a SynthSeg-extracted T1w image,
   resamples to the requested output spaces, and parcellates with SynthSeg
   cortical/subcortical labels. No tissue PVC, no Chimera, no `recon-all`.
   This is the fast default path for anatomical coverage and CRLB reporting.
-- **Full mode** — adds SynthSeg+FAST tissue probability maps, partial-volume
+- **`parc-con`** (parcellation and connectivity) — adds SynthSeg+FAST tissue probability maps, partial-volume
   correction, and a choice of Chimera multi-atlas or bundled MNI-atlas
   parcellation, plus optional perturbation-based connectivity matrices.
 
 Both modes share the same MRSI filtering, quality-masking, and T1w/MNI
-normalization machinery; full mode is a superset of light mode's outputs.
+normalization machinery; `parc-con` mode is a superset of `mni-norm` outputs.
 
 ## Design Principles
 

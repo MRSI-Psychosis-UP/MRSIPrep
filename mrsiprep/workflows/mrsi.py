@@ -46,7 +46,7 @@ def run_mrsi_workflow(config, subject: str, session: str | None, inputs: MRSIInp
     _symlink_quality_maps(config, subject, session, inputs)
     brainmask = ensure_brainmask(config, subject, session, inputs.brainmask, inputs.water_map, inputs.metabolite_maps)
     preproc = inputs.metabolite_maps
-    if config.processing_mode == "full":
+    if config.processing_mode == "parc-con":
         preproc = filter_metabolite_maps(config, subject, session, inputs.metabolite_maps, brainmask)
     reference = generate_reference(config, subject, session, preproc, preferred_met=config.ref_met)
     qcmasks, qc_summary = make_quality_masks(

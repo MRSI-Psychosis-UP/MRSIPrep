@@ -38,7 +38,7 @@ class NumpyEncoder(json.JSONEncoder):
 
 def required_external_tools(config=None) -> list[str]:
     tools = ["antsRegistrationSyN.sh", "antsRegistration", "antsApplyTransforms", "N4BiasFieldCorrection", "mri_synthseg"]
-    full = config is None or getattr(config, "processing_mode", "full") == "full"
+    full = config is None or getattr(config, "processing_mode", "parc-con") == "parc-con"
     tissue_backend = getattr(config, "tissue_backend", "synthseg-fast") if config is not None else "synthseg-fast"
     if full and tissue_backend == "synthseg-fast":
         tools.append("fast")

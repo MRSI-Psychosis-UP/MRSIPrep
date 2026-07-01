@@ -46,7 +46,7 @@ raw T1 * selected SynthSeg label mask
 ```
 
 6. Use the masked T1 and mask as the MRSI-to-T1 registration target.
-7. In full mode, run FSL FAST on the masked T1.
+7. In parc-con mode, run FSL FAST on the masked T1.
 8. Zero all GM/WM/CSF probabilities where the native-space SynthSeg label is
    `0`.
 9. Correct small GM/WM leakage into the SynthSeg exterior CSF layer: where

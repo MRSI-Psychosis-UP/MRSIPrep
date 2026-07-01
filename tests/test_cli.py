@@ -5,9 +5,9 @@ from mrsiprep.cli.parser import parse_args
 
 
 class CLITests(unittest.TestCase):
-    def test_cli_defaults_to_light_mode(self):
+    def test_cli_defaults_to_mni_norm_mode(self):
         cfg = parse_args(["/tmp/bids", "/tmp/derivatives", "participant", "--participant-label", "sub-S001"])
-        self.assertEqual(cfg.processing_mode, "light")
+        self.assertEqual(cfg.processing_mode, "mni-norm")
         self.assertEqual(cfg.registration_t1_target, "brain")
         self.assertEqual(cfg.parcellation_mode, "synthseg")
         self.assertEqual(cfg.synthseg_mode, "robust")
@@ -16,9 +16,9 @@ class CLITests(unittest.TestCase):
         self.assertEqual(cfg.tissue_backend, "synthseg-fast")
         self.assertEqual(cfg.derivative_dir, Path("/tmp/derivatives/mrsiprep"))
 
-    def test_cli_full_mode_defaults_to_chimera_and_synthseg_brain(self):
-        cfg = parse_args(["/tmp/bids", "/tmp/out", "participant", "--mode", "full"])
-        self.assertEqual(cfg.processing_mode, "full")
+    def test_cli_parc_con_mode_defaults_to_chimera_and_synthseg_brain(self):
+        cfg = parse_args(["/tmp/bids", "/tmp/out", "participant", "--mode", "parc-con"])
+        self.assertEqual(cfg.processing_mode, "parc-con")
         self.assertEqual(cfg.registration_t1_target, "brain-csf")
         self.assertEqual(cfg.parcellation_mode, "chimera")
         self.assertEqual(cfg.derivative_dir, Path("/tmp/out/mrsiprep"))
@@ -28,13 +28,13 @@ class CLITests(unittest.TestCase):
         cfg = parse_args(["/tmp/bids", "/tmp/derivatives/mrsiprep", "participant"])
         self.assertEqual(cfg.derivative_dir, Path("/tmp/derivatives/mrsiprep"))
 
-    def test_cli_full_mode_accepts_mni_atlas(self):
+    def test_cli_parc_con_mode_accepts_mni_atlas(self):
         cfg = parse_args([
             "/tmp/bids",
             "/tmp/out",
             "participant",
             "--mode",
-            "full",
+            "parc-con",
             "--parcellation-mode",
             "mni",
             "--atlas",
@@ -51,7 +51,7 @@ class CLITests(unittest.TestCase):
             "/tmp/out",
             "participant",
             "--mode",
-            "full",
+            "parc-con",
             "--parcellation-mode",
             "mni",
             "--output-spaces",
@@ -59,7 +59,7 @@ class CLITests(unittest.TestCase):
         ])
         self.assertEqual(cfg.output_spaces, ["MNI152NLin2009cAsym"])
 
-    def test_cli_rejects_chimera_in_light_mode(self):
+    def test_cli_rejects_chimera_in_mni_norm_mode(self):
         with self.assertRaises(ValueError):
             parse_args(["/tmp/bids", "/tmp/out", "participant", "--parcellation-mode", "chimera"])
 
@@ -68,7 +68,7 @@ class CLITests(unittest.TestCase):
         self.assertEqual(cfg.tissue_backend, "synthseg-fast")
 
     def test_cli_none_tissue_backend_forces_no_pvc(self):
-        cfg = parse_args(["/tmp/bids", "/tmp/out", "participant", "--mode", "full", "--tissue-backend", "none"])
+        cfg = parse_args(["/tmp/bids", "/tmp/out", "participant", "--mode", "parc-con", "--tissue-backend", "none"])
         self.assertEqual(cfg.tissue_backend, "none")
         self.assertTrue(cfg.no_pvc)
 
@@ -82,7 +82,7 @@ class CLITests(unittest.TestCase):
             "/tmp/out",
             "participant",
             "--mode",
-            "full",
+            "parc-con",
             "--parcellation-mode",
             "chimera",
             "--fs-subjects-dir",

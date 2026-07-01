@@ -11,7 +11,7 @@ docker run --rm \
   /data /out participant \
   --participant-label S001 \
   --session-label V1 \
-  --mode light \
+  --mode mni-norm \
   --output-spaces T1w MNI152NLin2009cAsym \
   --mni-resolution t1wres \
   --nthreads 16
@@ -42,7 +42,7 @@ docker run --rm \
   /data /out participant \
   --participant-label S001 \
   --session-label V1 \
-  --mode full \
+  --mode parc-con \
   --normalization ants-syn \
   --output-spaces MNI152NLin2009cAsym \
   --nthreads 16
@@ -61,7 +61,7 @@ pipeline.
 | `--output-spaces` | `T1w MNI152NLin2009cAsym` | Which space(s) to resample final MRSI maps into: `MRSI`, `T1w`, `MNI152NLin2009cAsym` (aliases `mrsi`, `t1`, `mni` accepted). |
 | `--mni-resolution` | `origres`, `t1wres`, `<N>mm` / `t1wres` | MNI template resolution for both T1w→MNI registration and final resampling. |
 | `--ref-met` | `CrPCr` | Reference metabolite map used to build the MRSI registration target. |
-| `--registration-t1-target` | `brain-csf`, `brain`, `raw` / `brain-csf` (full mode), `brain` (light mode) | Which T1w variant MRSI is registered to. |
+| `--registration-t1-target` | `brain-csf`, `brain`, `raw` / `brain-csf` (parc-con mode), `brain` (mni-norm mode) | Which T1w variant MRSI is registered to. |
 | `--transform-spikemask` | off | Also transform per-metabolite spike masks into T1w/MNI space (the combined QC mask is never transformed). |
 | `--transform` | `""` | Legacy output-transform override; prefer `--output-spaces`. |
 | `--overwrite-t1-reg` | off | Force-rerun MRSI→T1w registration only. |

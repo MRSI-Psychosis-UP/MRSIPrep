@@ -1,6 +1,6 @@
 # Parcellation and Connectivity Usage
 
-Full mode supports two parcellation backends — Chimera's multi-atlas fusion
+`parc-con` mode supports two parcellation backends — Chimera's multi-atlas fusion
 or a bundled MNI atlas — plus optional perturbation-based connectivity
 matrices computed from regional metabolite values.
 
@@ -15,14 +15,14 @@ docker run --rm \
   fedlucchetti/mrsiprep:cpu \
   /data /out participant \
   --participant-label S001 --session-label V1 \
-  --mode full \
+  --mode parc-con \
   --tissue-backend synthseg-fast \
   --parcellation-mode chimera \
   --chimera-scheme LFMIHIFIFF --chimera-scale 3
 ```
 
 Chimera parcellation requires `recon-all` and a valid `FS_LICENSE` — mount a
-FreeSurfer license file as shown above. Full mode also writes a
+FreeSurfer license file as shown above. `parc-con` mode also writes a
 legacy-compatible parcel profile archive under
 `<out>/mrsi_parcel/sub-*/ses-*/mrsi/*desc-metprofiles_mrsi.npz`.
 
@@ -37,7 +37,7 @@ docker run --rm \
   fedlucchetti/mrsiprep:cpu \
   /data /out participant \
   --participant-label S001 --session-label V1 \
-  --mode full \
+  --mode parc-con \
   --tissue-backend synthseg-fast \
   --parcellation-mode mni --atlas chimera-LFMIHIFIS-3
 ```
@@ -54,7 +54,7 @@ docker run --rm \
   fedlucchetti/mrsiprep:cpu \
   /data /out participant \
   --participant-label S001 --session-label V1 \
-  --mode full \
+  --mode parc-con \
   --parcellation-mode mni --atlas chimera-LFMIHIFIS-3 \
   --write-connectivity \
   --connectivity-method spearman \
@@ -70,7 +70,7 @@ quantification uncertainty into the connectivity estimate.
 
 | Argument | Choices / Default | Description |
 | --- | --- | --- |
-| `--parcellation-mode` | `synthseg`, `chimera`, `mni` / mode-dependent | Light mode only supports `synthseg`; full mode requires `chimera` or `mni`. |
+| `--parcellation-mode` | `synthseg`, `chimera`, `mni` / mode-dependent | `mni-norm` only supports `synthseg`; `parc-con` requires `chimera` or `mni`. |
 | `--atlas` | `chimera-LFMIHIFIS-3` | Bundled MNI atlas name (used with `--parcellation-mode mni`). |
 | `--custom-atlas` | none | Path to a custom atlas NIfTI. |
 | `--custom-atlas-lut` | none | Path to the lookup table for `--custom-atlas`. |

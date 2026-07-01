@@ -22,7 +22,7 @@ class MRSIPrepConfig:
     snr_min: float = QUALITY_DEFAULTS["snr_min"]
     linewidth_max: float = QUALITY_DEFAULTS["linewidth_max"]
     crlb_max: float = QUALITY_DEFAULTS["crlb_max"]
-    processing_mode: str = "light"
+    processing_mode: str = "mni-norm"
     tissue_backend: str = "synthseg-fast"
     registration_backend: str = "ants"
     normalization: str = "simple"
@@ -79,7 +79,7 @@ class MRSIPrepConfig:
             self.work_dir = Path(self.work_dir).resolve()
         if self.fs_subjects_dir is not None:
             self.fs_subjects_dir = Path(self.fs_subjects_dir).resolve()
-        if self.processing_mode not in {"light", "full"}:
+        if self.processing_mode not in {"mni-norm", "parc-con"}:
             raise ValueError(f"Unsupported processing mode: {self.processing_mode}")
         if self.synthseg_mode not in {"fast", "standard", "robust"}:
             raise ValueError(f"Unsupported SynthSeg mode: {self.synthseg_mode}")
@@ -88,16 +88,16 @@ class MRSIPrepConfig:
         if self.tissue_backend == "none":
             self.no_pvc = True
         if self.registration_t1_target is None:
-            self.registration_t1_target = "brain" if self.processing_mode == "light" else "brain-csf"
+            self.registration_t1_target = "brain" if self.processing_mode == "mni-norm" else "brain-csf"
         if self.parcellation_mode is None:
-            self.parcellation_mode = "synthseg" if self.processing_mode == "light" else "chimera"
-        if self.processing_mode == "light" and self.parcellation_mode != "synthseg":
-            raise ValueError("Light mode only supports SynthSeg parcellation. Use --mode full for Chimera or MNI atlases.")
-        if self.processing_mode == "light" and self.registration_t1_target not in {"brain", "raw"}:
-            raise ValueError("Light mode supports SynthSeg brain or raw T1w registration targets.")
-        if self.processing_mode == "full" and self.parcellation_mode == "synthseg":
-            raise ValueError("Full mode requires Chimera or MNI atlas parcellation.")
-        if self.processing_mode == "light":
+            self.parcellation_mode = "synthseg" if self.processing_mode == "mni-norm" else "chimera"
+        if self.processing_mode == "mni-norm" and self.parcellation_mode != "synthseg":
+            raise ValueError("mni-norm only supports SynthSeg parcellation. Use --mode parc-con for Chimera or MNI atlases.")
+        if self.processing_mode == "mni-norm" and self.registration_t1_target not in {"brain", "raw"}:
+            raise ValueError("mni-norm supports SynthSeg brain or raw T1w registration targets.")
+        if self.processing_mode == "parc-con" and self.parcellation_mode == "synthseg":
+            raise ValueError("parc-con requires Chimera or MNI atlas parcellation.")
+        if self.processing_mode == "mni-norm":
             self.no_pvc = True
         self.nproc = max(1, int(self.nproc))
         self.nthreads = max(1, int(self.nthreads))

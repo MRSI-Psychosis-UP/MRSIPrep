@@ -29,7 +29,7 @@ def build_parser() -> argparse.ArgumentParser:
     quality.add_argument("--crlb-max", type=float, default=QUALITY_DEFAULTS["crlb_max"])
 
     processing = parser.add_argument_group("processing mode")
-    processing.add_argument("--mode", "--processing-mode", dest="processing_mode", choices=["light", "full"], default="light")
+    processing.add_argument("--mode", "--processing-mode", dest="processing_mode", choices=["mni-norm", "parc-con"], default="mni-norm")
     processing.add_argument(
         "--tissue-backend",
         choices=["synthseg-fast", "existing", "none"],

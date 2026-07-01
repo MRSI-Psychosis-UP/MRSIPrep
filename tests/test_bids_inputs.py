@@ -41,7 +41,7 @@ class BIDSInputTests(unittest.TestCase):
                 "participant",
                 participant_label=["S001"],
                 session_label=["V1"],
-                processing_mode="full",
+                processing_mode="parc-con",
                 tissue_backend="existing",
             )
             with self.assertRaisesRegex(Exception, "p3"):
@@ -53,7 +53,7 @@ class BIDSInputTests(unittest.TestCase):
                 "participant",
                 participant_label=["S001"],
                 session_label=["V1"],
-                processing_mode="full",
+                processing_mode="parc-con",
                 tissue_backend="synthseg-fast",
             )
             validate_recording(cfg_synthseg_fast, "S001", "V1")
