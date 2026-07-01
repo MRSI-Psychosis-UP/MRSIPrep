@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Fixed broken ANTs CLI fallback: `antsRegistrationSyN.sh` calls `PrintHeader`
+  internally for image header inspection, but the previous Docker pruning pass
+  only kept the four binaries mrsiprep directly invokes and missed it —
+  causing `PrintHeader: command not found` and registration failures during
+  Chimera parcellation (confirmed by exhaustive grepping of all ANTs binary
+  names against the script). Added `PrintHeader` to the kept set and updated
+  the prune script with a comment documenting the complete verified dependency
+  list.
+
+## Unreleased (previous)
+
 - Fixed Chimera parcellation: corrected the FreeSurfer subject-ID/output-path
   conventions, pinned `clabtoolkit==0.4.2` for compatibility with
   `chimera-brainparcellation>=0.3.1`, forced Chimera to run single-threaded

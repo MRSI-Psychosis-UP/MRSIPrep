@@ -41,10 +41,13 @@ mv "${fsl_runtime}" "${FSL_ROOT}"
 # MRSIPrep only ever shells out to antsRegistrationSyN.sh and
 # antsApplyTransforms (interfaces/ants.py), and only as a fallback when
 # antspyx's Python bindings are unavailable; antspyx itself ships its own
-# bundled libs and has no dependency on /opt/ants. Verified this build: ldd
-# on antspyx's compiled extension and on these two binaries shows zero
-# linkage to /opt/ants/lib. N4BiasFieldCorrection is kept too even though
-# nothing currently shells out to it, since utils/provenance.py's
+# bundled libs and has no dependency on /opt/ants. antsRegistrationSyN.sh is
+# a shell script that itself calls antsRegistration, antsApplyTransforms,
+# and PrintHeader internally (confirmed by grepping the script for every
+# ANTs bin/ name) - PrintHeader was missed in an earlier pass of this prune
+# and broke every registration that goes through the CLI fallback path with
+# "PrintHeader: command not found". N4BiasFieldCorrection is kept too even
+# though nothing currently shells out to it, since utils/provenance.py's
 # required_external_tools() (and this same check_neurodeps.sh) treat it as
 # a required tool. Plus any resolved /opt/ants/lib dependency, mirroring
 # the FSL pattern above.
@@ -55,12 +58,13 @@ if [[ -d "${ANTS_ROOT}" ]]; then
   cp -a "${ANTS_ROOT}/bin/antsRegistration" "${ants_runtime}/bin/"
   cp -a "${ANTS_ROOT}/bin/antsApplyTransforms" "${ants_runtime}/bin/"
   cp -a "${ANTS_ROOT}/bin/N4BiasFieldCorrection" "${ants_runtime}/bin/"
+  cp -a "${ANTS_ROOT}/bin/PrintHeader" "${ants_runtime}/bin/"
 
   while IFS= read -r library; do
     [[ -n "${library}" ]] || continue
     mkdir -p "${ants_runtime}/lib"
     cp -L "${library}" "${ants_runtime}/lib/$(basename "${library}")"
-  done < <(ldd "${ANTS_ROOT}/bin/antsRegistration" "${ANTS_ROOT}/bin/antsApplyTransforms" "${ANTS_ROOT}/bin/N4BiasFieldCorrection" | awk -v root="${ANTS_ROOT}/" '$3 ~ "^" root {print $3}')
+  done < <(ldd "${ANTS_ROOT}/bin/antsRegistration" "${ANTS_ROOT}/bin/antsApplyTransforms" "${ANTS_ROOT}/bin/N4BiasFieldCorrection" "${ANTS_ROOT}/bin/PrintHeader" | awk -v root="${ANTS_ROOT}/" '$3 ~ "^" root {print $3}')
 
   rm -rf "${ANTS_ROOT}"
   mv "${ants_runtime}" "${ANTS_ROOT}"
