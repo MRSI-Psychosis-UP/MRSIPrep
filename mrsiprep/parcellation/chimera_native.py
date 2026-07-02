@@ -17,7 +17,8 @@ from mrsiprep.utils.debug import Debug
 def run_chimera_parcellation(config, subject: str, session: str | None, mrsi_reference: Path, t1_to_mrsi_transforms: list[Path]) -> ParcellationResult:
     debug = Debug(verbose=config.verbose)
     layout = BIDSLayout(config.bids_dir)
-    source_atlas = None if config.overwrite else layout.chimera_atlas(subject, session, config.chimera_scheme, config.chimera_scale, config.chimera_grow, space="orig")
+    rerun_chimera = config.overwrite or config.overwrite_chimera
+    source_atlas = None if rerun_chimera else layout.chimera_atlas(subject, session, config.chimera_scheme, config.chimera_scale, config.chimera_grow, space="orig")
     if source_atlas is None:
         raw_t1 = layout.raw_t1(subject, session)
         if raw_t1 is None:
@@ -37,7 +38,7 @@ def run_chimera_parcellation(config, subject: str, session: str | None, mrsi_ref
             config.chimera_grow,
             verbose=config.verbose >= 3,
             milestones=config.verbose >= 2,
-            force=config.overwrite,
+            force=rerun_chimera,
             debug=debug,
         )
     scale = f"scale{config.chimera_scale}"
@@ -45,12 +46,12 @@ def run_chimera_parcellation(config, subject: str, session: str | None, mrsi_ref
     t1_out = chimera_derivative(config.output_dir, subject, session, space="T1w", atlas=atlas_name, scale=scale)
     mrsi_out = chimera_derivative(config.output_dir, subject, session, space="MRSI", atlas=atlas_name, scale=scale)
     labels_out = chimera_derivative(config.output_dir, subject, session, atlas=atlas_name, scale=scale, suffix_override="tsv")
-    if not t1_out.exists() or config.overwrite:
+    if not t1_out.exists() or rerun_chimera:
         import shutil
 
         t1_out.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source_atlas, t1_out)
-    if not mrsi_out.exists() or config.overwrite:
+    if not mrsi_out.exists() or rerun_chimera:
         apply_transforms(mrsi_reference, t1_out, t1_to_mrsi_transforms, mrsi_out, interpolation="genericLabel")
     source_labels = source_atlas.with_suffix("").with_suffix(".tsv") if source_atlas.name.endswith(".nii.gz") else source_atlas.with_suffix(".tsv")
     if source_labels.exists():

@@ -106,6 +106,7 @@ def build_parser() -> argparse.ArgumentParser:
     overwrite.add_argument("--overwrite-t1-reg", action="store_true")
     overwrite.add_argument("--overwrite-mni-reg", action="store_true")
     overwrite.add_argument("--overwrite-transform", action="store_true")
+    overwrite.add_argument("--overwrite-chimera", action="store_true", help="Force re-run Chimera parcellation even if the output dseg file already exists.")
 
     runtime = parser.add_argument_group("runtime")
     runtime.add_argument("--validate-only", action="store_true", help="Check selected subject/session inputs and exit without running preprocessing.")
@@ -182,6 +183,7 @@ def parse_args(argv: list[str] | None = None) -> MRSIPrepConfig:
         overwrite_t1_reg=args.overwrite_t1_reg,
         overwrite_mni_reg=args.overwrite_mni_reg,
         overwrite_transform=args.overwrite_transform,
+        overwrite_chimera=args.overwrite_chimera,
         validate_only=args.validate_only,
         check_external_libs=args.check_external_libs,
         verbose=args.verbose,

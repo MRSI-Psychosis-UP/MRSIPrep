@@ -64,6 +64,7 @@ class MRSIPrepConfig:
     overwrite_t1_reg: bool = False
     overwrite_mni_reg: bool = False
     overwrite_transform: bool = False
+    overwrite_chimera: bool = False
     work_dir: Path | None = None
     verbose: int = 1
     validate_only: bool = False
