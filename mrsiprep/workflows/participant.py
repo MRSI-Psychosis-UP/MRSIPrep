@@ -240,6 +240,7 @@ def collect_recordings(config) -> list[Recording]:
 def _process_one_recording(config, subject: str, session: str | None) -> RecordingStatus:
     debug = Debug(verbose=config.verbose)
     msg = f"sub-{subject}" + (f" ses-{session}" if session else "")
+    debug.separator()
     debug.always(f"[proc]START[/proc] {msg}")
     LOGGER.info("START %s", msg)
     start = time.monotonic()
