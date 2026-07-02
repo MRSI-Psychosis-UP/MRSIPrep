@@ -21,6 +21,7 @@ dependencies = [
   "matplotlib",
   "scikit-image",
   "rich",
+  "nipype>=1.8",
 ]
 classifiers = [
   "Development Status :: 3 - Alpha",

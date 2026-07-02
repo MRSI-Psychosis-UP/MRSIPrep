@@ -22,4 +22,4 @@ REQUIRE_FSL=1 REQUIRE_FREESURFER=1 REQUIRE_PETPVC=1 REQUIRE_CHIMERA=1 \
 
 printf 'Final private dependency image ready: %s\n' "${DEPS_IMAGE}"
 printf 'The installation container remains available as %s until you remove it.\n' "${CONTAINER_NAME}"
-printf 'Next: docker/update_mrsiprep_image.sh\n'
+printf 'Next: docker/build_cpu_image.sh (prunes %s into mrsiprep-deps:cpu and builds the app image)\n' "${DEPS_IMAGE}"

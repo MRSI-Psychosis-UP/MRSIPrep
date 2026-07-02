@@ -1,35 +1,72 @@
 # Private Docker Build Workflow
 
-MRSIPrep uses two runtime images:
+MRSIPrep ships two runtime images:
 
 ```text
 mrsiprep-deps:cpu  reduced private external/Python dependencies
 mrsiprep:cpu       full application, including raw-to-Chimera support
 ```
 
-The source dependency image containing complete upstream installations is kept
-locally as `mrsiprep-deps:ubuntu22.04-cpu`. It is flattened and reduced into
-`mrsiprep-deps:cpu`. Python source changes only require rebuilding the thin
-`mrsiprep:cpu` application image.
+## Image chain
 
-## Build the full CPU image
+Every build converges on the same tail. The only choice is how you produce the
+unpruned source dependency image `mrsiprep-deps:ubuntu22.04-cpu`.
 
-After creating `mrsiprep-deps:ubuntu22.04-cpu` with the manual or private build
-workflow below, build the reduced full image with:
-
-```bash
-docker/build_cpu_image.sh
+```text
+ubuntu:22.04
+  │
+  ├─ (A) manual path                          ├─ (B) automated secret path
+  │   Dockerfile.bootstrap                     │   Dockerfile.deps
+  │     → mrsiprep-bootstrap:ubuntu22.04-cpu   │     → mrsiprep-deps:ubuntu22.04-cpu
+  │   + manual FSL/FreeSurfer install          │
+  │     → commit mrsiprep-deps:ubuntu22.04-cpu │
+  │                                            │
+  └──────────────┬─────────────────────────────┘
+                 │  mrsiprep-deps:ubuntu22.04-cpu  (full, unpruned source deps)
+                 ▼
+        Dockerfile.cpu-deps  (prune + flatten)
+                 → mrsiprep-deps:cpu
+                 ▼
+        Dockerfile  (thin MRSIPrep layer)
+                 → mrsiprep:cpu
+                 ▼
+        docker/publish_image.sh
+                 → fedlucchetti/mrsiprep:cpu
 ```
 
-This keeps SynthSeg, FAST, ANTs, PETPVC, Chimera, `recon-all`, and
-`mri_vol2vol`. FSL is reduced to FAST and its shared libraries. FreeSurfer is
-trimmed conservatively while retaining its core reconstruction executables,
-libraries, models, registration atlases, and `fsaverage` subject.
+`mrsiprep-deps:ubuntu22.04-cpu` holds complete upstream installations. It is
+flattened and reduced into `mrsiprep-deps:cpu`. Ordinary Python source changes
+only require rebuilding the thin `mrsiprep:cpu` layer — see
+[Python-only rebuilds](#python-only-rebuilds).
 
-## Recommended manual FSL/FreeSurfer workflow
+## Full rebuild from scratch → publish
 
-Build an Ubuntu 22.04 CPU bootstrap containing ANTs, ANTsPy,
-PETPVC, Chimera, and the Python dependencies:
+Pick path **A** or **B** for the source dependency image, then run the shared
+tail. End to end:
+
+```bash
+# --- Path A: manual FSL/FreeSurfer (recommended, less reproducible) ---
+docker/build_bootstrap.sh          # → mrsiprep-bootstrap:ubuntu22.04-cpu
+docker/enter_manual_deps.sh        # inside: bash /root/manual_install_fsl_freesurfer.sh && exit
+docker/finalize_manual_deps.sh     # commit → mrsiprep-deps:ubuntu22.04-cpu
+
+# --- OR Path B: automated secret-based build (more reproducible) ---
+cp docker/private-neurodeps.env.example docker/private-neurodeps.env
+# ...populate URLs/archive paths in the env file...
+docker/build_private_deps.sh       # → mrsiprep-deps:ubuntu22.04-cpu
+
+# --- Shared tail (both paths) ---
+docker/build_cpu_image.sh          # prune → mrsiprep-deps:cpu, then build → mrsiprep:cpu
+docker/test_container.sh mrsiprep:cpu
+docker/publish_image.sh -r fedlucchetti/mrsiprep -t cpu
+```
+
+Each step is detailed below.
+
+## Path A — manual FSL/FreeSurfer workflow
+
+Build an Ubuntu 22.04 CPU bootstrap containing ANTs, ANTsPy, PETPVC, Chimera,
+and the Python dependencies:
 
 ```bash
 docker/build_bootstrap.sh
@@ -59,16 +96,15 @@ Commit and verify the private dependency image:
 docker/finalize_manual_deps.sh
 ```
 
-Then build the thin MRSIPrep layer:
-
-```bash
-docker/update_mrsiprep_image.sh
-```
+This commits the full, unpruned installation as `mrsiprep-deps:ubuntu22.04-cpu`.
+Continue with the [shared tail](#shared-tail-prune-build-publish).
 
 This manual path is private and convenient, but the resulting dependency image
 is less reproducible than the automated secret-based build below.
 
-## 1. Configure private sources
+## Path B — automated secret-based build
+
+### 1. Configure private sources
 
 ```bash
 cp docker/private-neurodeps.env.example docker/private-neurodeps.env
@@ -95,7 +131,7 @@ FREESURFER_ARCHIVE=/private/software/freesurfer.tar.gz
 The configuration and archives are passed with BuildKit secrets. They are not
 stored as Docker build arguments or copied into the final image.
 
-## 2. Build private dependencies
+### 2. Build private dependencies
 
 ```bash
 docker/build_private_deps.sh
@@ -110,9 +146,28 @@ REQUIRE_CHIMERA=1 \
 docker/build_private_deps.sh
 ```
 
-This builds `Dockerfile.deps` and runs the dependency verifier automatically.
+This builds `Dockerfile.deps`, produces `mrsiprep-deps:ubuntu22.04-cpu`, and
+runs the dependency verifier automatically. Continue with the
+[shared tail](#shared-tail-prune-build-publish).
 
-## 3. Test an image
+## Shared tail (prune, build, publish)
+
+### 3. Prune and build the full CPU image
+
+Once `mrsiprep-deps:ubuntu22.04-cpu` exists (from path A or B):
+
+```bash
+docker/build_cpu_image.sh
+```
+
+This prunes and flattens the source deps into `mrsiprep-deps:cpu` (via
+`Dockerfile.cpu-deps`), then automatically builds `mrsiprep:cpu` (via
+`Dockerfile`). It keeps SynthSeg, FAST, ANTs, PETPVC, Chimera, `recon-all`, and
+`mri_vol2vol`. FSL is reduced to FAST and its shared libraries. FreeSurfer is
+trimmed conservatively while retaining its core reconstruction executables,
+libraries, models, registration atlases, and `fsaverage` subject.
+
+### 4. Test the images
 
 ```bash
 docker/test_container.sh mrsiprep-deps:cpu
@@ -122,17 +177,35 @@ docker/test_container.sh mrsiprep:cpu
 The check verifies the winning tissue tools, ANTsPy/ANTs CLI, Python imports,
 and optionally PETPVC and Chimera/FreeSurfer commands.
 
-## 4. Update MRSIPrep only
+### 5. Publish
 
-After changing Python code:
+Save a local tarball and/or push to Docker Hub:
+
+```bash
+docker/publish_image.sh -r fedlucchetti/mrsiprep -t cpu
+```
+
+Common variants:
+
+```bash
+docker/publish_image.sh --no-push                        # local ./dist tarball only
+SKIP_SAVE=1 docker/publish_image.sh -r fedlucchetti/mrsiprep
+```
+
+Pushing requires `docker login` first. See `docker/publish_image.sh -h` for all
+options.
+
+## Python-only rebuilds
+
+After changing MRSIPrep Python code only (no new dependencies):
 
 ```bash
 docker/update_mrsiprep_image.sh
 ```
 
-This builds `Dockerfile`, which starts from the existing dependency image and
-only copies/reinstalls MRSIPrep. It does not rebuild FreeSurfer, FSL, ANTs,
-PETPVC, or Chimera.
+This rebuilds `Dockerfile`, which starts from the existing `mrsiprep-deps:cpu`
+image and only copies/reinstalls MRSIPrep. It does not rebuild FreeSurfer, FSL,
+ANTs, PETPVC, or Chimera. Follow with step 5 to republish.
 
 Override image names when needed:
 
@@ -142,8 +215,9 @@ APP_IMAGE=registry.private/mrsiprep:cpu \
 docker/update_mrsiprep_image.sh
 ```
 
-If `pyproject.toml` dependency requirements change, rebuild the dependency
-image. Ordinary MRSIPrep Python source changes only require the thin update.
+If `pyproject.toml` dependency requirements change, rebuild the dependency image
+(path A or B) instead. Ordinary Python source changes only require this thin
+update.
 
 ## Runtime license
 

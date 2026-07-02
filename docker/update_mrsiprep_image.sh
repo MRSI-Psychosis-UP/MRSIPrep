@@ -7,7 +7,7 @@ APP_IMAGE="${APP_IMAGE:-mrsiprep:cpu}"
 
 if ! docker image inspect "${DEPS_IMAGE}" >/dev/null 2>&1; then
   printf 'Dependency image does not exist: %s\n' "${DEPS_IMAGE}" >&2
-  printf 'Run docker/build_private_deps.sh first.\n' >&2
+  printf 'Run docker/build_cpu_image.sh first (or docker/finalize_manual_deps.sh for the manual workflow) to produce it from mrsiprep-deps:ubuntu22.04-cpu.\n' >&2
   exit 2
 fi
 
