@@ -1,0 +1,38 @@
+# syntax=docker/dockerfile:1.7
+
+ARG SOURCE_DEPS_IMAGE=mrsiprep-deps:ubuntu22.04-cpu
+FROM ${SOURCE_DEPS_IMAGE} AS pruned
+
+COPY docker/prune_cpu_neurodeps.sh /usr/local/lib/mrsiprep/prune_cpu_neurodeps.sh
+RUN chmod 0755 /usr/local/lib/mrsiprep/prune_cpu_neurodeps.sh \
+    && /usr/local/lib/mrsiprep/prune_cpu_neurodeps.sh \
+    && rm /usr/local/lib/mrsiprep/prune_cpu_neurodeps.sh
+COPY --chmod=0755 docker/check_neurodeps.sh /usr/local/bin/mrsiprep-check-neurodeps
+
+# Copying the pruned filesystem into a fresh stage discards the large source
+# image layers. Deleting files without this flattening stage would not reduce
+# the published image size.
+FROM scratch
+COPY --from=pruned / /
+
+LABEL org.opencontainers.image.title="MRSIPrep CPU dependencies"
+LABEL org.opencontainers.image.description="Reduced full CPU runtime with FAST, SynthSeg and recon-all"
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    MPLBACKEND=Agg \
+    FREESURFER_HOME=/opt/freesurfer \
+    FREESURFER=/opt/freesurfer \
+    SUBJECTS_DIR=/out/freesurfer \
+    FS_LICENSE=/opt/freesurfer/license.txt \
+    FSLDIR=/opt/fsl \
+    FSLOUTPUTTYPE=NIFTI_GZ \
+    ANTSPATH=/opt/ants/bin \
+    LD_LIBRARY_PATH=/opt/fsl/lib \
+    PATH=/opt/ants/bin:/opt/fsl/bin:/opt/freesurfer/bin:/opt/freesurfer/tktools:/opt/freesurfer/mni/bin:/opt/petpvc/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+RUN REQUIRE_FSL=1 REQUIRE_FREESURFER=1 REQUIRE_PETPVC=1 REQUIRE_CHIMERA=1 \
+    /usr/local/bin/mrsiprep-check-neurodeps
+
+CMD ["/usr/local/bin/mrsiprep-check-neurodeps"]

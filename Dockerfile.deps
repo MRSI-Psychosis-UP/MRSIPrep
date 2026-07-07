@@ -1,0 +1,81 @@
+# syntax=docker/dockerfile:1.7
+
+FROM ubuntu:22.04
+
+LABEL org.opencontainers.image.title="MRSIPrep private dependencies"
+LABEL org.opencontainers.image.description="Private CPU dependency base for MRSIPrep"
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    MPLBACKEND=Agg \
+    FREESURFER_HOME=/opt/freesurfer \
+    FREESURFER=/opt/freesurfer \
+    SUBJECTS_DIR=/out/freesurfer \
+    FS_LICENSE=/opt/freesurfer/license.txt \
+    FSLDIR=/opt/fsl \
+    ANTSPATH=/opt/ants/bin \
+    PATH=/opt/ants/bin:/opt/fsl/bin:/opt/freesurfer/bin:/opt/freesurfer/fsfast/bin:/opt/freesurfer/tktools:/opt/freesurfer/mni/bin:/opt/petpvc/bin:/opt/chimera/bin:$PATH
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        bash bc build-essential bzip2 ca-certificates cmake curl git gzip \
+        libexpat1 libfontconfig1 libfreetype6 libgfortran5 libgl1 \
+        libglib2.0-0 libglu1-mesa libgomp1 libice6 libjpeg-turbo8 \
+        liblapack3 libopenblas0 libquadmath0 libsm6 libx11-6 libxext6 \
+        libxft2 libxmu6 libxrender1 libxt6 locales perl python3 \
+        python3-dev python3-pip python3-venv tar tcsh unzip wget xz-utils \
+    && locale-gen en_US.UTF-8 \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV LANG=en_US.UTF-8 \
+    LC_ALL=en_US.UTF-8
+
+COPY docker/install_neurodeps.sh /usr/local/lib/mrsiprep/install_neurodeps.sh
+COPY docker/check_neurodeps.sh /usr/local/bin/mrsiprep-check-neurodeps
+
+ARG REQUIRE_PETPVC=1
+ARG REQUIRE_CHIMERA=1
+
+# URLs are loaded from a BuildKit secret and are not persisted as ARG values.
+# Optional local archives can be mounted as BuildKit secrets by the wrapper.
+RUN --mount=type=secret,id=neurodeps_env,required=true \
+    --mount=type=secret,id=ants_archive \
+    --mount=type=secret,id=fsl_archive \
+    --mount=type=secret,id=freesurfer_archive \
+    --mount=type=secret,id=petpvc_archive \
+    --mount=type=secret,id=chimera_archive \
+    set -a \
+    && . /run/secrets/neurodeps_env \
+    && set +a \
+    && chmod +x /usr/local/lib/mrsiprep/install_neurodeps.sh /usr/local/bin/mrsiprep-check-neurodeps \
+    && ANTS_TARBALL="$(test -s /run/secrets/ants_archive && echo /run/secrets/ants_archive || true)" \
+       FSL_TARBALL="$(test -s /run/secrets/fsl_archive && echo /run/secrets/fsl_archive || true)" \
+       FREESURFER_TARBALL="$(test -s /run/secrets/freesurfer_archive && echo /run/secrets/freesurfer_archive || true)" \
+       PETPVC_TARBALL="$(test -s /run/secrets/petpvc_archive && echo /run/secrets/petpvc_archive || true)" \
+       CHIMERA_TARBALL="$(test -s /run/secrets/chimera_archive && echo /run/secrets/chimera_archive || true)" \
+       PETPVC_REQUIREMENT="$(test "${REQUIRE_PETPVC}" = 1 && echo required || echo optional)" \
+       CHIMERA_REQUIREMENT="$(test "${REQUIRE_CHIMERA}" = 1 && echo required || echo optional)" \
+       /usr/local/lib/mrsiprep/install_neurodeps.sh
+
+# Install Python runtime dependencies into the private base. PyQt is omitted;
+# the GUI utility remains host-side.
+COPY pyproject.toml README.md LICENSE /tmp/mrsiprep-python-deps/
+RUN /usr/bin/python3 -m pip install --upgrade pip setuptools wheel \
+    && /usr/bin/python3 -m pip install antspyx \
+    && /usr/bin/python3 -m pip install \
+        numpy scipy pandas nibabel nilearn matplotlib scikit-image rich nipype \
+        h5py pyvista colorama dipy screeninfo ipython \
+    && rm -rf /tmp/mrsiprep-python-deps
+
+# Cache the default MNI template while the private build has network access.
+RUN /usr/bin/python3 - <<'PY'
+from nilearn import datasets
+datasets.load_mni152_template()
+PY
+
+RUN REQUIRE_PETPVC="${REQUIRE_PETPVC}" \
+    REQUIRE_CHIMERA="${REQUIRE_CHIMERA}" \
+    /usr/local/bin/mrsiprep-check-neurodeps
+
+CMD ["/usr/local/bin/mrsiprep-check-neurodeps"]

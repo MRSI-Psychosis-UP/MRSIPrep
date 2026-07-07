@@ -1,0 +1,78 @@
+# syntax=docker/dockerfile:1.7
+
+FROM ubuntu:22.04
+
+LABEL org.opencontainers.image.title="MRSIPrep manual dependency bootstrap"
+LABEL org.opencontainers.image.description="Ubuntu 22.04 CPU environment awaiting manual FSL and FreeSurfer installation"
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    MPLBACKEND=Agg \
+    FREESURFER_HOME=/opt/freesurfer \
+    FREESURFER=/opt/freesurfer \
+    SUBJECTS_DIR=/out/freesurfer \
+    FS_LICENSE=/opt/freesurfer/license.txt \
+    FSLDIR=/opt/fsl \
+    ANTSPATH=/opt/ants/bin \
+    PATH=/opt/ants/bin:/opt/fsl/bin:/opt/freesurfer/bin:/opt/freesurfer/fsfast/bin:/opt/freesurfer/tktools:/opt/freesurfer/mni/bin:/opt/petpvc/bin:$PATH
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        bash bc build-essential bzip2 ca-certificates cmake curl git gzip \
+        libexpat1 libfontconfig1 libfreetype6 libgfortran5 libgl1 \
+        libglib2.0-0 libglu1-mesa libgomp1 libice6 libjpeg-turbo8 \
+        liblapack3 libopenblas0 libquadmath0 libsm6 libx11-6 libxext6 \
+        libxft2 libxmu6 libxrender1 libxt6 locales perl \
+        gnupg software-properties-common tar tcsh unzip wget xz-utils \
+    && add-apt-repository -y ppa:deadsnakes/ppa \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+        python3.11 python3.11-dev python3.11-venv \
+    && curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11 \
+    && update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 10 \
+    && update-alternatives --install /usr/bin/python python /usr/bin/python3.11 10 \
+    && locale-gen en_US.UTF-8 \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV LANG=en_US.UTF-8 \
+    LC_ALL=en_US.UTF-8
+
+COPY docker/install_neurodeps.sh /usr/local/lib/mrsiprep/install_neurodeps.sh
+COPY docker/check_neurodeps.sh /usr/local/bin/mrsiprep-check-neurodeps
+COPY docker/manual_install_fsl_freesurfer.sh /root/manual_install_fsl_freesurfer.sh
+COPY docker/patch_chimera_milestones.py /usr/local/lib/mrsiprep/patch_chimera_milestones.py
+
+ARG ANTS_URL=https://github.com/ANTsX/ANTs/releases/download/v2.6.5/ants-2.6.5-ubuntu20.04-X64-gcc.zip
+RUN chmod +x \
+        /usr/local/lib/mrsiprep/install_neurodeps.sh \
+        /usr/local/bin/mrsiprep-check-neurodeps \
+        /root/manual_install_fsl_freesurfer.sh \
+    && ANTS_URL="${ANTS_URL}" \
+       FSL_REQUIREMENT=optional \
+       FREESURFER_REQUIREMENT=optional \
+       PETPVC_REQUIREMENT=optional \
+       CHIMERA_REQUIREMENT=optional \
+       /usr/local/lib/mrsiprep/install_neurodeps.sh
+
+# CPU Python stack, ANTsPy, PETPVC and Chimera. PyQt is deliberately
+# excluded because the GUI utility runs on the host. clabtoolkit is pinned to
+# 0.4.2: chimera 0.3.1 calls AnnotParcellation.gii2annot() with ref_surf/
+# cont_tech/cont_image kwargs that 0.4.3 removed.
+RUN /usr/bin/python3 -m pip install --upgrade pip setuptools wheel \
+    && /usr/bin/python3 -m pip install antspyx \
+        numpy pandas nibabel nilearn matplotlib scikit-image rich nipype \
+        h5py pyvista colorama dipy screeninfo ipython \
+        "chimera-brainparcellation>=0.3.1" "clabtoolkit==0.4.2" \
+    && curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest \
+       | tar -xj -C /usr/local/bin --strip-components=1 bin/micromamba \
+    && MAMBA_ROOT_PREFIX=/opt/micromamba \
+       micromamba create -y -p /opt/petpvc -c conda-forge petpvc \
+    && MAMBA_ROOT_PREFIX=/opt/micromamba micromamba clean --all --yes \
+    && /usr/bin/python3 /usr/local/lib/mrsiprep/patch_chimera_milestones.py
+
+RUN REQUIRE_FSL=0 REQUIRE_FREESURFER=0 REQUIRE_PETPVC=1 REQUIRE_CHIMERA=1 \
+    /usr/local/bin/mrsiprep-check-neurodeps
+
+WORKDIR /root
+CMD ["/bin/bash"]

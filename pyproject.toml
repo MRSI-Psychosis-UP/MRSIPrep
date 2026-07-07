@@ -1,0 +1,56 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mrsiprep"
+version = "0.1.0"
+description = "BIDS-like preprocessing pipeline for quantified whole-brain MRSI derivatives"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "CHUV academic non-commercial research license" }
+authors = [
+  { name = "Federico Lucchetti", email = "federico.lucchetti@unil.ch" }
+]
+dependencies = [
+  "numpy",
+  "scipy",
+  "pandas",
+  "nibabel",
+  "nilearn",
+  "matplotlib",
+  "scikit-image",
+  "rich",
+  "nipype>=1.8",
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "License :: Other/Proprietary License",
+  "Programming Language :: Python :: 3",
+]
+
+[project.optional-dependencies]
+ants = ["antspyx"]
+gui = ["PyQt6"]
+all = ["antspyx", "PyQt6"]
+
+[project.scripts]
+mrsiprep = "mrsiprep.cli.run:main"
+mrsiprep-import = "mrsiprep.interfaces.bids_import:main"
+mrsiprep-import-gui = "mrsiprep.interfaces.bids_import_gui:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["mrsiprep", "mrsiprep.*"]
+
+[tool.setuptools.package-data]
+mrsiprep = [
+  "data/**/*.tsv",
+  "data/**/*.json",
+  "data/atlas/**/*.nii.gz",
+  "data/atlas/**/*.nii",
+  "data/atlas/**/*.tsv",
+  "data/atlas/**/*.md",
+  "reports/templates/*.html",
+]

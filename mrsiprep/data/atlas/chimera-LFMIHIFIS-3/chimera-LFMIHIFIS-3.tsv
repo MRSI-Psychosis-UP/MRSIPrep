@@ -1,0 +1,277 @@
+index	name	color
+1	ctx-rh-lateralorbitofrontal_1	#210d01
+2	ctx-rh-lateralorbitofrontal_2	#7bfc1e
+3	ctx-rh-lateralorbitofrontal_3	#f51ce6
+4	ctx-rh-lateralorbitofrontal_4	#d02937
+5	ctx-rh-parsorbitalis_1	#66b084
+6	ctx-rh-frontalpole_1	#032e6e
+7	ctx-rh-medialorbitofrontal_1	#0e0eb4
+8	ctx-rh-medialorbitofrontal_2	#8a9d5d
+9	ctx-rh-medialorbitofrontal_3	#7b4227
+10	ctx-rh-parstriangularis_1	#f68224
+11	ctx-rh-parstriangularis_2	#d62939
+12	ctx-rh-parsopercularis_1	#d335b2
+13	ctx-rh-parsopercularis_2	#a86010
+14	ctx-rh-rostralmiddlefrontal_1	#202002
+15	ctx-rh-rostralmiddlefrontal_2	#4a2365
+16	ctx-rh-rostralmiddlefrontal_3	#2d91d1
+17	ctx-rh-rostralmiddlefrontal_4	#4c6acd
+18	ctx-rh-rostralmiddlefrontal_5	#cd54c3
+19	ctx-rh-rostralmiddlefrontal_6	#472e9f
+20	ctx-rh-superiorfrontal_1	#e17264
+21	ctx-rh-superiorfrontal_2	#f941f6
+22	ctx-rh-superiorfrontal_3	#4e7866
+23	ctx-rh-superiorfrontal_4	#323fef
+24	ctx-rh-superiorfrontal_5	#35a14e
+25	ctx-rh-superiorfrontal_6	#7035dc
+26	ctx-rh-superiorfrontal_7	#141c09
+27	ctx-rh-superiorfrontal_8	#5a40f3
+28	ctx-rh-caudalmiddlefrontal_12	#f6b5cc
+30	ctx-rh-caudalmiddlefrontal_3	#280d39
+31	ctx-rh-precentral_1	#bfd8bc
+32	ctx-rh-precentral_2	#2aa8a5
+33	ctx-rh-precentral_3	#bf72b8
+34	ctx-rh-precentral_4	#fe7ede
+35	ctx-rh-precentral_5	#2fbab2
+36	ctx-rh-precentral_6	#f65840
+37	ctx-rh-paracentral_1	#ccd18e
+38	ctx-rh-paracentral_2	#b120c9
+39	ctx-rh-paracentral_3	#c7e330
+40	ctx-rh-rostralanteriorcingulate_1	#8febc1
+41	ctx-rh-caudalanteriorcingulate_1	#7d1e45
+42	ctx-rh-posteriorcingulate_1	#cc5743
+43	ctx-rh-posteriorcingulate_2	#f45655
+44	ctx-rh-isthmuscingulate_1	#c07478
+45	ctx-rh-postcentral_1	#94e86b
+46	ctx-rh-postcentral_2	#083e91
+47	ctx-rh-postcentral_3	#0aeaa5
+48	ctx-rh-postcentral_4	#fc8a0a
+49	ctx-rh-postcentral_5	#7872ae
+50	ctx-rh-supramarginal_1	#a2d5ed
+51	ctx-rh-supramarginal_2	#5bb9de
+52	ctx-rh-supramarginal_3	#5b5078
+53	ctx-rh-supramarginal_4	#77db49
+54	ctx-rh-superiorparietal_1	#2fb89f
+55	ctx-rh-superiorparietal_2	#77cca0
+56	ctx-rh-superiorparietal_3	#ed4cd1
+57	ctx-rh-superiorparietal_4	#bda554
+58	ctx-rh-superiorparietal_5	#c3cf15
+59	ctx-rh-superiorparietal_6	#28cd7f
+60	ctx-rh-superiorparietal_7	#a63e56
+61	ctx-rh-inferiorparietal_1	#b0ec16
+62	ctx-rh-inferiorparietal_2	#bb543b
+63	ctx-rh-inferiorparietal_3	#262208
+64	ctx-rh-inferiorparietal_4	#937082
+65	ctx-rh-inferiorparietal_5	#fb2937
+66	ctx-rh-inferiorparietal_6	#7af7a4
+67	ctx-rh-precuneus_1	#217e63
+68	ctx-rh-precuneus_2	#4d0990
+69	ctx-rh-precuneus_3	#c82248
+70	ctx-rh-precuneus_4	#d7d386
+71	ctx-rh-precuneus_5	#cb41fd
+72	ctx-rh-cuneus_1	#827b0f
+73	ctx-rh-cuneus_2	#99fcb6
+74	ctx-rh-pericalcarine	#8c09fc
+76	ctx-rh-lateraloccipital_1	#563ff4
+77	ctx-rh-lateraloccipital_2	#d63e77
+78	ctx-rh-lateraloccipital_3	#a9f5ed
+79	ctx-rh-lateraloccipital_4	#67b19b
+80	ctx-rh-lateraloccipital_5	#ca3278
+81	ctx-rh-lingual_1	#fc25c1
+82	ctx-rh-lingual_2	#bd9fd7
+83	ctx-rh-lingual_3	#6d19bf
+84	ctx-rh-fusiform_1	#081070
+85	ctx-rh-fusiform_2	#51f925
+86	ctx-rh-fusiform_3	#38866e
+87	ctx-rh-fusiform_4	#e504fd
+88	ctx-rh-parahippocampal_1	#e47a84
+89	ctx-rh-entorhinal_1	#c3c349
+90	ctx-rh-temporalpole_1	#08e164
+91	ctx-rh-inferiortemporal_12	#75cec0
+93	ctx-rh-inferiortemporal_3	#786db4
+94	ctx-rh-inferiortemporal_4	#8154a4
+95	ctx-rh-middletemporal_1	#18c435
+96	ctx-rh-middletemporal_2	#57a4f4
+97	ctx-rh-middletemporal_3	#56aade
+98	ctx-rh-middletemporal_4	#340722
+99	ctx-rh-bankssts_1	#af0d02
+100	ctx-rh-superiortemporal_1	#0d48e5
+101	ctx-rh-superiortemporal_2	#2a65ee
+102	ctx-rh-superiortemporal_3	#f06677
+103	ctx-rh-superiortemporal_4	#15ac40
+104	ctx-rh-superiortemporal_5	#71da61
+105	ctx-rh-transversetemporal_1	#b5ef5b
+106	ctx-rh-insula_1	#bcc688
+107	ctx-rh-insula_2	#48366e
+108	ctx-rh-insula_3	#a066dc
+109	subc-rh-caudate	#c6ead3
+110	subc-rh-putamen	#3f256e
+111	subc-rh-pallidum_accumbens	#c565a8
+113	thal-rh-pulvinar	#5fa935
+114	thal-rh-ventral-anterior	#e5a662
+115	thal-rh-mediodorsal	#810c70
+116	thal-rh-lateral-posterior-ventral-posterior-group	#a965d3
+117	thal-rh-pulvinar-medial-centrolateral-group	#c6a89a
+118	thal-rh-ventrolateral	#2ae64c
+119	thal-rh-ventral-posterior-ventrolateral-group	#004be2
+120	amygd-rh	#8bd272
+129	hipp-rh	#e9306a
+133	hypo-rh-anterior-inferior	#56ef06
+134	hypo-rh-anterior-superior	#a4f03f
+135	hypo-rh-posterior	#ae24a0
+136	hypo-rh-tubular-inferior	#dcac68
+137	hypo-rh-tubular-superior	#b2e1f0
+139	ctx-lh-lateralorbitofrontal_1	#33c65c
+140	ctx-lh-lateralorbitofrontal_2	#fc677b
+141	ctx-lh-lateralorbitofrontal_3	#dfb628
+142	ctx-lh-lateralorbitofrontal_4	#16c311
+143	ctx-lh-parsorbitalis_1	#091729
+144	ctx-lh-frontalpole_1	#4a7948
+145	ctx-lh-medialorbitofrontal_1	#4392ea
+146	ctx-lh-medialorbitofrontal_2	#30fa3c
+147	ctx-lh-medialorbitofrontal_3	#ef7d85
+148	ctx-lh-parstriangularis_1	#1cb548
+149	ctx-lh-parstriangularis_2	#f873a2
+150	ctx-lh-parsopercularis_1	#04d25b
+151	ctx-lh-parsopercularis_2	#18c3b2
+152	ctx-lh-rostralmiddlefrontal_1	#560737
+153	ctx-lh-rostralmiddlefrontal_2	#1c5a8d
+154	ctx-lh-rostralmiddlefrontal_3	#693651
+155	ctx-lh-rostralmiddlefrontal_4	#cbeaa4
+156	ctx-lh-rostralmiddlefrontal_5	#f58c47
+157	ctx-lh-rostralmiddlefrontal_6	#5e496f
+158	ctx-lh-superiorfrontal_1	#30c2af
+159	ctx-lh-superiorfrontal_2	#2e3466
+160	ctx-lh-superiorfrontal_3	#794299
+161	ctx-lh-superiorfrontal_4	#295004
+162	ctx-lh-superiorfrontal_5	#a65ba5
+163	ctx-lh-superiorfrontal_6	#0b1775
+164	ctx-lh-superiorfrontal_7	#9da8c3
+165	ctx-lh-superiorfrontal_8	#e0abb7
+166	ctx-lh-caudalmiddlefrontal_12	#3206d5
+168	ctx-lh-caudalmiddlefrontal_3	#2dd89a
+169	ctx-lh-precentral_1	#a31b7d
+170	ctx-lh-precentral_2	#f32396
+171	ctx-lh-precentral_3	#c4a633
+172	ctx-lh-precentral_4	#196919
+173	ctx-lh-precentral_5	#ee200c
+174	ctx-lh-precentral_6	#60b9cd
+175	ctx-lh-paracentral_1	#c18ea8
+176	ctx-lh-paracentral_2	#ef415b
+177	ctx-lh-paracentral_3	#e85068
+178	ctx-lh-rostralanteriorcingulate_1	#060343
+179	ctx-lh-caudalanteriorcingulate_1	#0a9a08
+180	ctx-lh-posteriorcingulate_1	#f36c5d
+181	ctx-lh-posteriorcingulate_2	#34109a
+182	ctx-lh-isthmuscingulate_1	#475a5d
+183	ctx-lh-postcentral_1	#aac3c5
+184	ctx-lh-postcentral_2	#82006b
+185	ctx-lh-postcentral_3	#85bd64
+186	ctx-lh-postcentral_4	#84825e
+187	ctx-lh-postcentral_5	#6c67b5
+188	ctx-lh-supramarginal_1	#200fc2
+189	ctx-lh-supramarginal_2	#ecd488
+190	ctx-lh-supramarginal_3	#e8a3e6
+191	ctx-lh-supramarginal_4	#1d2791
+192	ctx-lh-superiorparietal_1	#52576e
+193	ctx-lh-superiorparietal_2	#3c532d
+194	ctx-lh-superiorparietal_3	#d03261
+195	ctx-lh-superiorparietal_4	#f5e4f7
+196	ctx-lh-superiorparietal_5	#ee3577
+197	ctx-lh-superiorparietal_6	#8ff7b7
+198	ctx-lh-superiorparietal_7	#9b35d8
+199	ctx-lh-inferiorparietal_1	#1fa3a7
+200	ctx-lh-inferiorparietal_2	#d7badc
+201	ctx-lh-inferiorparietal_3	#2f1a4f
+202	ctx-lh-inferiorparietal_4	#3edabb
+203	ctx-lh-inferiorparietal_5	#99ac17
+204	ctx-lh-inferiorparietal_6	#4c4a09
+205	ctx-lh-precuneus_1	#f8674e
+206	ctx-lh-precuneus_2	#4f0ce6
+207	ctx-lh-precuneus_3	#15c01c
+208	ctx-lh-precuneus_4	#fa79de
+209	ctx-lh-precuneus_5	#c5bd4c
+210	ctx-lh-cuneus_1	#6586af
+211	ctx-lh-cuneus_2	#270c94
+212	ctx-lh-pericalcarine	#b81396
+214	ctx-lh-lateraloccipital_1	#a29b39
+215	ctx-lh-lateraloccipital_2	#72f4cf
+216	ctx-lh-lateraloccipital_3	#7f9399
+217	ctx-lh-lateraloccipital_4	#1e01e8
+218	ctx-lh-lateraloccipital_5	#09c0ca
+219	ctx-lh-lingual_1	#ad1533
+220	ctx-lh-lingual_2	#f342a2
+221	ctx-lh-lingual_3	#236864
+222	ctx-lh-fusiform_1	#2180b6
+223	ctx-lh-fusiform_2	#7bbb15
+224	ctx-lh-fusiform_3	#d5f92b
+225	ctx-lh-fusiform_4	#4a1e31
+226	ctx-lh-parahippocampal_1	#1f5e02
+227	ctx-lh-entorhinal_1	#5bff45
+228	ctx-lh-temporalpole_1	#6695a1
+229	ctx-lh-inferiortemporal_12	#6fd2d1
+231	ctx-lh-inferiortemporal_3	#58f4e1
+232	ctx-lh-inferiortemporal_4	#7b7985
+233	ctx-lh-middletemporal_1	#20a77a
+234	ctx-lh-middletemporal_2	#5d0606
+235	ctx-lh-middletemporal_3	#2c1ef6
+236	ctx-lh-middletemporal_4	#0ac2e5
+237	ctx-lh-bankssts_1	#ae5115
+238	ctx-lh-superiortemporal_1	#4d7972
+239	ctx-lh-superiortemporal_2	#5c4e58
+240	ctx-lh-superiortemporal_3	#8967d3
+241	ctx-lh-superiortemporal_4	#8e45a7
+242	ctx-lh-superiortemporal_5	#1a922f
+243	ctx-lh-transversetemporal_1	#fb52fc
+244	ctx-lh-insula_1	#c12e53
+245	ctx-lh-insula_2	#971298
+246	ctx-lh-insula_3	#d76b76
+247	subc-lh-caudate	#f0dda0
+248	subc-lh-putamen	#772e92
+249	subc-lh-pallidum_accumbens	#61fc65
+251	thal-lh-pulvinar	#31bfc1
+252	thal-lh-ventral-anterior	#0e8c4f
+253	thal-lh-mediodorsal	#c1fe99
+254	thal-lh-lateral-posterior-ventral-posterior-group	#8cb9e1
+255	thal-lh-pulvinar-medial-centrolateral-group	#5bcbf4
+256	thal-lh-ventrolateral	#cc371c
+257	thal-lh-ventral-posterior-ventrolateral-group	#c04e5f
+258	amygd-lh	#c32138
+267	hipp-lh	#5fa491
+271	hypo-lh-anterior-inferior	#692ebe
+272	hypo-lh-anterior-superior	#440b4b
+273	hypo-lh-posterior	#5b9043
+274	hypo-lh-tubular-inferior	#86c1e4
+275	hypo-lh-tubular-superior	#0e13b1
+277	brain-stem-midbrain	#eb9310
+278	brain-stem-pons	#e6fc67
+279	brain-stem-medulla	#ac8992
+280	brain-stem-scp	#b581b0
+2001	cer-Left I-IV	#a045b9
+2002	cer-Right I-IV	#18b62b
+2003	cer-Left V	#b871f1
+2004	cer-Right V	#e3c239
+2005	cer-Left VI	#d8d4c4
+2006	cer-Vermis VI	#692840
+2007	cer-Right VI	#1034c5
+2008	cer-Left Crus I	#f298d3
+2009	cer-Vermis Crus I	#07c152
+2010	cer-Right Crus I	#7e96f5
+2011	cer-Left Crus II	#46e4e8
+2012	cer-Vermis Crus II	#b1a80c
+2013	cer-Right Crus II	#5e98f4
+2014	cer-Left VIIb	#6686a3
+2015	cer-Vermis VIIb	#e02817
+2016	cer-Right VIIb	#88ada0
+2017	cer-Left VIIIa	#214a85
+2018	cer-Vermis VIIIa	#f657c7
+2019	cer-Right VIIIa	#b2c8a1
+2020	cer-Left VIIIb	#612588
+2021	cer-Vermis VIIIb	#f82ede
+2022	cer-Right VIIIb	#fa8e3b
+2023	cer-Left IX	#ad8764
+2024	cer-Vermis IX	#0edb6b
+2025	cer-Right IX	#3092b5
+2026	cer-Left X	#f1ec32
+2027	cer-Vermis X	#85faef
+2028	cer-Right X	#fe4022
