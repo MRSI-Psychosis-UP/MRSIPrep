@@ -21,15 +21,22 @@
 # (e.g. -e TZ=$(cat /etc/timezone) on Linux) to align them with the host.
 set -euo pipefail
 
-if [[ -n "${TZ:-}" && -f "/usr/share/zoneinfo/${TZ}" ]]; then
-  ln -snf "/usr/share/zoneinfo/${TZ}" /etc/localtime
-  echo "${TZ}" > /etc/timezone
+# Re-linking /etc/localtime requires root; if the container was started as a
+# non-root user (e.g. -u "$(id -u):$(id -g)"), skip it and rely on the TZ
+# env var alone -- Python's datetime.now()/time.strftime() honor TZ without
+# /etc/localtime, so timestamps still align with the host, just `date`(1)
+# output inside the container would not.
+if [[ -n "${TZ:-}" && -f "/usr/share/zoneinfo/${TZ}" && "$(id -u)" == "0" ]]; then
+  ln -snf "/usr/share/zoneinfo/${TZ}" /etc/localtime 2>/dev/null || true
+  echo "${TZ}" > /etc/timezone 2>/dev/null || true
 fi
 
 /usr/bin/python3 -m mrsiprep.cli.run "$@"
 status=$?
 
-if [[ "${MRSIPREP_NO_FIXPERMS:-0}" != "1" ]]; then
+# Only meaningful when running as root; a non-root -u already owns its own
+# output and chown would just fail permission checks.
+if [[ "${MRSIPREP_NO_FIXPERMS:-0}" != "1" && "$(id -u)" == "0" ]]; then
   out_dir="${2:-}"
   if [[ -n "${out_dir}" && -d "${out_dir}" ]]; then
     uid="${HOST_UID:-}"

@@ -24,7 +24,8 @@ docker run --rm \
 Chimera parcellation requires `recon-all` and a valid `FS_LICENSE` — mount a
 FreeSurfer license file as shown above. `parc-con` mode also writes a
 legacy-compatible parcel profile archive under
-`<out>/mrsi_parcel/sub-*/ses-*/mrsi/*desc-metprofiles_mrsi.npz`.
+`<out>/mrsiprep/sub-*/ses-*/mrsi/parcel/*_desc-{GM,}metprofiles_mrsi.npz`
+(`GMmetprofiles` when PVC ran, `metprofiles` when `--no-pvc` was passed).
 
 ## Bundled MNI atlas
 

@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mrsiprep-docker"
+version = "1.0.0"
+description = "A wrapper for generating Docker commands to run MRSIPrep using regular BIDS App syntax"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "CHUV academic non-commercial research license" }
+authors = [
+  { name = "Federico Lucchetti", email = "federico.lucchetti@unil.ch" }
+]
+dependencies = []
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Intended Audience :: Science/Research",
+  "License :: Other/Proprietary License",
+  "Programming Language :: Python :: 3",
+]
+
+[project.urls]
+Homepage = "https://github.com/MRSI-Psychosis-UP/MRSIPrep"
+Documentation = "https://mrsiprep.readthedocs.io/"
+"Docker Images" = "https://hub.docker.com/r/fedlucchetti/mrsiprep/tags/"
+
+[project.scripts]
+mrsiprep-docker = "mrsiprep_docker.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

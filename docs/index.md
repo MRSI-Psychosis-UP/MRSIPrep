@@ -19,6 +19,10 @@ academic non-commercial research license.
 
 ## What it uses
 
+- **[Nipype](https://nipype.readthedocs.io/)** as the workflow engine: each
+  subject/session is a cached, per-step Nipype workflow, so a rerun of an
+  already-processed recording skips finished steps instead of recomputing
+  them.
 - **[ANTs](http://stnava.github.io/ANTs/)** for MRSI↔T1w and T1w↔MNI registration.
 - **[FreeSurfer](https://surfer.nmr.mgh.harvard.edu/)** (`mri_synthseg`, `recon-all`, `mri_vol2vol`) for brain
   extraction, cortical/subcortical parcellation, and surface reconstruction.

@@ -12,16 +12,40 @@ docker run --rm \
   --participant-label S001 \
   --session-label V1 \
   --mode mni-norm \
-  --output-spaces T1w MNI152NLin2009cAsym \
+  --output-spaces MNI152NLin2009cAsym \
   --mni-resolution t1wres \
   --nthreads 16
 ```
 
-`--output-spaces` selects which space(s) the final MRSI maps are resampled
-into: `MRSI`, `T1w`, `MNI152NLin2009cAsym` (aliases `mrsi`, `t1`, `mni`
-accepted). `--mni-resolution` selects the MNI template resolution used for
-both T1w→MNI registration and final resampling: `origres` (MRSI native
-resolution), `t1wres` (T1w resolution, default), or an explicit `<N>mm`.
+`--output-spaces` (default `MNI152NLin2009cAsym` only) selects which
+space(s) the final MRSI maps are resampled into as permanent derivatives:
+`MRSI`, `MNI152NLin2009cAsym` (aliases `mrsi`, `mni` accepted). `--mni-resolution`
+selects the MNI template resolution used for both T1w→MNI registration and
+final resampling: `origres` (MRSI native resolution), `t1wres` (T1w
+resolution, default), or an explicit `<N>mm`.
+
+T1w-space resampling of every metabolite (+ CRLB/SNR/FWHM/spikemask) is
+**opt-in** via `--output-mrsi-t1w`, since nothing downstream (regional
+extraction, connectivity, metprofiles) consumes it — only the
+registration-overview QC report needs one reference-metabolite map in T1w
+space, and it generates that itself into `--work-dir` regardless of this
+flag, so the QC figure is always available even without `--output-mrsi-t1w`:
+
+```bash
+docker run --rm \
+  -v /path/to/bids:/data:ro \
+  -v /path/to/derivatives:/out \
+  fedlucchetti/mrsiprep:cpu \
+  /data /out participant \
+  --participant-label S001 \
+  --session-label V1 \
+  --mode mni-norm \
+  --output-mrsi-t1w \
+  --nthreads 16
+```
+
+With `--output-mrsi-t1w`, the full per-metabolite T1w-space maps are written
+to `<out>/mrsiprep/sub-*/ses-*/mrsi/t1w/` as permanent derivatives.
 
 CRLB, SNR, and FWHM(linewidth) maps for the configured `--metabolites` are
 transformed into T1w/MNI space alongside the signal maps whenever present;
@@ -58,7 +82,8 @@ pipeline.
 | --- | --- | --- |
 | `--registration-backend` | `ants` / `ants` | Registration engine (currently only ANTs). |
 | `--normalization` | `simple`, `ants-syn`, `existing` / `simple` | T1w→MNI normalization strategy; `existing` reuses a precomputed transform instead of registering. |
-| `--output-spaces` | `T1w MNI152NLin2009cAsym` | Which space(s) to resample final MRSI maps into: `MRSI`, `T1w`, `MNI152NLin2009cAsym` (aliases `mrsi`, `t1`, `mni` accepted). |
+| `--output-spaces` | `MNI152NLin2009cAsym` | Which space(s) to resample final MRSI maps into as permanent derivatives: `MRSI`, `MNI152NLin2009cAsym` (aliases `mrsi`, `mni` accepted). Does not control T1w output; see `--output-mrsi-t1w`. |
+| `--output-mrsi-t1w` | off | Also resample all metabolite (+ CRLB/SNR/FWHM/spikemask) maps into T1w space as permanent derivatives (`mrsi/t1w/`). Off by default; the registration-overview report always generates its own single reference-metabolite T1w map (in `--work-dir`) regardless of this flag. |
 | `--mni-resolution` | `origres`, `t1wres`, `<N>mm` / `t1wres` | MNI template resolution for both T1w→MNI registration and final resampling. |
 | `--ref-met` | `CrPCr` | Reference metabolite map used to build the MRSI registration target. |
 | `--registration-t1-target` | `brain-csf`, `brain`, `raw` / `brain-csf` (parc-con mode), `brain` (mni-norm mode) | Which T1w variant MRSI is registered to. |
