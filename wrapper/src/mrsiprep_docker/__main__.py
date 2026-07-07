@@ -26,10 +26,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-try:
-    from ._version import __version__
-except ImportError:
-    __version__ = "0+unknown"
+from . import __version__
 
 __bugreports__ = "https://github.com/MRSI-Psychosis-UP/MRSIPrep/issues"
 
@@ -90,10 +87,16 @@ def main() -> int:
     if (opts.bids_dir, opts.output_dir, opts.version, opts.help) == ("", "", False, False):
         opts.help = True
 
+    # mrsiprep's own CLI has no --version flag to query inside the container,
+    # so this only ever reports the wrapper's own version and configured
+    # image -- no need to touch Docker at all.
+    if opts.version:
+        print(f"mrsiprep-docker wrapper {__version__}")
+        print(f"image: {opts.image}")
+        return 0
+
     check = check_docker()
     if check < 1:
-        if opts.version:
-            print(f"mrsiprep-docker wrapper {__version__}")
         if opts.help:
             parser.print_help()
         if check == -1:
@@ -104,11 +107,9 @@ def main() -> int:
 
     if not check_image(opts.image):
         resp = "Y"
-        if opts.version:
-            print(f"mrsiprep-docker wrapper {__version__}")
         if opts.help:
             parser.print_help()
-        if opts.version or opts.help:
+        if opts.help:
             try:
                 resp = input(MISSING.format(opts.image))
             except KeyboardInterrupt:
@@ -176,10 +177,6 @@ def main() -> int:
         print("\n--- mrsiprep (inside the container) ---\n")
         print(target_help)
         return 0
-    if opts.version:
-        ret = subprocess.run([*command, "--version"])
-        print(f"mrsiprep-docker wrapper {__version__}")
-        return ret.returncode
 
     if not opts.shell:
         command.extend(main_args)

@@ -7,3 +7,6 @@ test_results/
 /docker/private-sources/
 /dist/
 /docs/_build/
+wrapper/dist/
+wrapper/build/
+*.egg-info/
