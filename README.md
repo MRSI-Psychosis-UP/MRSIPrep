@@ -2,7 +2,7 @@
 
 
 
-[![Docker Pulls](https://img.shields.io/docker/pulls/fedlucchetti/mrsiprep)](https://hub.docker.com/r/fedlucchetti/mrsiprep)
+[![Docker Pulls](https://img.shields.io/docker/pulls/mrsiup/mrsiprep)](https://hub.docker.com/r/mrsiup/mrsiprep)
 [![Documentation Status](https://app.readthedocs.org/projects/mrsiprep/badge/?version=latest)](https://mrsiprep.readthedocs.io/en/latest/)
 [![License: CHUV academic non-commercial](https://img.shields.io/badge/license-academic--non--commercial-blue)](LICENSE)
 

@@ -3,7 +3,7 @@
 *MRSIPrep* is a preprocessing and derivative-generation pipeline for already
 quantified whole-brain MRSI maps, run as a BIDS App via Docker.
 
-[![Docker Pulls](https://img.shields.io/docker/pulls/fedlucchetti/mrsiprep)](https://hub.docker.com/r/fedlucchetti/mrsiprep)
+[![Docker Pulls](https://img.shields.io/docker/pulls/mrsiup/mrsiprep)](https://hub.docker.com/r/mrsiup/mrsiprep)
 [![Documentation Status](https://app.readthedocs.org/projects/mrsiprep/badge/?version=latest)](https://mrsiprep.readthedocs.io/en/latest/)
 [![License: CHUV academic non-commercial](https://img.shields.io/badge/license-academic--non--commercial-blue)](https://github.com/MRSI-Psychosis-UP/mrsiprep/blob/main/LICENSE)
 

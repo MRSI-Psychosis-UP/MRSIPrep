@@ -71,7 +71,7 @@ def get_parser() -> argparse.ArgumentParser:
     parser.add_argument("analysis_level", nargs="?", default="participant", choices=["participant"])
 
     g_wrap = parser.add_argument_group("Wrapper (Docker-only) options")
-    g_wrap.add_argument("--image", default="fedlucchetti/mrsiprep:cpu", help="Docker image to use")
+    g_wrap.add_argument("--image", default="mrsiup/mrsiprep:cpu", help="Docker image to use")
     g_wrap.add_argument("--fs-license-file", metavar="PATH", type=os.path.abspath, help="path to a FreeSurfer license.txt, mounted and exported as FS_LICENSE")
     g_wrap.add_argument("--fs-subjects-dir", metavar="PATH", type=os.path.abspath, help="existing FreeSurfer SUBJECTS_DIR to mount and reuse")
     g_wrap.add_argument("--work-dir", metavar="PATH", type=os.path.abspath, help="scratch directory, mounted at /scratch")

@@ -5,7 +5,7 @@ installation of the pipeline itself — everything runs inside the container,
 including its [Nipype](https://nipype.readthedocs.io/)-based workflow engine.
 
 ```bash
-docker pull fedlucchetti/mrsiprep:cpu
+docker pull mrsiup/mrsiprep:cpu
 ```
 
 The image bundles ANTs, FSL (FAST only), FreeSurfer (`recon-all`,
@@ -21,7 +21,7 @@ docker run --rm \
   -v /path/to/freesurfer/license.txt:/opt/freesurfer/license.txt:ro \
   -e FS_LICENSE=/opt/freesurfer/license.txt \
   -e TZ="$(cat /etc/timezone)" \
-  fedlucchetti/mrsiprep:cpu \
+  mrsiup/mrsiprep:cpu \
   /data /out participant \
   --participant-label S001 \
   --session-label V1 \

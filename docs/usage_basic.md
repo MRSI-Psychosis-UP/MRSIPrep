@@ -12,7 +12,7 @@ image name for the equivalent `mrsiprep-docker` command.
 docker run --rm \
   -v /path/to/bids:/data:ro \
   -v /path/to/derivatives:/out \
-  fedlucchetti/mrsiprep:cpu \
+  mrsiup/mrsiprep:cpu \
   /data /out participant \
   --participant-label S001 \
   --session-label V1 \
@@ -38,7 +38,7 @@ Check all selected subject/session inputs without running preprocessing:
 docker run --rm \
   -v /path/to/bids:/data:ro \
   -v /path/to/derivatives:/out \
-  fedlucchetti/mrsiprep:cpu \
+  mrsiup/mrsiprep:cpu \
   /data /out participant \
   --participants participants.tsv \
   --validate-only
@@ -93,7 +93,7 @@ since their node cache is gone).
 docker run --rm \
   -v /path/to/bids:/data:ro \
   -v /path/to/derivatives:/out \
-  fedlucchetti/mrsiprep:cpu \
+  mrsiup/mrsiprep:cpu \
   /data /out participant \
   --participants participants.tsv \
   --mode parc-con \
@@ -161,7 +161,7 @@ threads).
 docker run --rm \
   -v /path/to/bids:/data:ro \
   -v /path/to/derivatives:/out \
-  fedlucchetti/mrsiprep:cpu \
+  mrsiup/mrsiprep:cpu \
   /data /out participant \
   --participant-label S001 \
   --session-label V1 \
@@ -185,7 +185,7 @@ Disable tissue segmentation and PVC entirely with `--tissue-backend none`
 docker run --rm \
   -v /path/to/bids:/data:ro \
   -v /path/to/derivatives:/out \
-  fedlucchetti/mrsiprep:cpu \
+  mrsiup/mrsiprep:cpu \
   /data /out participant \
   --participant-label S001 \
   --session-label V1 \

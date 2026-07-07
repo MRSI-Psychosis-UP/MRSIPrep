@@ -12,7 +12,7 @@ docker run --rm \
   -v /path/to/derivatives:/out \
   -v /path/to/freesurfer/license.txt:/opt/freesurfer/license.txt:ro \
   -e FS_LICENSE=/opt/freesurfer/license.txt \
-  fedlucchetti/mrsiprep:cpu \
+  mrsiup/mrsiprep:cpu \
   /data /out participant \
   --participant-label S001 --session-label V1 \
   --mode parc-con \
@@ -35,7 +35,7 @@ Use a bundled MNI atlas instead of Chimera (no FreeSurfer license required):
 docker run --rm \
   -v /path/to/bids:/data:ro \
   -v /path/to/derivatives:/out \
-  fedlucchetti/mrsiprep:cpu \
+  mrsiup/mrsiprep:cpu \
   /data /out participant \
   --participant-label S001 --session-label V1 \
   --mode parc-con \
@@ -52,7 +52,7 @@ with `--custom-atlas-lut`.
 docker run --rm \
   -v /path/to/bids:/data:ro \
   -v /path/to/derivatives:/out \
-  fedlucchetti/mrsiprep:cpu \
+  mrsiup/mrsiprep:cpu \
   /data /out participant \
   --participant-label S001 --session-label V1 \
   --mode parc-con \

@@ -30,8 +30,7 @@ ubuntu:22.04
         Dockerfile  (thin MRSIPrep layer)
                  → mrsiprep:cpu
                  ▼
-        docker/publish_image.sh
-                 → fedlucchetti/mrsiprep:cpu
+           (published as mrsiup/mrsiprep:cpu)
 ```
 
 `mrsiprep-deps:ubuntu22.04-cpu` holds complete upstream installations. It is
@@ -39,7 +38,7 @@ flattened and reduced into `mrsiprep-deps:cpu`. Ordinary Python source changes
 only require rebuilding the thin `mrsiprep:cpu` layer — see
 [Python-only rebuilds](#python-only-rebuilds).
 
-## Full rebuild from scratch → publish
+## Full rebuild from scratch
 
 Pick path **A** or **B** for the source dependency image, then run the shared
 tail. End to end:
@@ -58,8 +57,11 @@ docker/build_private_deps.sh       # → mrsiprep-deps:ubuntu22.04-cpu
 # --- Shared tail (both paths) ---
 docker/build_cpu_image.sh          # prune → mrsiprep-deps:cpu, then build → mrsiprep:cpu
 docker/test_container.sh mrsiprep:cpu
-docker/publish_image.sh -r fedlucchetti/mrsiprep -t cpu
 ```
+
+Pre-built images are published at `mrsiup/mrsiprep:cpu` on Docker Hub; most
+users should `docker pull mrsiup/mrsiprep:cpu` rather than building from
+source (see [Installation](../docs/installation.md)).
 
 Each step is detailed below.
 
@@ -97,7 +99,7 @@ docker/finalize_manual_deps.sh
 ```
 
 This commits the full, unpruned installation as `mrsiprep-deps:ubuntu22.04-cpu`.
-Continue with the [shared tail](#shared-tail-prune-build-publish).
+Continue with the [shared tail](#shared-tail-prune-and-build).
 
 This manual path is private and convenient, but the resulting dependency image
 is less reproducible than the automated secret-based build below.
@@ -148,9 +150,9 @@ docker/build_private_deps.sh
 
 This builds `Dockerfile.deps`, produces `mrsiprep-deps:ubuntu22.04-cpu`, and
 runs the dependency verifier automatically. Continue with the
-[shared tail](#shared-tail-prune-build-publish).
+[shared tail](#shared-tail-prune-and-build).
 
-## Shared tail (prune, build, publish)
+## Shared tail (prune and build)
 
 ### 3. Prune and build the full CPU image
 
@@ -177,24 +179,6 @@ docker/test_container.sh mrsiprep:cpu
 The check verifies the winning tissue tools, ANTsPy/ANTs CLI, Python imports,
 and optionally PETPVC and Chimera/FreeSurfer commands.
 
-### 5. Publish
-
-Save a local tarball and/or push to Docker Hub:
-
-```bash
-docker/publish_image.sh -r fedlucchetti/mrsiprep -t cpu
-```
-
-Common variants:
-
-```bash
-docker/publish_image.sh --no-push                        # local ./dist tarball only
-SKIP_SAVE=1 docker/publish_image.sh -r fedlucchetti/mrsiprep
-```
-
-Pushing requires `docker login` first. See `docker/publish_image.sh -h` for all
-options.
-
 ## Python-only rebuilds
 
 After changing MRSIPrep Python code only (no new dependencies):
@@ -205,7 +189,7 @@ docker/update_mrsiprep_image.sh
 
 This rebuilds `Dockerfile`, which starts from the existing `mrsiprep-deps:cpu`
 image and only copies/reinstalls MRSIPrep. It does not rebuild FreeSurfer, FSL,
-ANTs, PETPVC, or Chimera. Follow with step 5 to republish.
+ANTs, PETPVC, or Chimera.
 
 Override image names when needed:
 

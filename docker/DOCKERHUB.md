@@ -11,7 +11,7 @@ https://github.com/MRSI-Psychosis-UP/mrsiprep
 ## Pull
 
 ```bash
-docker pull fedlucchetti/mrsiprep:cpu
+docker pull mrsiup/mrsiprep:cpu
 ```
 
 Bundles ANTs, FSL (FAST only), FreeSurfer (`recon-all`, `mri_synthseg`,
@@ -27,7 +27,7 @@ docker run --rm \
   -v /path/to/freesurfer/license.txt:/opt/freesurfer/license.txt:ro \
   -e FS_LICENSE=/opt/freesurfer/license.txt \
   -e TZ="$(cat /etc/timezone)" \
-  fedlucchetti/mrsiprep:cpu \
+  mrsiup/mrsiprep:cpu \
   /data /out participant \
   --participant-label S001 \
   --session-label V1 \

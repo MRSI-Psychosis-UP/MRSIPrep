@@ -23,7 +23,7 @@ classifiers = [
 [project.urls]
 Homepage = "https://github.com/MRSI-Psychosis-UP/MRSIPrep"
 Documentation = "https://mrsiprep.readthedocs.io/"
-"Docker Images" = "https://hub.docker.com/r/fedlucchetti/mrsiprep/tags/"
+"Docker Images" = "https://hub.docker.com/r/mrsiup/mrsiprep/tags/"
 
 [project.scripts]
 mrsiprep-docker = "mrsiprep_docker.__main__:main"

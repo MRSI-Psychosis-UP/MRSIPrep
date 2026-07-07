@@ -7,7 +7,7 @@ normalizes them further into MNI space.
 docker run --rm \
   -v /path/to/bids:/data:ro \
   -v /path/to/derivatives:/out \
-  fedlucchetti/mrsiprep:cpu \
+  mrsiup/mrsiprep:cpu \
   /data /out participant \
   --participant-label S001 \
   --session-label V1 \
@@ -35,7 +35,7 @@ flag, so the QC figure is always available even without `--output-mrsi-t1w`:
 docker run --rm \
   -v /path/to/bids:/data:ro \
   -v /path/to/derivatives:/out \
-  fedlucchetti/mrsiprep:cpu \
+  mrsiup/mrsiprep:cpu \
   /data /out participant \
   --participant-label S001 \
   --session-label V1 \
@@ -62,7 +62,7 @@ for higher anatomical accuracy at additional compute cost:
 docker run --rm \
   -v /path/to/bids:/data:ro \
   -v /path/to/derivatives:/out \
-  fedlucchetti/mrsiprep:cpu \
+  mrsiup/mrsiprep:cpu \
   /data /out participant \
   --participant-label S001 \
   --session-label V1 \

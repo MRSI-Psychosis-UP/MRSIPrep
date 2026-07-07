@@ -30,7 +30,7 @@ docker run --rm -it -u "$(id -u):$(id -g)" \
   -e FS_LICENSE=/opt/freesurfer/license.txt \
   -v /path/to/bids:/data:ro \
   -v /path/to/derivatives:/out \
-  fedlucchetti/mrsiprep:cpu \
+  mrsiup/mrsiprep:cpu \
   /data /out participant \
   --participant-label S001 --session-label V1 \
   --mode mni-norm --nthreads 8
