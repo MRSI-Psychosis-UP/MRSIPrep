@@ -2,6 +2,42 @@
 
 ## Unreleased
 
+- **Breaking:** `--metabolites` and `--ref-met` are now required, with no
+  defaults. `--b0` (and the field-strength-dependent default metabolite
+  lists it selected between) has been removed entirely — there is no
+  implicit metabolite list; always pass `--metabolites` explicitly as a
+  comma-separated string, e.g. `--metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins`
+  (previously space-separated). `--ref-met` (e.g. `CrPCr`) must likewise
+  always be specified; it no longer defaults to `CrPCr`.
+- Aligned the CLI more closely with fMRIPrep's conventions: added
+  `--bids-filter-file` (JSON entity filters to force a specific T1w
+  acquisition/run when a session has more than one candidate; only the
+  `"t1w"` key is currently supported), a `-w` short alias for `--work-dir`,
+  and `--stop-on-first-crash` (abort the whole run on the first recording
+  failure instead of logging it and continuing). Renamed several `--help`
+  argument-group titles to match fMRIPrep's section names where a reasonable
+  analogue exists (e.g. "subject/session selection" →
+  "Options for filtering BIDS queries"); groups with no fMRIPrep equivalent
+  (quality thresholds, parcellation, connectivity, overwrite/recompute) keep
+  their existing names. Cosmetic/additive only — no existing flag was
+  renamed or removed.
+- Added `--longitudinal` subject-template normalization (**experimental —
+  not yet verified end-to-end on a full multi-session run**): for multi-session
+  subjects, builds one unbiased ANTs template across sessions
+  (`antsMultivariateTemplateConstruction2.sh`) and registers it to MNI once
+  (`antsRegistrationSyN.sh -t s`), composing (session→template)+
+  (template→MNI) for each session's final MNI-space maps instead of
+  registering every session directly. This completes the previously dead
+  `t1-template`/`template-mni` (`ses-all`) naming convention and preflight
+  columns that had been stubbed but unimplemented, replacing the dead
+  `--proc-mnilong` flag. No-op for single-session subjects. Requires
+  `antsMultivariateTemplateConstruction2.sh`, `antsAI`,
+  `AverageAffineTransform`, `AverageAffineTransformNoRigid`, `AverageImages`,
+  `ImageMath`, `MultiplyImages`, `ImageSetStatistics`, and `MeasureMinMaxMean`
+  on `$PATH`; added to the Docker CPU image's ANTs prune allowlist (the last
+  two were only caught by a full real end-to-end `--longitudinal` run, which
+  ran template construction to completion across all 4 iterations before
+  failing at the final "MeasureMinMaxMean: command not found").
 - Fixed broken ANTs CLI fallback: `antsRegistrationSyN.sh` calls `PrintHeader`
   internally for image header inspection, but the previous Docker pruning pass
   only kept the four binaries mrsiprep directly invokes and missed it —

@@ -25,6 +25,8 @@ docker run --rm \
   /data /out participant \
   --participant-label S001 \
   --session-label V1 \
+  --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \
+  --ref-met CrPCr \
   --mode mni-norm \
   --nthreads 8
 ```
@@ -45,6 +47,8 @@ pip install mrsiprep-docker
 
 mrsiprep-docker /path/to/bids /path/to/bids/derivatives participant \
   --participant-label S001 --session-label V1 \
+  --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \
+  --ref-met CrPCr \
   --mode mni-norm --nthreads 8 \
   --fs-license-file /path/to/freesurfer/license.txt
 ```

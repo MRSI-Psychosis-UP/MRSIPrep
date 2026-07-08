@@ -46,6 +46,18 @@ def required_external_tools(config=None) -> list[str]:
         tools.append("petpvc")
     if full and (config is None or getattr(config, "parcellation_mode", "chimera") == "chimera"):
         tools.extend(["chimera", "recon-all"])
+    if config is not None and getattr(config, "longitudinal", False):
+        tools.extend([
+            "antsMultivariateTemplateConstruction2.sh",
+            "antsAI",
+            "AverageAffineTransform",
+            "AverageAffineTransformNoRigid",
+            "AverageImages",
+            "ImageMath",
+            "MultiplyImages",
+            "ImageSetStatistics",
+            "MeasureMinMaxMean",
+        ])
     return list(dict.fromkeys(tools))
 
 

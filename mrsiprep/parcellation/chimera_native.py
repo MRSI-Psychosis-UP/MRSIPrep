@@ -16,7 +16,7 @@ from mrsiprep.utils.debug import Debug
 
 def run_chimera_parcellation(config, subject: str, session: str | None, mrsi_reference: Path, t1_to_mrsi_transforms: list[Path]) -> ParcellationResult:
     debug = Debug(verbose=config.verbose)
-    layout = BIDSLayout(config.bids_dir)
+    layout = BIDSLayout(config.bids_dir, filters=config.bids_filters)
     rerun_chimera = config.overwrite or config.overwrite_chimera
     source_atlas = None if rerun_chimera else layout.chimera_atlas(subject, session, config.chimera_scheme, config.chimera_scale, config.chimera_grow, space="orig")
     if source_atlas is None:

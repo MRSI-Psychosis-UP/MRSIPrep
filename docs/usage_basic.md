@@ -16,6 +16,8 @@ docker run --rm \
   /data /out participant \
   --participant-label S001 \
   --session-label V1 \
+  --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \
+  --ref-met CrPCr \
   --mode mni-norm \
   --synthseg-mode fast \
   --nthreads 8
@@ -41,6 +43,8 @@ docker run --rm \
   mrsiup/mrsiprep:cpu \
   /data /out participant \
   --participants participants.tsv \
+  --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \
+  --ref-met CrPCr \
   --validate-only
 ```
 
@@ -96,6 +100,8 @@ docker run --rm \
   mrsiup/mrsiprep:cpu \
   /data /out participant \
   --participants participants.tsv \
+  --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \
+  --ref-met CrPCr \
   --mode parc-con \
   --verbose 1 \
   --nthreads 8 \
@@ -165,6 +171,8 @@ docker run --rm \
   /data /out participant \
   --participant-label S001 \
   --session-label V1 \
+  --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \
+  --ref-met CrPCr \
   --mode parc-con \
   --tissue-backend existing
 ```
@@ -189,6 +197,8 @@ docker run --rm \
   /data /out participant \
   --participant-label S001 \
   --session-label V1 \
+  --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \
+  --ref-met CrPCr \
   --mode parc-con \
   --tissue-backend none
 ```
@@ -202,9 +212,25 @@ docker run --rm \
 | `--participant-label` | (all) | One or more subject labels to process, e.g. `S001 S002`. |
 | `--session-label` | (all) | One or more session labels to process, e.g. `V1 V2`. |
 | `--participants` | none | Path to a TSV/CSV with `subject`/`session` columns for batch runs, as an alternative to `--participant-label`/`--session-label`. |
-| `--b0` | `3.0` | Field strength: `3.0` or `7.0`. Selects the default metabolite list when `--metabolites` is not given. |
-| `--metabolites` | (B0-dependent list) | Metabolite names to process, e.g. `CrPCr GluGln GPCPCh NAANAAG Ins`. |
+| `--bids-filter-file` | none | Path to a JSON file of entity filters used to force a specific T1w acquisition/run when a session has more than one candidate (see below). |
+| `--metabolites` | **required** | Comma-separated metabolite names to process, e.g. `CrPCr,GluGln,GPCPCh,NAANAAG,Ins`. No default — there is no field-strength-dependent metabolite list; always specify explicitly. |
 | `--t1` | `desc-brain_T1w` | BIDS filename pattern used to locate the input T1w image. |
+
+By default, when a subject/session has more than one candidate raw T1w
+acquisition, MRSIPrep picks one heuristically (preferring
+`acq-memprage`/`mprage`/`mp2rage` and `run-01`). `--bids-filter-file` lets you
+override that choice explicitly:
+
+```json
+{"t1w": {"acquisition": "memprage", "run": "01"}}
+```
+
+Only the `"t1w"` key is currently supported (any other top-level key is
+rejected with an error rather than silently ignored). Filter values use
+either MRSIPrep's short BIDS entity names (`acq`, `run`, `ses`, `sub`) or the
+long PyBIDS-style names shown above (`acquisition`, `run`, `session`,
+`subject`) interchangeably. A value of `null` requires the entity to be
+absent from the filename.
 
 ### Quality thresholds
 
@@ -241,9 +267,10 @@ docker run --rm \
 | `--nthreads` | `16` | ANTs/ITK thread count per subject/session process. |
 | `--nproc` | `1` | Number of subject/session recordings to process in parallel (each its own Nipype workflow); combined with `--nthreads` this is capped at the host's CPU count. |
 | `--verbose`, `-v` | `0`-`3` / `1` | Console output detail level (see above). |
-| `--work-dir` | `<output_dir>/work` | Scratch directory for the Nipype node cache and other intermediate files; safe to delete between runs. |
+| `--work-dir`, `-w` | `<output_dir>/work` | Scratch directory for the Nipype node cache and other intermediate files; safe to delete between runs. |
 | `--validate-only` | off | Check selected subject/session inputs and exit without processing. |
 | `--check-external-libs` | off | Verify required external binaries are on `PATH`/installed and exit. |
+| `--stop-on-first-crash` | off | Abort the whole run immediately on the first recording failure, instead of logging it and continuing with the rest of the batch. |
 | `--overwrite` | off | Force-rerun all steps, ignoring the Nipype node cache and any file-level cached outputs. |
 | `--overwrite-filt` | off | Force-rerun MRSI filtering only. |
 | `--overwrite-seg` | off | Force-rerun tissue segmentation (SynthSeg brain extraction + dseg/probseg) only. |
@@ -289,3 +316,43 @@ mrsiprep-import-gui
 
 The import helpers preserve the MRSI-Metabolic-Connectome derivative layout:
 `derivatives/mrsi-orig`, `derivatives/cat12`, and `derivatives/skullstrip`.
+
+## Limitations and scope
+
+MRSIPrep is a BIDS App for whole-brain quantified MRSI derivatives, not a
+general-purpose neuroimaging pipeline. In particular:
+
+- It has no fieldmap/BOLD/functional-MRI handling — those are out of scope
+  entirely, since the inputs are already-quantified MRSI metabolite maps
+  rather than raw k-space or functional time series.
+- A single registration backend is supported (ANTs); there is no
+  TemplateFlow catalog, and normalization targets are limited to MNI152
+  (`MNI152NLin2009cAsym`) plus native T1w/MRSI space — see
+  [MNI Normalization Usage](usage_normalization.md).
+- `--longitudinal` (**experimental, not yet verified end-to-end**) builds one
+  ANTs subject-template across sessions — see
+  [MNI Normalization Usage](usage_normalization.md); it does not otherwise
+  change per-session processing, and assumes reasonably stable anatomy
+  across a subject's sessions.
+- Chimera parcellation and the `synthseg-fast` tissue backend require
+  FreeSurfer, FSL, and a valid `FS_LICENSE`; `mni-norm` mode does not.
+
+## Troubleshooting
+
+- Start with a full-detail run log at `<out>/mrsiprep/logs/mrsiprep_<timestamp>.log`,
+  and the per-recording logbook at `sub-*/ses-*/logs/sub-*_ses-*_desc-mrsiprep_log.txt`
+  for a single subject/session's history out of a larger batch (see
+  "Verbosity, logging, and provenance" above).
+- Re-run the same recording with `--verbose 2` (step-level detail) or
+  `--verbose 3` (raw ANTs/`recon-all`/`mri_synthseg` subprocess output) to
+  see exactly where a failure occurs.
+- `--validate-only` checks all selected subject/session inputs before any
+  expensive processing starts — run it first when troubleshooting a batch.
+- `--check-external-libs` verifies required external binaries
+  (ANTs/FSL/FreeSurfer/PETPVC/Chimera, as applicable to the selected mode)
+  are present and exits.
+- By default a batch run logs a recording's failure and continues with the
+  rest; pass `--stop-on-first-crash` to abort immediately instead, which is
+  often easier when debugging a single problematic recording.
+- Report issues at
+  [github.com/MRSI-Psychosis-UP/MRSIPrep/issues](https://github.com/MRSI-Psychosis-UP/MRSIPrep/issues).

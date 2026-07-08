@@ -47,23 +47,33 @@ def _configure_nipype_logging(config) -> None:
     nlogging.update_logging(ncfg)
 
 
-def execute_recordings_nipype(config, ready: "list[Recording]") -> "list[RecordingStatus]":
+def execute_recordings_nipype(config, ready: "list[Recording]", subject_templates: dict | None = None) -> "list[RecordingStatus]":
     """Run the ready recordings through the Nipype engine.
 
     Serial when ``--nproc <= 1``; otherwise fan out across recordings with a
     ProcessPoolExecutor (each worker builds and runs its own recording DAG).
+
+    ``subject_templates`` maps subject -> precomputed ``SubjectTemplateResult``
+    (see ``mrsiprep.workflows.participant._build_subject_templates``), built
+    once per subject ahead of time when ``--longitudinal`` is on. Subjects
+    absent from the dict fall back to direct per-session T1-to-MNI
+    registration.
     """
     _configure_nipype_logging(config)
+    subject_templates = subject_templates or {}
 
     if config.nproc <= 1:
-        return [_run_one_recording_nipype(config, rec.subject, rec.session) for rec in ready]
+        return [
+            _run_one_recording_nipype(config, rec.subject, rec.session, subject_templates.get(rec.subject))
+            for rec in ready
+        ]
 
     from concurrent.futures import ProcessPoolExecutor, as_completed
 
     statuses: list = []
     with ProcessPoolExecutor(max_workers=config.nproc) as executor:
         futures = {
-            executor.submit(_run_one_recording_nipype, config, rec.subject, rec.session): rec
+            executor.submit(_run_one_recording_nipype, config, rec.subject, rec.session, subject_templates.get(rec.subject)): rec
             for rec in ready
         }
         for future in as_completed(futures):
@@ -71,7 +81,7 @@ def execute_recordings_nipype(config, ready: "list[Recording]") -> "list[Recordi
     return statuses
 
 
-def _run_one_recording_nipype(config, subject: str, session: str | None) -> "RecordingStatus":
+def _run_one_recording_nipype(config, subject: str, session: str | None, subject_template=None) -> "RecordingStatus":
     from mrsiprep.io.naming import prefix as name_prefix
     from mrsiprep.io.naming import subject_session_dir
     from mrsiprep.utils.debug import set_logbook
@@ -92,19 +102,21 @@ def _run_one_recording_nipype(config, subject: str, session: str | None) -> "Rec
     LOGGER.info("START %s", msg)
     start = time.monotonic()
     try:
-        wf = build_recording_workflow(config, subject, session)
+        wf = build_recording_workflow(config, subject, session, subject_template=subject_template)
         exec_graph = wf.run(plugin="Linear")
         outputs = _terminal_outputs(exec_graph, TERMINAL_NODE)
         elapsed = time.monotonic() - start
         debug.always(f"[success]FINISHED[/success] {msg} in {_format_elapsed(elapsed)}")
         LOGGER.info("FINISHED %s in %s", msg, _format_elapsed(elapsed))
         return RecordingStatus(subject, session, "success", outputs=outputs)
-    except Exception as exc:  # batch-safe failure
+    except Exception as exc:  # batch-safe failure, unless --stop-on-first-crash
         elapsed = time.monotonic() - start
         debug.always(f"[failure]FAILED[/failure] {msg} after {_format_elapsed(elapsed)}: {exc}")
         LOGGER.error("FAILED %s after %s: %s", msg, _format_elapsed(elapsed), exc)
         if config.verbose >= 2:
             LOGGER.error(traceback.format_exc())
+        if config.stop_on_first_crash:
+            raise
         return RecordingStatus(subject, session, "failed", error=str(exc))
     finally:
         set_logbook(None)

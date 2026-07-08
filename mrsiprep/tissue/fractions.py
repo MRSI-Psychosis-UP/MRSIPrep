@@ -10,7 +10,7 @@ from mrsiprep.io.naming import anat_derivative, mrsi_derivative
 
 
 def load_existing_cat12(config, subject: str, session: str | None) -> dict[str, Path]:
-    layout = BIDSLayout(config.bids_dir)
+    layout = BIDSLayout(config.bids_dir, filters=config.bids_filters)
     paths = {
         "GM": layout.cat12_probseg(subject, session, 1),
         "WM": layout.cat12_probseg(subject, session, 2),

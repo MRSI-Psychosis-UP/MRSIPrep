@@ -35,3 +35,29 @@ def run_t1_to_mni(config, subject: str, session: str | None, t1_path: Path, mrsi
         )
     register(template, t1_path, prefix, transform="s", verbose=config.verbose >= 3, threads=config.nthreads)
     return T1ToMNIResult(transform_paths(prefix, "forward"), transform_paths(prefix, "inverse"), prefix, template)
+
+
+def compose_longitudinal_t1_to_mni(config, subject: str, session: str, template_result, t1_path: Path) -> T1ToMNIResult:
+    """Compose (session -> subject template) + (template -> MNI) forward transforms.
+
+    ``template_result`` is a ``SubjectTemplateResult`` from
+    ``mrsiprep.registration.subject_template.build_subject_template``, already
+    built for this subject. The composed forward list is applied in order by
+    ``apply_transforms``/antspyx (session-to-template transform first, then
+    template-to-MNI), matching the existing forward-transform-list convention
+    used everywhere else in the codebase (see ``registration.transforms``).
+    """
+    from nilearn import datasets
+
+    session_forward = template_result.per_session_forward.get(session)
+    if not session_forward or not all_exist(session_forward):
+        raise FileNotFoundError(
+            f"Missing session-to-template transform for sub-{subject} ses-{session}; "
+            "build_subject_template() should have produced it."
+        )
+    forward = session_forward + template_result.template_to_mni_forward
+    inverse = template_result.template_to_mni_inverse
+    resolution = resolve_mni_resolution(config.mni_resolution, t1_path)
+    template = datasets.load_mni152_template(resolution)
+    prefix = ants_transform_prefix(config.derivative_dir, subject, session, "anat")
+    return T1ToMNIResult(forward, inverse, prefix, template)

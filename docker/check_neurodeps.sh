@@ -58,6 +58,17 @@ check_command antsRegistration
 check_command antsApplyTransforms
 check_command N4BiasFieldCorrection
 
+# --longitudinal subject-template construction (registration/subject_template.py).
+check_command antsMultivariateTemplateConstruction2.sh
+check_command antsAI
+check_command AverageAffineTransform
+check_command AverageAffineTransformNoRigid
+check_command AverageImages
+check_command ImageMath
+check_command MultiplyImages
+check_command ImageSetStatistics
+check_command MeasureMinMaxMean
+
 if [[ "${REQUIRE_PETPVC:-1}" == "1" ]]; then
   check_command petpvc
 fi
@@ -70,9 +81,18 @@ if [[ "${REQUIRE_CHIMERA:-1}" == "1" ]]; then
   fi
 fi
 
-for module in numpy scipy pandas nibabel nilearn matplotlib skimage rich ants nipype; do
+for module in numpy scipy pandas nibabel nilearn matplotlib skimage rich ants; do
   check_python_import "${module}"
 done
+
+# nipype is pure-Python and installed at the thin app layer (Dockerfile), not
+# the deps layer, so existing dependency images built before it was added
+# still get it without a full deps rebuild (see Dockerfile's comment). Only
+# require it here when explicitly requested (the app-layer build/test can set
+# REQUIRE_NIPYPE=1 once it's actually expected to be present).
+if [[ "${REQUIRE_NIPYPE:-0}" == "1" ]]; then
+  check_python_import nipype
+fi
 
 if [[ "${failures}" -ne 0 ]]; then
   printf '\nDependency verification failed: %d missing item(s).\n' "${failures}" >&2

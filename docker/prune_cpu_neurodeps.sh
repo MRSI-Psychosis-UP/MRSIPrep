@@ -38,19 +38,41 @@ done
 rm -rf "${FSL_ROOT}"
 mv "${fsl_runtime}" "${FSL_ROOT}"
 
-# MRSIPrep only ever shells out to antsRegistrationSyN.sh and
-# antsApplyTransforms (interfaces/ants.py), and only as a fallback when
-# antspyx's Python bindings are unavailable; antspyx itself ships its own
-# bundled libs and has no dependency on /opt/ants. antsRegistrationSyN.sh is
-# a shell script that itself calls antsRegistration, antsApplyTransforms,
-# and PrintHeader internally (confirmed by grepping the script for every
-# ANTs bin/ name) - PrintHeader was missed in an earlier pass of this prune
-# and broke every registration that goes through the CLI fallback path with
-# "PrintHeader: command not found". N4BiasFieldCorrection is kept too even
-# though nothing currently shells out to it, since utils/provenance.py's
-# required_external_tools() (and this same check_neurodeps.sh) treat it as
-# a required tool. Plus any resolved /opt/ants/lib dependency, mirroring
-# the FSL pattern above.
+# MRSIPrep shells out to antsRegistrationSyN.sh and antsApplyTransforms
+# (interfaces/ants.py), only as a fallback when antspyx's Python bindings are
+# unavailable; antspyx itself ships its own bundled libs and has no
+# dependency on /opt/ants. antsRegistrationSyN.sh is a shell script that
+# itself calls antsRegistration, antsApplyTransforms, and PrintHeader
+# internally (confirmed by grepping the script for every ANTs bin/ name) -
+# PrintHeader was missed in an earlier pass of this prune and broke every
+# registration that goes through the CLI fallback path with "PrintHeader:
+# command not found". N4BiasFieldCorrection is kept too even though nothing
+# currently shells out to it directly, since utils/provenance.py's
+# required_external_tools() (and this same check_neurodeps.sh) treat it as a
+# required tool.
+#
+# --longitudinal mode (registration/subject_template.py) additionally shells
+# out to antsMultivariateTemplateConstruction2.sh, which itself calls
+# antsAI, AverageAffineTransform, AverageAffineTransformNoRigid,
+# AverageImages, ImageMath, MultiplyImages, ImageSetStatistics, and
+# MeasureMinMaxMean (confirmed by grepping a real ANTs 2.5.4 install for
+# every bare binary name the script invokes - it has no $ANTSPATH prefix, so
+# it relies on these being on $PATH; ImageSetStatistics/MeasureMinMaxMean
+# were missed in an earlier pass and reproduced with a real end-to-end
+# --longitudinal run: template construction ran to completion across all 4
+# iterations before failing at the final "MeasureMinMaxMean: command not
+# found"). Missing any of these reproduces the same class of "command not
+# found" failure as the PrintHeader case above, just deeper in the
+# longitudinal template-building path. The script also does an unconditional
+# upfront `-x` existence check
+# on its SGE/PBS/XGrid/SLURM cluster-mode helper scripts (ANTSpexec.sh,
+# waitForSGEQJobs.pl, waitForPBSQJobs.pl, waitForXGridJobs.pl,
+# waitForSlurmJobs.pl) and hard-exits if any are missing, even though the
+# default local/serial execution path never calls them - confirmed by an
+# actual failed run ("FILE ANTSpexec.sh DOES NOT EXIST...will terminate").
+# They're a few KB each, so kept unconditionally rather than trying to patch
+# the script's own upfront check. Plus any resolved /opt/ants/lib dependency,
+# mirroring the FSL pattern above.
 if [[ -d "${ANTS_ROOT}" ]]; then
   ants_runtime="$(mktemp -d /opt/ants-runtime.XXXXXX)"
   mkdir -p "${ants_runtime}/bin"
@@ -59,12 +81,31 @@ if [[ -d "${ANTS_ROOT}" ]]; then
   cp -a "${ANTS_ROOT}/bin/antsApplyTransforms" "${ants_runtime}/bin/"
   cp -a "${ANTS_ROOT}/bin/N4BiasFieldCorrection" "${ants_runtime}/bin/"
   cp -a "${ANTS_ROOT}/bin/PrintHeader" "${ants_runtime}/bin/"
+  cp -a "${ANTS_ROOT}/bin/antsMultivariateTemplateConstruction2.sh" "${ants_runtime}/bin/"
+  cp -a "${ANTS_ROOT}/bin/antsAI" "${ants_runtime}/bin/"
+  cp -a "${ANTS_ROOT}/bin/AverageAffineTransform" "${ants_runtime}/bin/"
+  cp -a "${ANTS_ROOT}/bin/AverageAffineTransformNoRigid" "${ants_runtime}/bin/"
+  cp -a "${ANTS_ROOT}/bin/AverageImages" "${ants_runtime}/bin/"
+  cp -a "${ANTS_ROOT}/bin/ImageMath" "${ants_runtime}/bin/"
+  cp -a "${ANTS_ROOT}/bin/MultiplyImages" "${ants_runtime}/bin/"
+  cp -a "${ANTS_ROOT}/bin/ImageSetStatistics" "${ants_runtime}/bin/"
+  cp -a "${ANTS_ROOT}/bin/MeasureMinMaxMean" "${ants_runtime}/bin/"
+  cp -a "${ANTS_ROOT}/bin/ANTSpexec.sh" "${ants_runtime}/bin/"
+  cp -a "${ANTS_ROOT}/bin/waitForSGEQJobs.pl" "${ants_runtime}/bin/"
+  cp -a "${ANTS_ROOT}/bin/waitForPBSQJobs.pl" "${ants_runtime}/bin/"
+  cp -a "${ANTS_ROOT}/bin/waitForXGridJobs.pl" "${ants_runtime}/bin/"
+  cp -a "${ANTS_ROOT}/bin/waitForSlurmJobs.pl" "${ants_runtime}/bin/"
 
+  ants_libbin_deps=(
+    antsRegistration antsApplyTransforms N4BiasFieldCorrection PrintHeader
+    antsAI AverageAffineTransform AverageAffineTransformNoRigid AverageImages
+    ImageMath MultiplyImages ImageSetStatistics MeasureMinMaxMean
+  )
   while IFS= read -r library; do
     [[ -n "${library}" ]] || continue
     mkdir -p "${ants_runtime}/lib"
     cp -L "${library}" "${ants_runtime}/lib/$(basename "${library}")"
-  done < <(ldd "${ANTS_ROOT}/bin/antsRegistration" "${ANTS_ROOT}/bin/antsApplyTransforms" "${ANTS_ROOT}/bin/N4BiasFieldCorrection" "${ANTS_ROOT}/bin/PrintHeader" | awk -v root="${ANTS_ROOT}/" '$3 ~ "^" root {print $3}')
+  done < <(ldd "${ants_libbin_deps[@]/#/${ANTS_ROOT}/bin/}" | awk -v root="${ANTS_ROOT}/" '$3 ~ "^" root {print $3}')
 
   rm -rf "${ANTS_ROOT}"
   mv "${ants_runtime}" "${ANTS_ROOT}"

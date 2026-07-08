@@ -30,7 +30,7 @@ def prepare_anatomical(
     p3_override: Path | None = None,
     brain_mask_override: Path | None = None,
 ) -> AnatomicalResult:
-    layout = BIDSLayout(config.bids_dir)
+    layout = BIDSLayout(config.bids_dir, filters=config.bids_filters)
     raw_t1 = layout.raw_t1(subject, session)
     brain_mask = brain_mask_override or layout.brain_mask(subject, session)
     registration_t1 = t1_path

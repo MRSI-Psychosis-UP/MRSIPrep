@@ -15,6 +15,8 @@ docker run --rm \
   mrsiup/mrsiprep:cpu \
   /data /out participant \
   --participant-label S001 --session-label V1 \
+  --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \
+  --ref-met CrPCr \
   --mode parc-con \
   --tissue-backend synthseg-fast \
   --parcellation-mode chimera \
@@ -38,6 +40,8 @@ docker run --rm \
   mrsiup/mrsiprep:cpu \
   /data /out participant \
   --participant-label S001 --session-label V1 \
+  --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \
+  --ref-met CrPCr \
   --mode parc-con \
   --tissue-backend synthseg-fast \
   --parcellation-mode mni --atlas chimera-LFMIHIFIS-3
@@ -55,6 +59,8 @@ docker run --rm \
   mrsiup/mrsiprep:cpu \
   /data /out participant \
   --participant-label S001 --session-label V1 \
+  --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \
+  --ref-met CrPCr \
   --mode parc-con \
   --parcellation-mode mni --atlas chimera-LFMIHIFIS-3 \
   --write-connectivity \

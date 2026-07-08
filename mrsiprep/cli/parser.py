@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from mrsiprep.config.defaults import METABOLITES_3T, METABOLITES_7T, QUALITY_DEFAULTS
+from mrsiprep.config.defaults import QUALITY_DEFAULTS
 from mrsiprep.config.settings import MRSIPrepConfig
 
 
@@ -15,20 +15,32 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("output_dir", type=Path)
     parser.add_argument("analysis_level", choices=["participant"])
 
-    selection = parser.add_argument_group("subject/session selection")
+    selection = parser.add_argument_group("Options for filtering BIDS queries")
     selection.add_argument("--participant-label", nargs="+", default=[])
     selection.add_argument("--session-label", nargs="+", default=[])
     selection.add_argument("--participants", type=Path, default=None, help="TSV/CSV subject-session list.")
+    selection.add_argument(
+        "--bids-filter-file",
+        type=Path,
+        default=None,
+        help="Path to a JSON file of PyBIDS-style entity filters used to select among ambiguous input candidates, "
+        "e.g. {\"t1w\": {\"acquisition\": \"memprage\", \"run\": \"01\"}} to force a specific T1w acquisition/run "
+        "when a session has more than one. Only the \"t1w\" key is currently supported.",
+    )
 
     quality = parser.add_argument_group("quality thresholds")
-    quality.add_argument("--b0", type=float, default=3.0, choices=[3.0, 7.0])
-    quality.add_argument("--metabolites", nargs="+", default=None)
+    quality.add_argument(
+        "--metabolites",
+        type=_parse_comma_list,
+        required=True,
+        help="Comma-separated metabolite names to process, e.g. 'CrPCr,GluGln,GPCPCh,NAANAAG,Ins'.",
+    )
     quality.add_argument("--quality-metrics", nargs="+", default=["snr", "linewidth", "crlb"])
     quality.add_argument("--snr-min", type=float, default=QUALITY_DEFAULTS["snr_min"])
     quality.add_argument("--linewidth-max", type=float, default=QUALITY_DEFAULTS["linewidth_max"])
     quality.add_argument("--crlb-max", type=float, default=QUALITY_DEFAULTS["crlb_max"])
 
-    processing = parser.add_argument_group("processing mode")
+    processing = parser.add_argument_group("Options for performing only a subset of the workflow")
     processing.add_argument("--mode", "--processing-mode", dest="processing_mode", choices=["mni-norm", "parc-con"], default="mni-norm")
     processing.add_argument(
         "--tissue-backend",
@@ -37,7 +49,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Tissue segmentation backend for PVC. 'none' disables tissue segmentation and PVC entirely.",
     )
 
-    registration = parser.add_argument_group("registration and normalization")
+    registration = parser.add_argument_group("Specific options for ANTs registrations")
     registration.add_argument("--registration-backend", choices=["ants"], default="ants")
     registration.add_argument("--normalization", choices=["simple", "ants-syn", "existing"], default="simple")
     registration.add_argument("--output-spaces", nargs="+", default=["MNI152NLin2009cAsym"])
@@ -55,7 +67,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     registration.add_argument("--registration-t1-target", choices=["brain-csf", "brain", "raw"], default=None)
     registration.add_argument("--csf-pv-threshold", type=float, default=0.95)
-    registration.add_argument("--ref-met", default="CrPCr")
+    registration.add_argument(
+        "--ref-met",
+        required=True,
+        help="Reference metabolite map used to build the MRSI registration target, e.g. 'CrPCr'.",
+    )
     registration.add_argument("--t1", dest="t1_pattern", default="desc-brain_T1w")
 
     parcellation = parser.add_argument_group("parcellation")
@@ -88,12 +104,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     connectivity.add_argument("--regional-summary", choices=["mean", "median", "weighted_mean"], default="mean")
 
-    processing_control = parser.add_argument_group("processing control")
+    processing_control = parser.add_argument_group("Workflow configuration")
     processing_control.add_argument("--transform", default="", help="Legacy output transform override; prefer --output-spaces.")
     processing_control.add_argument("--no-filter", action="store_true")
     processing_control.add_argument("--spikepc", type=float, default=99.0)
     processing_control.add_argument("--no-pvc", action="store_true")
-    processing_control.add_argument("--proc-mnilong", action="store_true")
+    processing_control.add_argument(
+        "--longitudinal",
+        action="store_true",
+        help="[EXPERIMENTAL, not yet fully verified end-to-end] Build one unbiased ANTs template across a "
+        "subject's sessions and register it to MNI once, composing (session-to-template)+(template-to-MNI) "
+        "instead of registering each session directly to MNI. No-op for subjects with a single session.",
+    )
     processing_control.add_argument("--transform-spikemask", action="store_true", help="Also transform per-metabolite spike masks into T1w/MNI space.")
     processing_control.add_argument("--nthreads", type=int, default=16, help="ANTs/ITK thread count per subject/session process.")
     processing_control.add_argument(
@@ -103,7 +125,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Number of subject/session recordings to process in parallel. Each parallel process gets --nthreads threads; "
         "if nproc*nthreads exceeds the available CPU count, --nthreads is coerced down and a warning is shown at startup.",
     )
-    processing_control.add_argument("--work-dir", type=Path, default=None)
+    processing_control.add_argument("--work-dir", "-w", type=Path, default=None)
 
     overwrite = parser.add_argument_group("overwrite/recompute")
     overwrite.add_argument("--overwrite", action="store_true")
@@ -115,9 +137,14 @@ def build_parser() -> argparse.ArgumentParser:
     overwrite.add_argument("--overwrite-transform", action="store_true")
     overwrite.add_argument("--overwrite-chimera", action="store_true", help="Force re-run Chimera parcellation even if the output dseg file already exists.")
 
-    runtime = parser.add_argument_group("runtime")
+    runtime = parser.add_argument_group("Other options")
     runtime.add_argument("--validate-only", action="store_true", help="Check selected subject/session inputs and exit without running preprocessing.")
     runtime.add_argument("--check-external-libs", action="store_true", help="Verify required external binaries are available and exit.")
+    runtime.add_argument(
+        "--stop-on-first-crash",
+        action="store_true",
+        help="Abort the whole run immediately on the first recording failure, instead of logging it and continuing with the rest of the batch.",
+    )
     runtime.add_argument(
         "--verbose",
         "-v",
@@ -131,9 +158,6 @@ def build_parser() -> argparse.ArgumentParser:
 
 def parse_args(argv: list[str] | None = None) -> MRSIPrepConfig:
     args = build_parser().parse_args(argv)
-    metabolites = args.metabolites
-    if metabolites is None:
-        metabolites = list(METABOLITES_7T if args.b0 == 7.0 else METABOLITES_3T)
     return MRSIPrepConfig(
         bids_dir=args.bids_dir,
         output_dir=args.output_dir,
@@ -141,8 +165,8 @@ def parse_args(argv: list[str] | None = None) -> MRSIPrepConfig:
         participant_label=args.participant_label,
         session_label=args.session_label,
         participants_file=args.participants,
-        b0=args.b0,
-        metabolites=metabolites,
+        bids_filter_file=args.bids_filter_file,
+        metabolites=args.metabolites,
         quality_metrics=args.quality_metrics,
         snr_min=args.snr_min,
         linewidth_max=args.linewidth_max,
@@ -179,7 +203,7 @@ def parse_args(argv: list[str] | None = None) -> MRSIPrepConfig:
         filter_biharmonic=not args.no_filter,
         spike_percentile=args.spikepc,
         no_pvc=args.no_pvc,
-        proc_mnilong=args.proc_mnilong,
+        longitudinal=args.longitudinal,
         transform_spikemask=args.transform_spikemask,
         nthreads=args.nthreads,
         nproc=args.nproc,
@@ -194,8 +218,13 @@ def parse_args(argv: list[str] | None = None) -> MRSIPrepConfig:
         overwrite_chimera=args.overwrite_chimera,
         validate_only=args.validate_only,
         check_external_libs=args.check_external_libs,
+        stop_on_first_crash=args.stop_on_first_crash,
         verbose=args.verbose,
     )
+
+
+def _parse_comma_list(value: str) -> list[str]:
+    return [item.strip() for item in str(value).split(",") if item.strip()]
 
 
 def _parse_scale(value) -> int:

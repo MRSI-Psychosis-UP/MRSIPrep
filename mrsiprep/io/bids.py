@@ -2,12 +2,27 @@
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
 
 from mrsiprep.config.defaults import METABOLITE_ALIASES
 from mrsiprep.utils.misc import normalize_session, normalize_subject, parse_bids_entities
+
+# Long-form PyBIDS/fMRIPrep-style entity names accepted in --bids-filter-file,
+# mapped to the short-form keys parse_bids_entities() actually returns.
+_FILTER_ENTITY_ALIASES = {
+    "subject": "sub",
+    "session": "ses",
+    "acquisition": "acq",
+    "run": "run",
+    "acq": "acq",
+    "sub": "sub",
+    "ses": "ses",
+}
+
+_SUPPORTED_BIDS_FILTER_KEYS = {"t1w"}
 
 
 @dataclass(frozen=True)
@@ -22,12 +37,41 @@ class Recording:
         return f"sub-{self.subject}"
 
 
+def load_bids_filters(path: str | Path | None) -> dict:
+    """Parse a --bids-filter-file JSON document.
+
+    Only the "t1w" top-level key is currently supported (the one input
+    MRSIPrep has ambiguous-candidate logic for today, in
+    BIDSLayout.raw_t1()). Any other top-level key raises immediately rather
+    than being silently ignored, since a user copying an fMRIPrep-style
+    filter file (with "bold"/"fmap"/etc keys) should get fast feedback that
+    those aren't supported here yet.
+    """
+    if path is None:
+        return {}
+    path = Path(path)
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Could not parse --bids-filter-file {path}: {exc}") from exc
+    if not isinstance(data, dict):
+        raise ValueError(f"--bids-filter-file {path} must contain a JSON object at the top level.")
+    unsupported = set(data) - _SUPPORTED_BIDS_FILTER_KEYS
+    if unsupported:
+        raise ValueError(
+            f"--bids-filter-file {path} has unsupported key(s) {sorted(unsupported)}; "
+            f"only {sorted(_SUPPORTED_BIDS_FILTER_KEYS)} is currently supported."
+        )
+    return data
+
+
 class BIDSLayout:
     """Minimal path resolver for the MRSI-Metabolic-Connectome derivative layout."""
 
-    def __init__(self, bids_dir: str | Path):
+    def __init__(self, bids_dir: str | Path, filters: dict | None = None):
         self.bids_dir = Path(bids_dir).resolve()
         self.derivatives = self.bids_dir / "derivatives"
+        self.filters = filters or {}
 
     def discover_recordings(self) -> list[Recording]:
         participants = self.bids_dir / "participants_allsessions.tsv"
@@ -52,13 +96,16 @@ class BIDSLayout:
         anat_dir = self._raw_anat_dir(subject, session)
         if not anat_dir.exists():
             return None
+        t1w_filter = self.filters.get("t1w")
         candidates = []
         for path in sorted(anat_dir.glob("*T1w.nii*")):
             if "_desc-" in path.name:
                 continue
+            entities = parse_bids_entities(path)
+            if t1w_filter and not _matches_filter(entities, t1w_filter):
+                continue
             if reference_name and reference_name in path.name:
                 return path
-            entities = parse_bids_entities(path)
             score = 0
             if entities.get("acq") in {"memprage", "mprage", "mp2rage"}:
                 score += 2
@@ -214,3 +261,22 @@ class BIDSLayout:
         res_part = r"_res-[^_]+" if res is not None else r"(?:_res-[^_]+)?"
         option_part = rf"_{re.escape(option)}" if option else r"(?:_[^_]+)?"
         return re.compile(rf"^{prefix}_space-{re.escape(space)}{res_part}{met_part}_desc-{re.escape(desc)}{option_part}_mrsi\.nii(\.gz)?$")
+
+
+def _matches_filter(entities: dict, filter_dict: dict) -> bool:
+    """True if every key in filter_dict matches the corresponding parsed entity.
+
+    Filter keys may use either MRSIPrep's short entity names (acq, run, ses,
+    sub) or PyBIDS/fMRIPrep-style long names (acquisition, session, subject),
+    per _FILTER_ENTITY_ALIASES. A filter value of null/None requires the
+    entity to be absent from the filename.
+    """
+    for key, expected in filter_dict.items():
+        short_key = _FILTER_ENTITY_ALIASES.get(key, key)
+        actual = entities.get(short_key)
+        if expected is None:
+            if actual is not None:
+                return False
+        elif actual != str(expected):
+            return False
+    return True

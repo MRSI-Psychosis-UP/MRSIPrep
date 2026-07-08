@@ -1,8 +1,5 @@
 """Default values for MRSIPrep."""
 
-METABOLITES_3T = ["CrPCr", "GluGln", "GPCPCh", "NAANAAG", "Ins"]
-METABOLITES_7T = ["NAA", "NAAG", "Ins", "GPCPCh", "Glu", "Gln", "CrPCr", "GABA", "GSH"]
-
 METABOLITE_ALIASES = {
     "Glx": ["GluGln", "Glx"],
     "GluGln": ["GluGln", "Glx"],

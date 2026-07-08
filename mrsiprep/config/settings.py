@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-from .defaults import METABOLITES_3T, QUALITY_DEFAULTS
+from .defaults import QUALITY_DEFAULTS
 
 
 @dataclass
@@ -16,8 +16,8 @@ class MRSIPrepConfig:
     participant_label: list[str] = field(default_factory=list)
     session_label: list[str] = field(default_factory=list)
     participants_file: Path | None = None
-    b0: float = 3.0
-    metabolites: list[str] = field(default_factory=lambda: list(METABOLITES_3T))
+    bids_filter_file: Path | None = None
+    metabolites: list[str] | None = None
     quality_metrics: list[str] = field(default_factory=lambda: ["snr", "linewidth", "crlb"])
     snr_min: float = QUALITY_DEFAULTS["snr_min"]
     linewidth_max: float = QUALITY_DEFAULTS["linewidth_max"]
@@ -50,13 +50,13 @@ class MRSIPrepConfig:
     regional_summary: str = "mean"
     nthreads: int = 16
     nproc: int = 1
-    ref_met: str = "CrPCr"
+    ref_met: str | None = None
     t1_pattern: str = "desc-brain_T1w"
     transform: str = ""
     filter_biharmonic: bool = True
     spike_percentile: float = 99.0
     no_pvc: bool = False
-    proc_mnilong: bool = False
+    longitudinal: bool = False
     transform_spikemask: bool = False
     overwrite: bool = False
     overwrite_filt: bool = False
@@ -70,10 +70,20 @@ class MRSIPrepConfig:
     verbose: int = 1
     validate_only: bool = False
     check_external_libs: bool = False
+    stop_on_first_crash: bool = False
 
     def __post_init__(self) -> None:
+        if not self.metabolites:
+            raise ValueError("--metabolites is required (comma-separated list, e.g. 'CrPCr,GluGln,GPCPCh,NAANAAG,Ins').")
+        if not self.ref_met:
+            raise ValueError("--ref-met is required (reference metabolite used to build the MRSI registration target).")
         self.bids_dir = Path(self.bids_dir).resolve()
         self.output_dir = Path(self.output_dir).resolve()
+        if self.bids_filter_file is not None:
+            self.bids_filter_file = Path(self.bids_filter_file).resolve()
+        from mrsiprep.io.bids import load_bids_filters
+
+        self.bids_filters = load_bids_filters(self.bids_filter_file)
         self.output_spaces = _normalize_output_spaces(self.output_spaces)
         if self.work_dir is None:
             self.work_dir = self.output_dir / "work"

@@ -11,6 +11,8 @@ docker run --rm \
   /data /out participant \
   --participant-label S001 \
   --session-label V1 \
+  --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \
+  --ref-met CrPCr \
   --mode mni-norm \
   --output-spaces MNI152NLin2009cAsym \
   --mni-resolution t1wres \
@@ -39,6 +41,8 @@ docker run --rm \
   /data /out participant \
   --participant-label S001 \
   --session-label V1 \
+  --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \
+  --ref-met CrPCr \
   --mode mni-norm \
   --output-mrsi-t1w \
   --nthreads 16
@@ -66,6 +70,8 @@ docker run --rm \
   /data /out participant \
   --participant-label S001 \
   --session-label V1 \
+  --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \
+  --ref-met CrPCr \
   --mode parc-con \
   --normalization ants-syn \
   --output-spaces MNI152NLin2009cAsym \
@@ -76,6 +82,62 @@ docker run --rm \
 when a T1w→MNI transform was already produced by a prior run or an external
 pipeline.
 
+## Longitudinal (subject-template) normalization
+
+```{warning}
+**Experimental.** `--longitudinal` has not yet been verified end-to-end on a
+full multi-session run. The individual pieces (template construction,
+template→MNI registration, transform composition) work in isolation, but a
+complete real-data run has not yet finished successfully. Use with caution
+and inspect outputs carefully until this notice is removed.
+```
+
+For subjects scanned across multiple sessions, `--longitudinal` builds one
+unbiased ANTs template across all of that subject's sessions and registers
+the template to MNI once, instead of registering each session directly to
+MNI independently. Every session's final MNI-space maps are then produced by
+composing (session→template) with (template→MNI), reducing registration
+noise/bias across timepoints — the same "custom template" concept used by
+fMRIPrep's longitudinal processing.
+
+```bash
+docker run --rm \
+  -v /path/to/bids:/data:ro \
+  -v /path/to/derivatives:/out \
+  mrsiup/mrsiprep:cpu \
+  /data /out participant \
+  --participant-label S001 \
+  --session-label V1 V2 V3 \
+  --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \
+  --ref-met CrPCr \
+  --mode mni-norm \
+  --longitudinal \
+  --nthreads 16
+```
+
+The template is built with `antsMultivariateTemplateConstruction2.sh`
+(4 iterations, rigid initial alignment) and registered to MNI with
+`antsRegistrationSyN.sh -t s` (full SyN), mirroring the longitudinal
+normalization already validated in the MRSI-Metabolic-Connectome research
+pipeline. It runs once per subject, before any session's own processing, and
+is cached the same way as every other registration stage — reruns skip it
+unless `--overwrite`/`--overwrite-mni-reg` is passed or a session is added.
+
+**Single-session subjects are unaffected.** `--longitudinal` is a no-op for
+any subject with only one ready session; that session falls back to direct
+per-session T1w→MNI registration as usual.
+
+Derivatives are written per subject (not per session):
+
+```text
+sub-<label>/ses-all/transforms/anat/
+  sub-<label>_ses-all_desc-template_to_mni.affine.mat
+  sub-<label>_ses-all_desc-template_to_mni.syn.nii.gz
+sub-<label>/ses-<session>/transforms/anat/
+  sub-<label>_ses-<session>_desc-t1w_to_template.affine.mat
+  sub-<label>_ses-<session>_desc-t1w_to_template.syn.nii.gz
+```
+
 ## Argument reference
 
 | Argument | Choices / Default | Description |
@@ -85,10 +147,11 @@ pipeline.
 | `--output-spaces` | `MNI152NLin2009cAsym` | Which space(s) to resample final MRSI maps into as permanent derivatives: `MRSI`, `MNI152NLin2009cAsym` (aliases `mrsi`, `mni` accepted). Does not control T1w output; see `--output-mrsi-t1w`. |
 | `--output-mrsi-t1w` | off | Also resample all metabolite (+ CRLB/SNR/FWHM/spikemask) maps into T1w space as permanent derivatives (`mrsi/t1w/`). Off by default; the registration-overview report always generates its own single reference-metabolite T1w map (in `--work-dir`) regardless of this flag. |
 | `--mni-resolution` | `origres`, `t1wres`, `<N>mm` / `t1wres` | MNI template resolution for both T1w→MNI registration and final resampling. |
-| `--ref-met` | `CrPCr` | Reference metabolite map used to build the MRSI registration target. |
+| `--ref-met` | **required** | Reference metabolite map used to build the MRSI registration target, e.g. `CrPCr`. No default. |
 | `--registration-t1-target` | `brain-csf`, `brain`, `raw` / `brain-csf` (parc-con mode), `brain` (mni-norm mode) | Which T1w variant MRSI is registered to. |
 | `--transform-spikemask` | off | Also transform per-metabolite spike masks into T1w/MNI space (the combined QC mask is never transformed). |
 | `--transform` | `""` | Legacy output-transform override; prefer `--output-spaces`. |
 | `--overwrite-t1-reg` | off | Force-rerun MRSI→T1w registration only. |
 | `--overwrite-mni-reg` | off | Force-rerun T1w→MNI registration only. |
 | `--overwrite-transform` | off | Force-rerun transform resampling only. |
+| `--longitudinal` | off | Build one subject-level ANTs template across sessions and register it to MNI once; each session's MNI-space maps are then composed via (session→template)+(template→MNI). No-op for single-session subjects. |

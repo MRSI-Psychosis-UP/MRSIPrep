@@ -22,7 +22,7 @@ def recording_base_dir(config, subject: str, session: str | None) -> Path:
     return Path(config.work_dir) / "nipype" / f"sub-{subject}" / ses
 
 
-def build_recording_workflow(config, subject: str, session: str | None):
+def build_recording_workflow(config, subject: str, session: str | None, subject_template=None):
     """Return a linear ``pe.Workflow`` for one recording.
 
     The returned workflow's terminal node (:data:`TERMINAL_NODE`) exposes the
@@ -31,6 +31,11 @@ def build_recording_workflow(config, subject: str, session: str | None):
     Each node wraps a step function via :class:`StepInterface`, which hashes only
     ``(step, config, subject, session)`` --- deterministic across processes --- and
     flows ``ctx`` unhashed, so completed recordings hit the node cache on rerun.
+
+    ``subject_template`` is an optional precomputed ``SubjectTemplateResult``
+    (see ``mrsiprep.registration.subject_template``), seeded into the initial
+    ``ctx`` so ``step_registration`` can compose (session->template)+
+    (template->MNI) instead of registering this session directly to MNI.
     """
     import nipype.pipeline.engine as pe
 
@@ -50,8 +55,8 @@ def build_recording_workflow(config, subject: str, session: str | None):
         node.inputs.session = session
         nodes.append(node)
 
-    # Seed the first node with an empty context; thread ctx through the chain.
-    nodes[0].inputs.ctx = {}
+    # Seed the first node with the initial context; thread ctx through the chain.
+    nodes[0].inputs.ctx = {"subject_template": subject_template}
     for prev, nxt in zip(nodes, nodes[1:]):
         wf.connect(prev, "ctx", nxt, "ctx")
 

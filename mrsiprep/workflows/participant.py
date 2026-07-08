@@ -55,7 +55,7 @@ class RecordingStatus:
 
 
 def _gather_input_availability(config, subject: str, session: str | None) -> dict:
-    layout = BIDSLayout(config.bids_dir)
+    layout = BIDSLayout(config.bids_dir, filters=config.bids_filters)
     recording_id = f"sub-{subject}"
     if session:
         recording_id += f"_ses-{session}"
@@ -83,11 +83,11 @@ def _gather_input_availability(config, subject: str, session: str | None) -> dic
     else:
         tissue_label = "[cyan]AUTO[/cyan]"
 
-    # t1-template/template-mni (longitudinal ses-all templating) are not yet
-    # implemented by any workflow, so they're excluded from the preflight
-    # table until that feature exists and can be opted into.
+    transform_stages = ["mrsi", "anat"]
+    if config.longitudinal:
+        transform_stages.append("t1-template")
     transforms = {}
-    for stage in ("mrsi", "anat"):
+    for stage in transform_stages:
         stage_paths = layout.transform(subject, session, stage)
         transforms[stage] = bool(stage_paths and all(path.exists() for path in stage_paths))
 
@@ -126,6 +126,8 @@ def _render_preflight_table(config, summaries: list[dict], debug: Debug) -> None
         ("mrsi", "MRSI→T1"),
         ("anat", "T1→MNI"),
     ]
+    if config.longitudinal:
+        transform_columns.append(("t1-template", "Ses→Template"))
 
     show_freesurfer = any(row["freesurfer"] is not None for row in summaries)
 
@@ -228,11 +230,47 @@ def collect_recordings(config) -> list[Recording]:
         if sessions:
             return [Recording(normalize_subject(sub), normalize_session(ses)) for sub in subjects for ses in sessions]
         return [Recording(normalize_subject(sub), None) for sub in subjects]
-    return BIDSLayout(config.bids_dir).discover_recordings()
+    return BIDSLayout(config.bids_dir, filters=config.bids_filters).discover_recordings()
 
 
 def _format_elapsed(seconds: float) -> str:
     return format_elapsed_hm(seconds)
+
+
+def _build_subject_templates(config, ready: list[Recording], debug: Debug) -> dict[str, object]:
+    """Build one subject-level template per subject with >=2 ready sessions.
+
+    Runs once, before per-recording dispatch, so every recording's Nipype
+    workflow can be seeded with its subject's precomputed template (see
+    ``build_recording_workflow``'s ``subject_template`` param). Subjects with
+    a single ready session are absent from the returned dict; their
+    recordings fall back to direct per-session T1-to-MNI registration.
+    """
+    from mrsiprep.io.bids import BIDSLayout
+    from mrsiprep.registration.subject_template import build_subject_template
+
+    by_subject: dict[str, list[str]] = {}
+    for recording in ready:
+        if recording.session:
+            by_subject.setdefault(recording.subject, []).append(recording.session)
+
+    templates: dict[str, object] = {}
+    layout = BIDSLayout(config.bids_dir, filters=config.bids_filters)
+    for subject, sessions in by_subject.items():
+        if len(sessions) < 2:
+            continue
+        with debug.step(f"Building subject template (sub-{subject}, {len(sessions)} sessions)"):
+            session_t1_paths = {}
+            for session in sessions:
+                t1_path, _inputs = validate_recording(config, subject, session)
+                raw_t1 = layout.raw_t1(subject, session)
+                _, precomputed_tissue_t1, p3_override, brain_mask_override = _step_tissue_segmentation(
+                    config, subject, session, raw_t1, t1_path, debug
+                )
+                anat = _step_anatomical_prep(config, subject, session, t1_path, p3_override, brain_mask_override, debug)
+                session_t1_paths[session] = anat.registration_t1w
+            templates[subject] = build_subject_template(config, subject, session_t1_paths)
+    return templates
 
 
 def run_participant_workflow(config) -> list[RecordingStatus]:
@@ -258,9 +296,13 @@ def run_participant_workflow(config) -> list[RecordingStatus]:
     if not ready:
         return statuses
 
+    subject_templates: dict[str, object] = {}
+    if config.longitudinal:
+        subject_templates = _build_subject_templates(config, ready, debug)
+
     from mrsiprep.workflows.nipype_engine.run import execute_recordings_nipype
 
-    statuses.extend(execute_recordings_nipype(config, ready))
+    statuses.extend(execute_recordings_nipype(config, ready, subject_templates=subject_templates))
     return statuses
 
 
@@ -295,7 +337,7 @@ def validate_participant_inputs(config) -> list[RecordingStatus]:
 
 
 def _validate_backend_inputs(config, subject: str, session: str | None) -> None:
-    layout = BIDSLayout(config.bids_dir)
+    layout = BIDSLayout(config.bids_dir, filters=config.bids_filters)
     raw_t1 = layout.raw_t1(subject, session)
     if config.processing_mode == "mni-norm" and raw_t1 is None:
         raise FileNotFoundError(f"Missing raw T1w required for light-mode SynthSeg parcellation: sub-{subject} ses-{session}")
@@ -345,9 +387,11 @@ def _step_mrsi_preprocessing(config, subject, session, inputs, debug):
     return mrsi, qc_report_mrsi_preproc
 
 
-def _step_registration(config, subject, session, mrsi, anat, debug):
+def _step_registration(config, subject, session, mrsi, anat, debug, subject_template=None):
     with debug.step("MRSI-T1w-MNI registration"):
-        return run_registration_workflow(config, subject, session, mrsi.reference, anat.registration_t1w, anat.registration_mask)
+        return run_registration_workflow(
+            config, subject, session, mrsi.reference, anat.registration_t1w, anat.registration_mask, subject_template=subject_template
+        )
 
 
 def _step_tissue_probmaps(config, subject, session, anat, mrsi, registration, precomputed_tissue_t1, debug):

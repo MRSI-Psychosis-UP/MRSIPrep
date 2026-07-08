@@ -15,7 +15,7 @@ class ValidationError(RuntimeError):
 
 
 def validate_recording(config: MRSIPrepConfig, subject: str, session: str | None) -> tuple[Path, MRSIInputs]:
-    layout = BIDSLayout(config.bids_dir)
+    layout = BIDSLayout(config.bids_dir, filters=config.bids_filters)
     t1 = layout.t1(subject, session, config.t1_pattern)
     if not t1 or not t1.exists():
         raise ValidationError(f"Missing T1w reference for sub-{subject} ses-{session}: pattern {config.t1_pattern}")
