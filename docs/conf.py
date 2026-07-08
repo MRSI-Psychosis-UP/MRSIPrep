@@ -19,6 +19,29 @@ extensions = [
     "sphinxarg.ext",
 ]
 
+# sphinxarg.ext's ArgParseDomain doesn't implement merge_domaindata, which
+# Sphinx requires for parallel reads -- Read the Docs always builds with
+# `-j auto`, so without this patch the build crashes with
+# "NotImplementedError: merge_domaindata must be implemented in
+# <class 'sphinxarg.ext.ArgParseDomain'>" (reproduced locally with
+# `sphinx-build -j auto`; a plain serial build never hits it, which is why
+# this only surfaced on Read the Docs). initial_data is just a list +
+# a dict keyed by group name, so merging is a straightforward union.
+def _patch_argparse_domain_for_parallel_builds() -> None:
+    from sphinxarg.ext import ArgParseDomain
+
+    def merge_domaindata(self, docnames, otherdata):
+        self.data.setdefault("commands", [])
+        self.data["commands"].extend(otherdata.get("commands", []))
+        self.data.setdefault("commands-by-group", {})
+        for group, items in otherdata.get("commands-by-group", {}).items():
+            self.data["commands-by-group"].setdefault(group, []).extend(items)
+
+    ArgParseDomain.merge_domaindata = merge_domaindata
+
+
+_patch_argparse_domain_for_parallel_builds()
+
 source_suffix = {
     ".rst": "restructuredtext",
     ".md": "markdown",
