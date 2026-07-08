@@ -73,22 +73,10 @@ metabolite values. The matrix is perturbed `--connectivity-n-perturbations`
 times with CRLB-scaled noise (`--connectivity-sigma-scale`) to propagate
 quantification uncertainty into the connectivity estimate.
 
-## Argument reference
-
-| Argument | Choices / Default | Description |
-| --- | --- | --- |
-| `--parcellation-mode` | `synthseg`, `chimera`, `mni` / mode-dependent | `mni-norm` only supports `synthseg`; `parc-con` requires `chimera` or `mni`. |
-| `--atlas` | `chimera-LFMIHIFIS-3` | Bundled MNI atlas name (used with `--parcellation-mode mni`). |
-| `--custom-atlas` | none | Path to a custom atlas NIfTI. |
-| `--custom-atlas-lut` | none | Path to the lookup table for `--custom-atlas`. |
-| `--chimera-scheme` | `LFMIHIFIFF` | Chimera parcellation scheme: a 10-character code, one letter per supra-region (cortical, subcortical, thalamus, amygdala, hippocampus, hypothalamus, cerebellum, brainstem, gyral WM, WM). |
-| `--chimera-scale` | `3` | Chimera parcellation scale. |
-| `--chimera-grow` | `2` | Chimera region-growing parameter. |
-| `--regional-summary` | `mean`, `median`, `weighted_mean` / `mean` | How voxel values are summarized per parcel. |
-| `--write-connectivity` | off | Write a connectivity matrix from regional metabolite values. |
-| `--connectivity-method` | `pearson`, `spearman`, `cosine`, `euclidean_distance` / `spearman` | Similarity/distance metric for the connectivity matrix. |
-| `--connectivity-space` | `MRSI`, `T1w`, `MNI` / `MRSI` | Space the connectivity matrix is computed in. |
-| `--connectivity-n-perturbations` | `50` | Number of CRLB-scaled noise perturbations per metabolite used to build the connectivity matrix. |
-| `--connectivity-sigma-scale` | `2.0` | Scale factor applied to the CRLB-derived noise sigma when perturbing metabolite maps for connectivity. |
-| `--connectivity-exclude-parcels` | none | Comma-separated substrings; parcels whose name contains any of them are excluded from the connectivity matrix (e.g. `wm-lh,cer-`). |
-| `--connectivity-max-parcel-id` | none | Exclude parcels whose label/ID is greater than or equal to this value from the connectivity matrix. |
+See [Basic Usage](usage_basic.md) for the full CLI
+reference, including `--parcellation-mode`, `--atlas`, `--custom-atlas`,
+`--custom-atlas-lut`, `--chimera-scheme`, `--chimera-scale`,
+`--chimera-grow`, `--regional-summary`, `--write-connectivity`,
+`--connectivity-method`, `--connectivity-space`,
+`--connectivity-n-perturbations`, `--connectivity-sigma-scale`,
+`--connectivity-exclude-parcels`, and `--connectivity-max-parcel-id`.

@@ -11,9 +11,13 @@ from mrsiprep.config.settings import MRSIPrepConfig
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="mrsiprep", description="Preprocess quantified whole-brain MRSI derivatives.")
-    parser.add_argument("bids_dir", type=Path)
-    parser.add_argument("output_dir", type=Path)
-    parser.add_argument("analysis_level", choices=["participant"])
+    parser.add_argument("bids_dir", type=Path, help="The root folder of a BIDS valid dataset (sub-XXXXX folders at the top level).")
+    parser.add_argument("output_dir", type=Path, help="The output path for MRSIPrep derivatives and reports.")
+    parser.add_argument(
+        "analysis_level",
+        choices=["participant"],
+        help="Processing stage to be run, only 'participant' in the case of MRSIPrep (see BIDS-Apps specification).",
+    )
 
     selection = parser.add_argument_group("Options for filtering BIDS queries")
     selection.add_argument("--participant-label", nargs="+", default=[])

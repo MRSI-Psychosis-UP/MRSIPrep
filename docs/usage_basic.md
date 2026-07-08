@@ -203,18 +203,13 @@ docker run --rm \
   --tissue-backend none
 ```
 
-## Argument reference
+## Command-Line Arguments
 
-### Subjects, sessions, and acquisitions
-
-| Argument | Default | Description |
-| --- | --- | --- |
-| `--participant-label` | (all) | One or more subject labels to process, e.g. `S001 S002`. |
-| `--session-label` | (all) | One or more session labels to process, e.g. `V1 V2`. |
-| `--participants` | none | Path to a TSV/CSV with `subject`/`session` columns for batch runs, as an alternative to `--participant-label`/`--session-label`. |
-| `--bids-filter-file` | none | Path to a JSON file of entity filters used to force a specific T1w acquisition/run when a session has more than one candidate (see below). |
-| `--metabolites` | **required** | Comma-separated metabolite names to process, e.g. `CrPCr,GluGln,GPCPCh,NAANAAG,Ins`. No default — there is no field-strength-dependent metabolite list; always specify explicitly. |
-| `--t1` | `desc-brain_T1w` | BIDS filename pattern used to locate the input T1w image. |
+```{argparse}
+:module: mrsiprep.cli.parser
+:func: build_parser
+:prog: mrsiprep
+```
 
 By default, when a subject/session has more than one candidate raw T1w
 acquisition, MRSIPrep picks one heuristically (preferring
@@ -232,56 +227,8 @@ long PyBIDS-style names shown above (`acquisition`, `run`, `session`,
 `subject`) interchangeably. A value of `null` requires the entity to be
 absent from the filename.
 
-### Quality thresholds
-
-| Argument | Default | Description |
-| --- | --- | --- |
-| `--quality-metrics` | `snr linewidth crlb` | Which quality maps to check/report. |
-| `--snr-min` | (package default) | Minimum acceptable SNR. |
-| `--linewidth-max` | (package default) | Maximum acceptable linewidth/FWHM. |
-| `--crlb-max` | (package default) | Maximum acceptable per-metabolite CRLB. |
-
-### Processing mode and tissue segmentation
-
-| Argument | Choices / Default | Description |
-| --- | --- | --- |
-| `--mode` (alias `--processing-mode`) | `mni-norm`, `parc-con` / `mni-norm` | `mni-norm`: SynthSeg extraction + parcellation only, no FAST/PVC/Chimera/`recon-all`. `parc-con`: adds tissue probability maps, PVC, and Chimera/MNI-atlas parcellation. |
-| `--tissue-backend` | `synthseg-fast`, `existing`, `none` / `synthseg-fast` | How GM/WM/CSF probability maps are produced in parc-con mode. `synthseg-fast` segments with SynthSeg+FAST; `existing` reuses precomputed CAT12 maps from `derivatives/skullstrip`/`derivatives/cat12`; `none` disables tissue segmentation and PVC entirely. |
-| `--synthseg-mode` | `fast`, `standard`, `robust` / `robust` | SynthSeg accuracy/speed trade-off; `fast` and `robust` are never combined. SynthSeg thread count is taken from `--nthreads`. |
-| `--registration-t1-target` | `brain-csf`, `brain`, `raw` / `brain-csf` (parc-con mode), `brain` (mni-norm mode) | Which T1w variant MRSI is registered to. |
-| `--csf-pv-threshold` | `0.95` | CSF partial-volume threshold used when building registration masks. |
-| `--fs-subjects-dir` | none | Existing FreeSurfer `SUBJECTS_DIR` to reuse/write into (used by Chimera parcellation). |
-
-### Filtering
-
-| Argument | Default | Description |
-| --- | --- | --- |
-| `--no-filter` | off | Disable biharmonic spike-repair filtering of MRSI maps. |
-| `--spikepc` | `99.0` | Percentile threshold used for spike detection. |
-| `--no-pvc` | off | Disable partial-volume correction (parc-con mode only; always disabled in mni-norm mode). |
-
-### Performance, logging, and control flow
-
-| Argument | Default | Description |
-| --- | --- | --- |
-| `--nthreads` | `16` | ANTs/ITK thread count per subject/session process. |
-| `--nproc` | `1` | Number of subject/session recordings to process in parallel (each its own Nipype workflow); combined with `--nthreads` this is capped at the host's CPU count. |
-| `--verbose`, `-v` | `0`-`3` / `1` | Console output detail level (see above). |
-| `--work-dir`, `-w` | `<output_dir>/work` | Scratch directory for the Nipype node cache and other intermediate files; safe to delete between runs. |
-| `--validate-only` | off | Check selected subject/session inputs and exit without processing. |
-| `--check-external-libs` | off | Verify required external binaries are on `PATH`/installed and exit. |
-| `--stop-on-first-crash` | off | Abort the whole run immediately on the first recording failure, instead of logging it and continuing with the rest of the batch. |
-| `--overwrite` | off | Force-rerun all steps, ignoring the Nipype node cache and any file-level cached outputs. |
-| `--overwrite-filt` | off | Force-rerun MRSI filtering only. |
-| `--overwrite-seg` | off | Force-rerun tissue segmentation (SynthSeg brain extraction + dseg/probseg) only. |
-| `--overwrite-pve` | off | Force-rerun tissue probability map generation only. |
-| `--overwrite-t1-reg` | off | Force-rerun MRSI→T1w registration only. |
-| `--overwrite-mni-reg` | off | Force-rerun T1w→MNI registration only. |
-| `--overwrite-transform` | off | Force-rerun transform resampling only. |
-| `--overwrite-chimera` | off | Force re-run Chimera parcellation even if the output dseg file already exists. |
-
-See [MNI Normalization Usage](usage_normalization.md) for `--output-spaces`
-and `--output-mrsi-t1w`.
+See [MNI Normalization Usage](usage_normalization.md) for `--output-spaces`,
+`--output-mrsi-t1w`, and `--longitudinal`.
 
 ## Output layout
 

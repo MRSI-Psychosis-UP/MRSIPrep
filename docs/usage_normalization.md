@@ -138,20 +138,8 @@ sub-<label>/ses-<session>/transforms/anat/
   sub-<label>_ses-<session>_desc-t1w_to_template.syn.nii.gz
 ```
 
-## Argument reference
-
-| Argument | Choices / Default | Description |
-| --- | --- | --- |
-| `--registration-backend` | `ants` / `ants` | Registration engine (currently only ANTs). |
-| `--normalization` | `simple`, `ants-syn`, `existing` / `simple` | T1w→MNI normalization strategy; `existing` reuses a precomputed transform instead of registering. |
-| `--output-spaces` | `MNI152NLin2009cAsym` | Which space(s) to resample final MRSI maps into as permanent derivatives: `MRSI`, `MNI152NLin2009cAsym` (aliases `mrsi`, `mni` accepted). Does not control T1w output; see `--output-mrsi-t1w`. |
-| `--output-mrsi-t1w` | off | Also resample all metabolite (+ CRLB/SNR/FWHM/spikemask) maps into T1w space as permanent derivatives (`mrsi/t1w/`). Off by default; the registration-overview report always generates its own single reference-metabolite T1w map (in `--work-dir`) regardless of this flag. |
-| `--mni-resolution` | `origres`, `t1wres`, `<N>mm` / `t1wres` | MNI template resolution for both T1w→MNI registration and final resampling. |
-| `--ref-met` | **required** | Reference metabolite map used to build the MRSI registration target, e.g. `CrPCr`. No default. |
-| `--registration-t1-target` | `brain-csf`, `brain`, `raw` / `brain-csf` (parc-con mode), `brain` (mni-norm mode) | Which T1w variant MRSI is registered to. |
-| `--transform-spikemask` | off | Also transform per-metabolite spike masks into T1w/MNI space (the combined QC mask is never transformed). |
-| `--transform` | `""` | Legacy output-transform override; prefer `--output-spaces`. |
-| `--overwrite-t1-reg` | off | Force-rerun MRSI→T1w registration only. |
-| `--overwrite-mni-reg` | off | Force-rerun T1w→MNI registration only. |
-| `--overwrite-transform` | off | Force-rerun transform resampling only. |
-| `--longitudinal` | off | Build one subject-level ANTs template across sessions and register it to MNI once; each session's MNI-space maps are then composed via (session→template)+(template→MNI). No-op for single-session subjects. |
+See [Basic Usage](usage_basic.md) for the full CLI
+reference, including `--registration-backend`, `--normalization`,
+`--output-spaces`, `--output-mrsi-t1w`, `--mni-resolution`, `--ref-met`,
+`--registration-t1-target`, `--transform-spikemask`, `--overwrite-t1-reg`,
+`--overwrite-mni-reg`, `--overwrite-transform`, and `--longitudinal`.
