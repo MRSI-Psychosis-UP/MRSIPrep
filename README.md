@@ -17,6 +17,8 @@ PETPVC, and Chimera/MNI-atlas regional profile extraction for metabolic connecti
 **Full documentation, installation, and usage instructions are on
 [Read the Docs](https://mrsiprep.readthedocs.io/en/latest/).**
 
+![MRSIPrep pipeline schematic](docs/figures/pipeline_schematic.png)
+
 ## Design Principles
 
 MRSIPrep was designed according to four main principles:

@@ -17,6 +17,8 @@ PETPVC, and Chimera/MNI-atlas regional profile extraction for metabolic connecti
 It is derived from the implementation in `MRSI-Metabolic-Connectome` and preserves the CHUV
 academic non-commercial research license.
 
+![MRSIPrep pipeline schematic](figures/pipeline_schematic.png)
+
 ## What it uses
 
 - **[Nipype](https://nipype.readthedocs.io/)** as the workflow engine: each
