@@ -111,10 +111,16 @@ def _run_one_recording_nipype(config, subject: str, session: str | None, subject
         return RecordingStatus(subject, session, "success", outputs=outputs)
     except Exception as exc:  # batch-safe failure, unless --stop-on-first-crash
         elapsed = time.monotonic() - start
-        debug.always(f"[failure]FAILED[/failure] {msg} after {_format_elapsed(elapsed)}: {exc}")
-        LOGGER.error("FAILED %s after %s: %s", msg, _format_elapsed(elapsed), exc)
-        if config.verbose >= 2:
-            LOGGER.error(traceback.format_exc())
+        # str(exc) can itself be a multi-line blob (e.g. FreeSurferError/
+        # ChimeraError embed the failed subprocess's full captured stdout) --
+        # keep only the first line on the always-shown console summary; the
+        # full exception text and traceback still go to the per-recording
+        # logbook via debug.exception() below, and to the failure's `error`
+        # field on the returned status either way.
+        exc_summary = str(exc).splitlines()[0] if str(exc) else exc.__class__.__name__
+        debug.always(f"[failure]FAILED[/failure] {msg} after {_format_elapsed(elapsed)}: {exc_summary}")
+        LOGGER.error("FAILED %s after %s: %s", msg, _format_elapsed(elapsed), exc_summary)
+        debug.exception(f"FAILED {msg} after {_format_elapsed(elapsed)}: {exc}", traceback.format_exc())
         if config.stop_on_first_crash:
             raise
         return RecordingStatus(subject, session, "failed", error=str(exc))

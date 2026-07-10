@@ -8,8 +8,8 @@ including its [Nipype](https://nipype.readthedocs.io/)-based workflow engine.
 docker pull mrsiup/mrsiprep:cpu
 ```
 
-The image bundles ANTs, FSL (FAST only), FreeSurfer (`recon-all`,
-`mri_synthseg`, `mri_vol2vol`), PETPVC, Chimera, and Nipype. It does not
+The image bundles ANTs, FSL (FAST plus FLIRT/FNIRT registration tools),
+FreeSurfer (`recon-all`, `mri_synthseg`, `mri_vol2vol`), PETPVC, Chimera, and Nipype. It does not
 include a FreeSurfer license file — mount your own and set `FS_LICENSE`.
 
 ## Option A: plain `docker run`

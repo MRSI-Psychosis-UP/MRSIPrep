@@ -164,9 +164,9 @@ docker/build_cpu_image.sh
 
 This prunes and flattens the source deps into `mrsiprep-deps:cpu` (via
 `Dockerfile.cpu-deps`), then automatically builds `mrsiprep:cpu` (via
-`Dockerfile`). It keeps SynthSeg, FAST, ANTs, PETPVC, Chimera, `recon-all`, and
-`mri_vol2vol`. FSL is reduced to FAST and its shared libraries. FreeSurfer is
-trimmed conservatively while retaining its core reconstruction executables,
+`Dockerfile`). It keeps SynthSeg, FSL FAST plus FLIRT/FNIRT registration tools,
+ANTs, PETPVC, Chimera, `recon-all`, and `mri_vol2vol`. FreeSurfer is trimmed
+conservatively while retaining its core reconstruction executables,
 libraries, models, registration atlases, and `fsaverage` subject.
 
 ### 4. Test the images

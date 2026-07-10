@@ -93,11 +93,25 @@ def build_subject_template(config, subject: str, session_t1_paths: dict[str, Pat
         template_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(built_template, template_path)
 
-        for session, session_input in zip(sessions, session_inputs):
+        for index, (session, session_input) in enumerate(zip(sessions, session_inputs)):
             out_prefix = ants_transform_prefix(config.derivative_dir, subject, session, "t1-template")
             out_prefix.parent.mkdir(parents=True, exist_ok=True)
-            affine = tmp / f"sub-{subject}_ses-{session}_T1w0GenericAffine.mat"
-            warp = tmp / f"sub-{subject}_ses-{session}_T1w1Warp.nii.gz"
+            # antsMultivariateTemplateConstruction2.sh names each session's final
+            # (last-iteration) transform "{build_prefix}input{NNNN}-{input
+            # basename without extension}-{0GenericAffine.mat,1Warp.nii.gz}" --
+            # confirmed by reading the script (OUTWARPFN=${OUTPUTNAME}input$(printf
+            # "%04d" $j)-${IMGbase...}-) and by inspecting a real run's tmpdir.
+            # Every iteration (including the last) deletes all *Warp.nii*/
+            # *GenericAffine.mat files upfront and regenerates them, so only the
+            # final iteration's files remain once the script exits.
+            input_stem = session_input.name
+            for suffix in (".nii.gz", ".nii"):
+                if input_stem.endswith(suffix):
+                    input_stem = input_stem[: -len(suffix)]
+                    break
+            warp_prefix = build_prefix.with_name(build_prefix.name + f"input{index:04d}-{input_stem}-")
+            affine = warp_prefix.with_name(warp_prefix.name + "0GenericAffine.mat")
+            warp = warp_prefix.with_name(warp_prefix.name + "1Warp.nii.gz")
             if not affine.exists() or not warp.exists():
                 raise FileNotFoundError(
                     f"antsMultivariateTemplateConstruction2.sh did not produce expected transforms for session {session}: "

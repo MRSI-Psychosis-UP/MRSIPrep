@@ -18,25 +18,10 @@ fi
 printf 'Installed sizes before pruning:\n'
 du -sh "${FSL_ROOT}" "${FS_ROOT}" "${ANTS_ROOT}" 2>/dev/null || true
 
-# FAST is the only FSL program called by MRSIPrep. Build a fresh FSL tree with
-# the executable and every FSL/conda library resolved by the dynamic loader.
-fsl_runtime="$(mktemp -d /opt/fsl-runtime.XXXXXX)"
-mkdir -p "${fsl_runtime}/bin" "${fsl_runtime}/lib"
-cp -a "${FSL_ROOT}/bin/fast" "${fsl_runtime}/bin/fast"
-
-while IFS= read -r library; do
-  [[ -n "${library}" ]] || continue
-  cp -L "${library}" "${fsl_runtime}/lib/$(basename "${library}")"
-done < <(ldd "${FSL_ROOT}/bin/fast" | awk -v root="${FSL_ROOT}/" '$3 ~ "^" root {print $3}')
-
-for license_file in LICENCE.FSL LICENSE COPYING; do
-  if [[ -f "${FSL_ROOT}/${license_file}" ]]; then
-    cp -a "${FSL_ROOT}/${license_file}" "${fsl_runtime}/${license_file}"
-  fi
-done
-
-rm -rf "${FSL_ROOT}"
-mv "${fsl_runtime}" "${FSL_ROOT}"
+# MRSIPrep uses FAST for SynthSeg-constrained tissue maps and optionally uses
+# FLIRT/FNIRT/applywarp/convertwarp for the FSL registration backend. Keep the
+# full FSL tree: FNIRT and FLIRT depend on schedules/configuration/data under
+# $FSLDIR beyond their direct shared-library dependencies.
 
 # MRSIPrep shells out to antsRegistrationSyN.sh and antsApplyTransforms
 # (interfaces/ants.py), only as a fallback when antspyx's Python bindings are
@@ -186,10 +171,16 @@ find "${python_lib_dir}" /opt/petpvc -type f \( -name '*.pyc' -o -name '*.pyo' \
 printf 'Installed sizes after pruning:\n'
 du -sh "${FSL_ROOT}" "${FS_ROOT}" "${ANTS_ROOT}" 2>/dev/null || true
 
-if ldd "${FSL_ROOT}/bin/fast" | grep -q 'not found'; then
-  printf 'FAST has unresolved shared-library dependencies after pruning.\n' >&2
-  exit 1
-fi
+for fsl_binary in fast flirt fnirt applywarp convertwarp invwarp convert_xfm; do
+  if [[ ! -x "${FSL_ROOT}/bin/${fsl_binary}" ]]; then
+    printf 'Required FSL binary missing after pruning: %s\n' "${FSL_ROOT}/bin/${fsl_binary}" >&2
+    exit 1
+  fi
+  if ldd "${FSL_ROOT}/bin/${fsl_binary}" | grep -q 'not found'; then
+    printf '%s has unresolved shared-library dependencies after pruning.\n' "${fsl_binary}" >&2
+    exit 1
+  fi
+done
 if [[ -x "${ANTS_ROOT}/bin/antsRegistration" ]] && ldd "${ANTS_ROOT}/bin/antsRegistration" | grep -q 'not found'; then
   printf 'antsRegistration has unresolved shared-library dependencies after pruning.\n' >&2
   exit 1

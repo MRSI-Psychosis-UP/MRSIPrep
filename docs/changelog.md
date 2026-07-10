@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+- Added `--mode midas`: a MIDAS-faithful processing pipeline (Maudsley et al.
+  2006) using fuzzy c-means tissue segmentation, PSF-convolved tissue
+  fractions, rigid MRSI→T1 registration, and per-parcel Eq. 4 pure-GM/pure-WM
+  regression in place of PETPVC voxelwise partial-volume correction. Always
+  uses SynthSeg parcellation and its own fuzzy c-means segmentation
+  (`--tissue-backend` is ignored in this mode).
+- Added an FSL registration backend (`--registration-backend fsl` /
+  `flirt-fnirt`) as an alternative to the default ANTs backend: FLIRT affine
+  registration for both MRSI→T1w and T1w→MNI (no deformable/FNIRT stage).
+  New flags `--fsl-mrsi-to-t1-dof`, `--fsl-mrsi-to-t1-init`,
+  `--fsl-t1-to-mni-dof`, `--fsl-cost` configure it; `--ants-mrsi-to-t1-transform`
+  and `--ants-t1-to-mni-transform` expose the equivalent ANTs transform
+  presets (unchanged defaults). `--longitudinal` currently requires the ANTs
+  backend. Docker CPU image now keeps the full FSL tree (FLIRT/FNIRT need
+  their schedule/configuration data, not just FAST's binary).
+- Failed-recording console output no longer dumps the full exception text
+  and traceback at `--verbose 2` (some failures, e.g. a `recon-all`/Chimera
+  subprocess error, embed hundreds of lines of captured subprocess stdout in
+  their exception message). Console now shows a one-line summary at every
+  verbosity level and the full traceback only at `--verbose 3`; the
+  per-recording logbook (`sub-*/ses-*/logs/*_desc-mrsiprep_log.txt`) always
+  gets the full exception text and traceback regardless of `--verbose`, so
+  nothing is lost — added `Debug.exception()` for this.
 - **Breaking:** `--metabolites` and `--ref-met` are now required, with no
   defaults. `--b0` (and the field-strength-dependent default metabolite
   lists it selected between) has been removed entirely — there is no
@@ -21,8 +44,7 @@
   (quality thresholds, parcellation, connectivity, overwrite/recompute) keep
   their existing names. Cosmetic/additive only — no existing flag was
   renamed or removed.
-- Added `--longitudinal` subject-template normalization (**experimental —
-  not yet verified end-to-end on a full multi-session run**): for multi-session
+- Added `--longitudinal` subject-template normalization: for multi-session
   subjects, builds one unbiased ANTs template across sessions
   (`antsMultivariateTemplateConstruction2.sh`) and registers it to MNI once
   (`antsRegistrationSyN.sh -t s`), composing (session→template)+

@@ -17,6 +17,7 @@ from mrsiprep.mrsi.pvc import create_tissue_4d, run_pvc
 from mrsiprep.utils.debug import Debug
 from mrsiprep.mrsi.resampling import transform_mrsi_maps
 from mrsiprep.parcellation.extraction import extract_regional_metabolites
+from mrsiprep.parcellation.tissue_regression import regional_tissue_regression
 from mrsiprep.parcellation.metprofiles import export_metprofile_npz
 from mrsiprep.parcellation.synthseg import run_synthseg_parcellation
 from mrsiprep.reports.parcel_qc import write_parcel_qc
@@ -42,7 +43,7 @@ from mrsiprep.workflows.mrsi import run_mrsi_workflow
 from mrsiprep.workflows.parcellation import run_parcellation_workflow
 from mrsiprep.workflows.registration import run_registration_workflow
 from mrsiprep.workflows.reports import run_reports_workflow
-from mrsiprep.workflows.tissue import run_tissue_workflow
+from mrsiprep.workflows.tissue import run_tissue_workflow, segment_t1_fuzzy_cmeans
 
 
 @dataclass
@@ -365,6 +366,14 @@ def _step_tissue_segmentation(config, subject, session, raw_t1, t1_path, debug):
             if config.registration_t1_target == "brain":
                 t1_path = synthseg_brain
                 brain_mask_override = synthseg_mask
+        elif config.processing_mode == "midas":
+            if raw_t1 is None:
+                raise FileNotFoundError(f"Missing raw T1w required for MIDAS fuzzy c-means segmentation: sub-{subject} ses-{session}")
+            synthseg_brain, synthseg_mask = extract_t1_synthseg(config, subject, session, raw_t1)
+            precomputed_tissue_t1 = segment_t1_fuzzy_cmeans(config, subject, session, synthseg_brain, synthseg_mask)
+            t1_path = synthseg_brain
+            brain_mask_override = synthseg_mask
+            p3_override = precomputed_tissue_t1["CSF"]
         elif config.processing_mode == "parc-con" and config.tissue_backend == "synthseg-fast":
             if raw_t1 is None:
                 raise FileNotFoundError(f"Missing raw T1w required for SynthSeg+FAST segmentation: sub-{subject} ses-{session}")
@@ -395,7 +404,7 @@ def _step_registration(config, subject, session, mrsi, anat, debug, subject_temp
 
 
 def _step_tissue_probmaps(config, subject, session, anat, mrsi, registration, precomputed_tissue_t1, debug):
-    if config.processing_mode != "parc-con":
+    if config.processing_mode not in {"parc-con", "midas"}:
         return None
     with debug.step("Tissue probability maps in MRSI space"):
         return run_tissue_workflow(
@@ -491,7 +500,7 @@ def _step_parcellation(config, subject, session, raw_t1, mrsi, anat, registratio
     preliminary SynthSeg parcellation outside parc-con mode."""
     parcels = preliminary_parcels
     qc_report_parcellation = None
-    if config.processing_mode == "parc-con":
+    if config.processing_mode in {"parc-con", "midas"}:
         with debug.step("Parcellation"):
             parcels = run_parcellation_workflow(
                 config,
@@ -507,8 +516,10 @@ def _step_parcellation(config, subject, session, raw_t1, mrsi, anat, registratio
 
 
 def _step_regional_extraction(config, subject, session, corrected_maps, parcels, mrsi, tissue, debug):
+    """Returns (regional_table, regional_regression). regional_regression is the
+    MIDAS Eq. 4-5 pure-GM/pure-WM regression TSV in ``midas`` mode, else None."""
     with debug.step("Regional metabolite extraction"):
-        return extract_regional_metabolites(
+        regional = extract_regional_metabolites(
             config,
             subject,
             session,
@@ -520,6 +531,12 @@ def _step_regional_extraction(config, subject, session, corrected_maps, parcels,
             mrsi.crlb_maps,
             tissue.mrsi if tissue is not None else {},
         )
+        regional_regression = None
+        if config.processing_mode == "midas" and tissue is not None:
+            regional_regression = regional_tissue_regression(
+                config, subject, session, corrected_maps, parcels, mrsi.qcmasks, tissue.mrsi
+            )
+    return regional, regional_regression
 
 
 def _step_connectivity(config, subject, session, regional, parcels, corrected_maps, mrsi, tissue, debug):
@@ -540,7 +557,7 @@ def _step_connectivity(config, subject, session, regional, parcels, corrected_ma
 
 
 def _step_metprofiles(config, subject, session, corrected_maps, mrsi, parcels, regional, anat):
-    if config.processing_mode != "parc-con":
+    if config.processing_mode not in {"parc-con", "midas"}:
         return None
     return export_metprofile_npz(
         config,

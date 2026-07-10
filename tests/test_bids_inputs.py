@@ -41,6 +41,8 @@ class BIDSInputTests(unittest.TestCase):
                 "participant",
                 participant_label=["S001"],
                 session_label=["V1"],
+                metabolites=["CrPCr"],
+                ref_met="CrPCr",
                 processing_mode="parc-con",
                 tissue_backend="existing",
             )
@@ -53,6 +55,8 @@ class BIDSInputTests(unittest.TestCase):
                 "participant",
                 participant_label=["S001"],
                 session_label=["V1"],
+                metabolites=["CrPCr"],
+                ref_met="CrPCr",
                 processing_mode="parc-con",
                 tissue_backend="synthseg-fast",
             )
@@ -86,6 +90,8 @@ class BIDSInputTests(unittest.TestCase):
                 "participant",
                 participant_label=["S001"],
                 session_label=["V1"],
+                metabolites=["CrPCr"],
+                ref_met="CrPCr",
                 tissue_backend="synthseg-fast",
             )
 
@@ -122,6 +128,8 @@ class BIDSInputTests(unittest.TestCase):
                 "participant",
                 participant_label=["S001"],
                 session_label=["V1", "V2"],
+                metabolites=["CrPCr", "GluGln", "GPCPCh", "NAANAAG", "Ins"],
+                ref_met="CrPCr",
                 tissue_backend="synthseg-fast",
             )
 

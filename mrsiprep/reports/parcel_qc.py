@@ -7,9 +7,9 @@ from pathlib import Path
 import nibabel as nib
 import numpy as np
 
-from mrsiprep.interfaces.ants import apply_transforms
 from mrsiprep.io.naming import mrsi_derivative, parcellation_derivative
 from mrsiprep.parcellation.base import ParcellationResult
+from mrsiprep.registration.transforms import apply_image_transform
 from mrsiprep.utils.images import load_3d_data
 from mrsiprep.utils.tables import read_labels, write_tsv
 
@@ -37,7 +37,7 @@ def write_parcel_qc(
         suffix_override="mask",
     )
     if not coverage_mask.exists() or config.overwrite_transform or config.overwrite:
-        apply_transforms(
+        apply_image_transform(
             t1_reference,
             mrsi_brainmask,
             mrsi_to_t1,

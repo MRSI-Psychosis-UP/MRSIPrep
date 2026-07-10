@@ -160,10 +160,11 @@ def step_regional(config, subject, session, ctx):
     from mrsiprep.utils.debug import Debug
     from mrsiprep.workflows.participant import _step_regional_extraction
 
-    ctx = dict(ctx)
-    ctx["regional"] = _step_regional_extraction(
+    regional, regional_regression = _step_regional_extraction(
         config, subject, session, ctx["corrected_maps"], ctx["parcels"], ctx["mrsi"], ctx["tissue"], Debug(verbose=config.verbose)
     )
+    ctx = dict(ctx)
+    ctx.update(regional=regional, regional_regression=regional_regression)
     return ctx
 
 
@@ -209,6 +210,7 @@ def step_reports(config, subject, session, ctx):
         "atlas_mrsi": parcels.atlas_mrsi,
         "preliminary_atlas_mrsi": ctx["preliminary_parcels"].atlas_mrsi,
         "regional_table": ctx["regional"],
+        "regional_tissue_regression": ctx.get("regional_regression"),
         "metprofiles": ctx["metprofiles"],
         "connectivity": ctx["connectivity"],
         "transformed_maps": ctx["transformed"],

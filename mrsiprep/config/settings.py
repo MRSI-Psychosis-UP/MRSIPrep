@@ -25,6 +25,12 @@ class MRSIPrepConfig:
     processing_mode: str = "mni-norm"
     tissue_backend: str = "synthseg-fast"
     registration_backend: str = "ants"
+    ants_mrsi_to_t1_transform: str = "sr"
+    ants_t1_to_mni_transform: str = "s"
+    fsl_mrsi_to_t1_dof: int = 6
+    fsl_mrsi_to_t1_init: str = "flirt"
+    fsl_t1_to_mni_dof: int = 12
+    fsl_cost: str = "mutualinfo"
     normalization: str = "simple"
     output_spaces: list[str] = field(default_factory=lambda: ["MNI152NLin2009cAsym"])
     output_mrsi_t1w: bool = False
@@ -91,18 +97,32 @@ class MRSIPrepConfig:
             self.work_dir = Path(self.work_dir).resolve()
         if self.fs_subjects_dir is not None:
             self.fs_subjects_dir = Path(self.fs_subjects_dir).resolve()
-        if self.processing_mode not in {"mni-norm", "parc-con"}:
+        if self.processing_mode not in {"mni-norm", "parc-con", "midas"}:
             raise ValueError(f"Unsupported processing mode: {self.processing_mode}")
         if self.synthseg_mode not in {"fast", "standard", "robust"}:
             raise ValueError(f"Unsupported SynthSeg mode: {self.synthseg_mode}")
         if self.tissue_backend not in {"synthseg-fast", "existing", "none"}:
             raise ValueError(f"Unsupported tissue backend: {self.tissue_backend}")
+        if self.registration_backend in {"flirt/fnirt", "flirt_fnirt", "flirt-fnirt"}:
+            self.registration_backend = "fsl"
+        if self.registration_backend not in {"ants", "fsl"}:
+            raise ValueError(f"Unsupported registration backend: {self.registration_backend}")
+        if self.registration_backend == "fsl" and self.longitudinal:
+            raise ValueError("--longitudinal currently requires --registration-backend ants.")
+        if self.fsl_mrsi_to_t1_dof not in {6, 7, 9, 12}:
+            raise ValueError("--fsl-mrsi-to-t1-dof must be one of 6, 7, 9, or 12.")
+        if self.fsl_mrsi_to_t1_init not in {"flirt", "usesqform"}:
+            raise ValueError("--fsl-mrsi-to-t1-init must be 'flirt' or 'usesqform'.")
+        if self.fsl_t1_to_mni_dof not in {6, 7, 9, 12}:
+            raise ValueError("--fsl-t1-to-mni-dof must be one of 6, 7, 9, or 12.")
         if self.tissue_backend == "none":
             self.no_pvc = True
         if self.registration_t1_target is None:
-            self.registration_t1_target = "brain" if self.processing_mode == "mni-norm" else "brain-csf"
+            self.registration_t1_target = "brain" if self.processing_mode in {"mni-norm", "midas"} else "brain-csf"
         if self.parcellation_mode is None:
-            self.parcellation_mode = "synthseg" if self.processing_mode == "mni-norm" else "chimera"
+            # midas defaults to SynthSeg parcellation: subject-native, needs no
+            # recon-all, and its GM/WM atlas suffices for the Eq. 4 regression.
+            self.parcellation_mode = "synthseg" if self.processing_mode in {"mni-norm", "midas"} else "chimera"
         if self.processing_mode == "mni-norm" and self.parcellation_mode != "synthseg":
             raise ValueError("mni-norm only supports SynthSeg parcellation. Use --mode parc-con for Chimera or MNI atlases.")
         if self.processing_mode == "mni-norm" and self.registration_t1_target not in {"brain", "raw"}:
@@ -111,6 +131,13 @@ class MRSIPrepConfig:
             raise ValueError("parc-con requires Chimera or MNI atlas parcellation.")
         if self.processing_mode == "mni-norm":
             self.no_pvc = True
+        if self.processing_mode == "midas":
+            # MIDAS mode's tissue correction is the per-parcel Eq. 4 regression,
+            # not PETPVC RBV; the paper has no voxelwise PVC step. Fuzzy c-means
+            # always supplies its own GM/WM/CSF maps, so the SynthSeg+FAST/CAT12
+            # tissue backends do not apply here.
+            self.no_pvc = True
+            self.tissue_backend = "synthseg-fast"
         self.nproc = max(1, int(self.nproc))
         self.nthreads = max(1, int(self.nthreads))
 

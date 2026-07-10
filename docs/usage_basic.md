@@ -122,7 +122,10 @@ docker run --rm \
   which can otherwise sit silently for 10-20+ minutes — shows visible
   progress.
 - `3` — also lets ANTs, `recon-all`, and `mri_synthseg` print their own raw
-  subprocess output instead of being captured.
+  subprocess output instead of being captured, and prints the full traceback
+  for a failed recording (at `0`-`2`, a failure shows only a one-line
+  summary on console — the full traceback is always written to that
+  recording's logbook regardless of `--verbose`, see below).
 
 Every console line is timestamped `dd/mm-HH:MM`, e.g. `07/07-14:35 [ PROC ]
 Tissue segmentation`; pass `-e TZ=<zone>` to the container (or let
@@ -139,7 +142,11 @@ Each subject/session additionally gets, inside its own output folder:
 
 - `sub-*/ses-*/logs/sub-*_ses-*_desc-mrsiprep_log.txt` — every timestamped
   console message for that recording only, useful when re-reading a single
-  subject's history out of a large batch run's combined log.
+  subject's history out of a large batch run's combined log. If the
+  recording fails, this logbook always contains the full exception text and
+  traceback (an `ERROR`/`TRACE` entry), regardless of `--verbose` — the
+  console itself only shows the full traceback at `--verbose 3`, to keep
+  batch-run output readable at lower verbosity levels.
 - `sub-*/ses-*/reports/sub-*_ses-*_desc-provenance.json` — the full run
   configuration, software versions, and a `pipeline_trace` array listing
   each of the 13 steps as `RAN` or `SKIPPED` with a one-line reason (e.g.
@@ -272,12 +279,12 @@ general-purpose neuroimaging pipeline. In particular:
 - It has no fieldmap/BOLD/functional-MRI handling — those are out of scope
   entirely, since the inputs are already-quantified MRSI metabolite maps
   rather than raw k-space or functional time series.
-- A single registration backend is supported (ANTs); there is no
-  TemplateFlow catalog, and normalization targets are limited to MNI152
-  (`MNI152NLin2009cAsym`) plus native T1w/MRSI space — see
+- Registration can use ANTs (default) or FSL FLIRT via
+  `--registration-backend flirt-fnirt` (affine only; FNIRT is not implemented); there is no TemplateFlow catalog, and
+  normalization targets are limited to MNI152 (`MNI152NLin2009cAsym`) plus native T1w/MRSI space — see
   [MNI Normalization Usage](usage_normalization.md).
-- `--longitudinal` (**experimental, not yet verified end-to-end**) builds one
-  ANTs subject-template across sessions — see
+- `--longitudinal` builds one ANTs subject-template across sessions
+  (requires `--registration-backend ants`) — see
   [MNI Normalization Usage](usage_normalization.md); it does not otherwise
   change per-session processing, and assumes reasonably stable anatomy
   across a subject's sessions.

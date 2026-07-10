@@ -45,16 +45,51 @@ def build_parser() -> argparse.ArgumentParser:
     quality.add_argument("--crlb-max", type=float, default=QUALITY_DEFAULTS["crlb_max"])
 
     processing = parser.add_argument_group("Options for performing only a subset of the workflow")
-    processing.add_argument("--mode", "--processing-mode", dest="processing_mode", choices=["mni-norm", "parc-con"], default="mni-norm")
+    processing.add_argument(
+        "--mode",
+        "--processing-mode",
+        dest="processing_mode",
+        choices=["mni-norm", "parc-con", "midas"],
+        default="mni-norm",
+        help="Processing mode. 'midas' runs a MIDAS-faithful pipeline (Maudsley et al. 2006): fuzzy c-means "
+        "tissue segmentation, PSF-convolved tissue fractions, rigid MRSI->T1 registration, and per-parcel "
+        "Eq. 4 pure-GM/pure-WM regression instead of PETPVC.",
+    )
     processing.add_argument(
         "--tissue-backend",
         choices=["synthseg-fast", "existing", "none"],
         default="synthseg-fast",
-        help="Tissue segmentation backend for PVC. 'none' disables tissue segmentation and PVC entirely.",
+        help="Tissue segmentation backend for PVC. 'none' disables tissue segmentation and PVC entirely. "
+        "Ignored in --mode midas, which always uses its own fuzzy c-means segmentation.",
     )
 
-    registration = parser.add_argument_group("Specific options for ANTs registrations")
-    registration.add_argument("--registration-backend", choices=["ants"], default="ants")
+    registration = parser.add_argument_group("Specific options for registrations")
+    registration.add_argument(
+        "--registration-backend",
+        choices=["ants", "fsl", "flirt-fnirt", "flirt_fnirt", "flirt/fnirt"],
+        default="ants",
+        help="Registration toolchain. 'ants' is the default; 'fsl'/'flirt-fnirt' uses FLIRT affine registration "
+        "(no deformable stage -- FNIRT is not implemented).",
+    )
+    registration.add_argument(
+        "--ants-mrsi-to-t1-transform",
+        default="sr",
+        help="ANTs transform preset/code for MRSI-to-T1w registration. Default matches the previous implementation: 'sr'.",
+    )
+    registration.add_argument(
+        "--ants-t1-to-mni-transform",
+        default="s",
+        help="ANTs transform preset/code for T1w-to-MNI registration. Default matches the previous implementation: 's'.",
+    )
+    registration.add_argument("--fsl-mrsi-to-t1-dof", type=int, choices=[6, 7, 9, 12], default=6)
+    registration.add_argument(
+        "--fsl-mrsi-to-t1-init",
+        choices=["flirt", "usesqform"],
+        default="flirt",
+        help="FSL MRSI-to-T1w initialization. 'usesqform' applies the NIfTI qform/sform geometry with FLIRT.",
+    )
+    registration.add_argument("--fsl-t1-to-mni-dof", type=int, choices=[6, 7, 9, 12], default=12)
+    registration.add_argument("--fsl-cost", default="mutualinfo", help="FLIRT cost function for FSL registrations.")
     registration.add_argument("--normalization", choices=["simple", "ants-syn", "existing"], default="simple")
     registration.add_argument("--output-spaces", nargs="+", default=["MNI152NLin2009cAsym"])
     registration.add_argument(
@@ -116,9 +151,9 @@ def build_parser() -> argparse.ArgumentParser:
     processing_control.add_argument(
         "--longitudinal",
         action="store_true",
-        help="[EXPERIMENTAL, not yet fully verified end-to-end] Build one unbiased ANTs template across a "
-        "subject's sessions and register it to MNI once, composing (session-to-template)+(template-to-MNI) "
-        "instead of registering each session directly to MNI. No-op for subjects with a single session.",
+        help="Build one unbiased ANTs template across a subject's sessions and register it to MNI once, "
+        "composing (session-to-template)+(template-to-MNI) instead of registering each session directly to MNI. "
+        "No-op for subjects with a single session. Requires --registration-backend ants.",
     )
     processing_control.add_argument("--transform-spikemask", action="store_true", help="Also transform per-metabolite spike masks into T1w/MNI space.")
     processing_control.add_argument("--nthreads", type=int, default=16, help="ANTs/ITK thread count per subject/session process.")
@@ -178,6 +213,12 @@ def parse_args(argv: list[str] | None = None) -> MRSIPrepConfig:
         processing_mode=args.processing_mode,
         tissue_backend=args.tissue_backend,
         registration_backend=args.registration_backend,
+        ants_mrsi_to_t1_transform=args.ants_mrsi_to_t1_transform,
+        ants_t1_to_mni_transform=args.ants_t1_to_mni_transform,
+        fsl_mrsi_to_t1_dof=args.fsl_mrsi_to_t1_dof,
+        fsl_mrsi_to_t1_init=args.fsl_mrsi_to_t1_init,
+        fsl_t1_to_mni_dof=args.fsl_t1_to_mni_dof,
+        fsl_cost=args.fsl_cost,
         normalization=args.normalization,
         output_spaces=args.output_spaces,
         output_mrsi_t1w=args.output_mrsi_t1w,

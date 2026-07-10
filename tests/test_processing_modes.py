@@ -106,7 +106,7 @@ class ProcessingModeTests(unittest.TestCase):
                 shutil.copy2(moving, output)
                 return Path(output)
 
-            with patch("mrsiprep.reports.parcel_qc.apply_transforms", side_effect=copy_transform):
+            with patch("mrsiprep.reports.parcel_qc.apply_image_transform", side_effect=copy_transform):
                 output = write_parcel_qc(
                     config,
                     "S001",

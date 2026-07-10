@@ -1,7 +1,13 @@
 from pathlib import Path
 import unittest
 
-from mrsiprep.cli.parser import parse_args
+from mrsiprep.cli.parser import parse_args as _parse_args
+
+_REQUIRED_ARGS = ["--metabolites", "CrPCr", "--ref-met", "CrPCr"]
+
+
+def parse_args(argv):
+    return _parse_args(argv + _REQUIRED_ARGS)
 
 
 class CLITests(unittest.TestCase):
@@ -24,6 +30,27 @@ class CLITests(unittest.TestCase):
     def test_cli_output_mrsi_t1w_flag(self):
         cfg = parse_args(["/tmp/bids", "/tmp/out", "participant", "--output-mrsi-t1w"])
         self.assertTrue(cfg.output_mrsi_t1w)
+
+    def test_cli_registration_backend_defaults_to_ants(self):
+        cfg = parse_args(["/tmp/bids", "/tmp/out", "participant"])
+        self.assertEqual(cfg.registration_backend, "ants")
+        self.assertEqual(cfg.ants_mrsi_to_t1_transform, "sr")
+        self.assertEqual(cfg.ants_t1_to_mni_transform, "s")
+
+    def test_cli_accepts_flirt_fnirt_registration_backend(self):
+        cfg = parse_args([
+            "/tmp/bids",
+            "/tmp/out",
+            "participant",
+            "--registration-backend",
+            "flirt-fnirt",
+            "--fsl-mrsi-to-t1-dof",
+            "12",
+            "--fsl-t1-to-mni-dof",
+            "12",
+        ])
+        self.assertEqual(cfg.registration_backend, "fsl")
+        self.assertEqual(cfg.fsl_cost, "mutualinfo")
 
     def test_cli_parc_con_mode_defaults_to_chimera_and_synthseg_brain(self):
         cfg = parse_args(["/tmp/bids", "/tmp/out", "participant", "--mode", "parc-con"])

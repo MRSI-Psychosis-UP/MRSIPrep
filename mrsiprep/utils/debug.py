@@ -153,6 +153,21 @@ class Debug:
         if self.verbose >= 3:
             self.console.print(f"{prefix}{timestamp()} [debug][  DEBUG  ][/debug] {escape(message)}")
 
+    def exception(self, summary: str, traceback_text: str):
+        """Record a failure's full detail without flooding the console.
+
+        ``summary`` and ``traceback_text`` are always written to the
+        per-recording logbook (regardless of verbosity, same as every other
+        logbook write) so nothing is lost. The console only gets the full
+        traceback at verbose 3 (the caller is expected to already have
+        printed a short one-line summary via e.g. `always()`, so nothing
+        extra prints here below that tier).
+        """
+        _logbook_write("ERROR", summary)
+        _logbook_write("TRACE", traceback_text)
+        if self.verbose >= 3:
+            self.console.print(escape(traceback_text))
+
     @contextmanager
     def step(self, *messages, live: bool = True):
         """Like `proc()`, but shows a live spinner while the `with` body runs and

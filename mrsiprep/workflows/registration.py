@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from mrsiprep.registration.mrsi_to_t1 import MRSIToT1Result, run_mrsi_to_t1
+from mrsiprep.registration.mrsi_to_t1 import MRSIToT1Result, run_mrsi_to_t1, run_mrsi_to_t1_rigid_mi
 from mrsiprep.registration.t1_to_mni import T1ToMNIResult, compose_longitudinal_t1_to_mni, run_t1_to_mni
 
 
@@ -29,7 +29,10 @@ def run_registration_workflow(
     when ``--longitudinal`` is on and the subject has 2+ sessions. When
     present, T1-to-MNI is composed via (session->template)+(template->MNI)
     instead of registering this session directly to MNI."""
-    mrsi_to_t1 = run_mrsi_to_t1(config, subject, session, mrsi_reference, registration_t1, fixed_mask=registration_mask)
+    if config.processing_mode == "midas":
+        mrsi_to_t1 = run_mrsi_to_t1_rigid_mi(config, subject, session, mrsi_reference, registration_t1, fixed_mask=registration_mask)
+    else:
+        mrsi_to_t1 = run_mrsi_to_t1(config, subject, session, mrsi_reference, registration_t1, fixed_mask=registration_mask)
     t1_to_mni = None
     if "MNI152NLin2009cAsym" in config.output_spaces or config.parcellation_mode == "mni" or "mni" in config.transform:
         if subject_template is not None and session is not None:

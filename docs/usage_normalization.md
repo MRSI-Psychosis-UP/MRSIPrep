@@ -84,13 +84,7 @@ pipeline.
 
 ## Longitudinal (subject-template) normalization
 
-```{warning}
-**Experimental.** `--longitudinal` has not yet been verified end-to-end on a
-full multi-session run. The individual pieces (template construction,
-template→MNI registration, transform composition) work in isolation, but a
-complete real-data run has not yet finished successfully. Use with caution
-and inspect outputs carefully until this notice is removed.
-```
+Requires `--registration-backend ants` (the default).
 
 For subjects scanned across multiple sessions, `--longitudinal` builds one
 unbiased ANTs template across all of that subject's sessions and registers

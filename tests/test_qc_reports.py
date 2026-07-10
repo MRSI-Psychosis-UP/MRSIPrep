@@ -24,6 +24,8 @@ def _make_config(tmp_path: Path) -> MRSIPrepConfig:
         "participant",
         participant_label=["S001"],
         session_label=["V1"],
+        metabolites=["CrPCr"],
+        ref_met="CrPCr",
     )
 
 

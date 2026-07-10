@@ -68,6 +68,17 @@ def _itk_thread_env(threads: int | None):
             os.environ["ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS"] = previous
 
 
+# Full antspyx type_of_transform preset names passed through verbatim; anything
+# else is treated as a short antsRegistrationSyN transform code (e.g. "s", "sr").
+_ANTS_FULL_PRESETS = {"Rigid", "Affine", "AffineFast", "Similarity", "SyN", "SyNRA", "SyNOnly", "TRSAA", "ElasticSyN"}
+
+
+def _resolve_type_of_transform(transform: str) -> str:
+    if transform in _ANTS_FULL_PRESETS:
+        return transform
+    return f"antsRegistrationSyN[{transform}]"
+
+
 def register(
     fixed,
     moving,
@@ -90,7 +101,7 @@ def register(
                 moving=moving_img,
                 fixed_mask=fixed_mask_img,
                 moving_mask=moving_mask_img,
-                type_of_transform=f"antsRegistrationSyN[{transform}]",
+                type_of_transform=_resolve_type_of_transform(transform),
                 verbose=verbose,
             )
         return save_all_transforms(tx, out_prefix)
@@ -229,6 +240,7 @@ def register_cli(
     moving_path = _as_image_path(moving)
     out_prefix = Path(out_prefix)
     out_prefix.parent.mkdir(parents=True, exist_ok=True)
+    cli_transform = _cli_transform_code(transform)
     with tempfile.TemporaryDirectory(prefix="mrsiprep_antscli_") as tmpdir:
         cli_prefix = Path(tmpdir) / "ants_"
         cmd = [
@@ -242,7 +254,7 @@ def register_cli(
             "-o",
             str(cli_prefix),
             "-t",
-            transform,
+            cli_transform,
         ]
         if fixed_mask is not None:
             cmd.extend(["-x", str(_as_image_path(fixed_mask))])
@@ -250,15 +262,36 @@ def register_cli(
         affine = cli_prefix.with_name(cli_prefix.name + "0GenericAffine.mat")
         warp = cli_prefix.with_name(cli_prefix.name + "1Warp.nii.gz")
         inverse_warp = cli_prefix.with_name(cli_prefix.name + "1InverseWarp.nii.gz")
-        outputs = {
-            "forward": [out_prefix.with_suffix(".syn.nii.gz"), out_prefix.with_suffix(".affine.mat")],
-            "inverse": [out_prefix.with_suffix(".affine_inv.mat"), out_prefix.with_suffix(".syn_inv.nii.gz")],
-        }
-        _copy_required(warp, outputs["forward"][0])
-        _copy_required(affine, outputs["forward"][1])
-        _copy_required(affine, outputs["inverse"][0])
-        _copy_required(inverse_warp, outputs["inverse"][1])
+        # Rigid/affine-only registrations (e.g. MIDAS mode's "Rigid") produce no
+        # deformable warp; emit the affine-only transform pair in that case.
+        if warp.exists():
+            outputs = {
+                "forward": [out_prefix.with_suffix(".syn.nii.gz"), out_prefix.with_suffix(".affine.mat")],
+                "inverse": [out_prefix.with_suffix(".affine_inv.mat"), out_prefix.with_suffix(".syn_inv.nii.gz")],
+            }
+            _copy_required(warp, outputs["forward"][0])
+            _copy_required(affine, outputs["forward"][1])
+            _copy_required(affine, outputs["inverse"][0])
+            _copy_required(inverse_warp, outputs["inverse"][1])
+        else:
+            outputs = {
+                "forward": [out_prefix.with_suffix(".affine.mat")],
+                "inverse": [out_prefix.with_suffix(".affine_inv.mat")],
+            }
+            _copy_required(affine, outputs["forward"][0])
+            _copy_required(affine, outputs["inverse"][0])
     return outputs
+
+
+# Map antspyx type_of_transform presets / short SyN codes to antsRegistrationSyN.sh -t codes.
+_CLI_TRANSFORM_CODES = {"Rigid": "r", "Affine": "a", "AffineFast": "a", "SyN": "s", "SyNRA": "s"}
+
+
+def _cli_transform_code(transform: str) -> str:
+    if transform in _CLI_TRANSFORM_CODES:
+        return _CLI_TRANSFORM_CODES[transform]
+    # Already a short antsRegistrationSyN code (e.g. "s", "sr", "r", "a").
+    return transform
 
 
 def apply_transforms_cli(

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from mrsiprep.interfaces.ants import apply_transforms
 from mrsiprep.io.bids import BIDSLayout
 from mrsiprep.io.naming import anat_derivative, mrsi_derivative
+from mrsiprep.registration.transforms import apply_image_transform
 
 
 def load_existing_cat12(config, subject: str, session: str | None) -> dict[str, Path]:
@@ -45,5 +45,5 @@ def resample_tissue_to_mrsi(config, subject: str, session: str | None, tissue_t1
         if target.exists() and not (config.overwrite_seg or config.overwrite):
             out[label] = target
             continue
-        out[label] = apply_transforms(mrsi_reference, path, t1_to_mrsi_transforms, target, interpolation="linear")
+        out[label] = apply_image_transform(mrsi_reference, path, t1_to_mrsi_transforms, target, interpolation="linear", threads=config.nthreads)
     return out

@@ -9,10 +9,10 @@ import nibabel as nib
 import numpy as np
 import pandas as pd
 
-from mrsiprep.interfaces.ants import apply_transforms
 from mrsiprep.io.naming import parcellation_derivative
 from mrsiprep.parcellation.base import ParcellationResult
 from mrsiprep.parcellation.labels import infer_hemisphere
+from mrsiprep.registration.transforms import apply_image_transform
 from mrsiprep.tissue.synthseg_fast import CSF_VENTRICLE_LABELS, run_or_load_synthseg_labels
 from mrsiprep.utils.images import save_nifti
 
@@ -61,7 +61,7 @@ def run_synthseg_parcellation(
     if not atlas_t1.exists() or config.overwrite:
         save_nifti(retained, t1_img, atlas_t1, dtype=np.uint16)
     if not atlas_mrsi.exists() or config.overwrite:
-        apply_transforms(mrsi_reference, atlas_t1, t1_to_mrsi, atlas_mrsi, interpolation="genericLabel", threads=config.nthreads)
+        apply_image_transform(mrsi_reference, atlas_t1, t1_to_mrsi, atlas_mrsi, interpolation="genericLabel", threads=config.nthreads)
 
     indices = np.unique(retained)
     indices = indices[indices != 0]

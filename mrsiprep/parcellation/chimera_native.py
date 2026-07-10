@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from mrsiprep.interfaces.ants import apply_transforms
 from mrsiprep.interfaces.chimera import run_chimera
 from mrsiprep.interfaces.freesurfer import freesurfer_subject_id, run_recon_all, subject_dir_valid
 from mrsiprep.io.bids import BIDSLayout
 from mrsiprep.io.naming import chimera_derivative
 from mrsiprep.parcellation.base import ParcellationResult
 from mrsiprep.parcellation.labels import copy_labels
+from mrsiprep.registration.transforms import apply_image_transform
 from mrsiprep.utils.debug import Debug
 
 
@@ -52,7 +52,7 @@ def run_chimera_parcellation(config, subject: str, session: str | None, mrsi_ref
         t1_out.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source_atlas, t1_out)
     if not mrsi_out.exists() or rerun_chimera:
-        apply_transforms(mrsi_reference, t1_out, t1_to_mrsi_transforms, mrsi_out, interpolation="genericLabel")
+        apply_image_transform(mrsi_reference, t1_out, t1_to_mrsi_transforms, mrsi_out, interpolation="genericLabel", threads=config.nthreads)
     source_labels = source_atlas.with_suffix("").with_suffix(".tsv") if source_atlas.name.endswith(".nii.gz") else source_atlas.with_suffix(".tsv")
     if source_labels.exists():
         copy_labels(source_labels, labels_out)
