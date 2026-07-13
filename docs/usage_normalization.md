@@ -82,58 +82,13 @@ docker run --rm \
 when a T1w→MNI transform was already produced by a prior run or an external
 pipeline.
 
-## Longitudinal (subject-template) normalization
-
-Requires `--registration-backend ants` (the default).
-
-For subjects scanned across multiple sessions, `--longitudinal` builds one
-unbiased ANTs template across all of that subject's sessions and registers
-the template to MNI once, instead of registering each session directly to
-MNI independently. Every session's final MNI-space maps are then produced by
-composing (session→template) with (template→MNI), reducing registration
-noise/bias across timepoints — the same "custom template" concept used by
-fMRIPrep's longitudinal processing.
-
-```bash
-docker run --rm \
-  -v /path/to/bids:/data:ro \
-  -v /path/to/derivatives:/out \
-  mrsiup/mrsiprep:cpu \
-  /data /out participant \
-  --participant-label S001 \
-  --session-label V1 V2 V3 \
-  --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \
-  --ref-met CrPCr \
-  --mode mni-norm \
-  --longitudinal \
-  --nthreads 16
-```
-
-The template is built with `antsMultivariateTemplateConstruction2.sh`
-(4 iterations, rigid initial alignment) and registered to MNI with
-`antsRegistrationSyN.sh -t s` (full SyN), mirroring the longitudinal
-normalization already validated in the MRSI-Metabolic-Connectome research
-pipeline. It runs once per subject, before any session's own processing, and
-is cached the same way as every other registration stage — reruns skip it
-unless `--overwrite`/`--overwrite-mni-reg` is passed or a session is added.
-
-**Single-session subjects are unaffected.** `--longitudinal` is a no-op for
-any subject with only one ready session; that session falls back to direct
-per-session T1w→MNI registration as usual.
-
-Derivatives are written per subject (not per session):
-
-```text
-sub-<label>/ses-all/transforms/anat/
-  sub-<label>_ses-all_desc-template_to_mni.affine.mat
-  sub-<label>_ses-all_desc-template_to_mni.syn.nii.gz
-sub-<label>/ses-<session>/transforms/anat/
-  sub-<label>_ses-<session>_desc-t1w_to_template.affine.mat
-  sub-<label>_ses-<session>_desc-t1w_to_template.syn.nii.gz
-```
+See [Longitudinal (Subject-Template) Normalization](usage_longitudinal.md)
+for `--longitudinal`, which registers one unbiased ANTs template built
+across a subject's sessions to MNI instead of registering each session
+directly.
 
 See [Basic Usage](usage_basic.md) for the full CLI
 reference, including `--registration-backend`, `--normalization`,
 `--output-spaces`, `--output-mrsi-t1w`, `--mni-resolution`, `--ref-met`,
 `--registration-t1-target`, `--transform-spikemask`, `--overwrite-t1-reg`,
-`--overwrite-mni-reg`, `--overwrite-transform`, and `--longitudinal`.
+`--overwrite-mni-reg`, and `--overwrite-transform`.

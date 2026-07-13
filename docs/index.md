@@ -147,6 +147,7 @@ publications:
 installation
 usage_basic
 usage_normalization
+usage_longitudinal
 usage_parcellation
 ```
 

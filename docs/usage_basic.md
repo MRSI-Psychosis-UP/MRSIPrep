@@ -234,8 +234,10 @@ long PyBIDS-style names shown above (`acquisition`, `run`, `session`,
 `subject`) interchangeably. A value of `null` requires the entity to be
 absent from the filename.
 
-See [MNI Normalization Usage](usage_normalization.md) for `--output-spaces`,
-`--output-mrsi-t1w`, and `--longitudinal`.
+See [MNI Normalization Usage](usage_normalization.md) for `--output-spaces`
+and `--output-mrsi-t1w`, and
+[Longitudinal (Subject-Template) Normalization](usage_longitudinal.md) for
+`--longitudinal`.
 
 ## Output layout
 
@@ -285,9 +287,9 @@ general-purpose neuroimaging pipeline. In particular:
   [MNI Normalization Usage](usage_normalization.md).
 - `--longitudinal` builds one ANTs subject-template across sessions
   (requires `--registration-backend ants`) — see
-  [MNI Normalization Usage](usage_normalization.md); it does not otherwise
-  change per-session processing, and assumes reasonably stable anatomy
-  across a subject's sessions.
+  [Longitudinal (Subject-Template) Normalization](usage_longitudinal.md); it
+  does not otherwise change per-session processing, and assumes reasonably
+  stable anatomy across a subject's sessions.
 - Chimera parcellation and the `synthseg-fast` tissue backend require
   FreeSurfer, FSL, and a valid `FS_LICENSE`; `mni-norm` mode does not.
 

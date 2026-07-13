@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Split `--longitudinal` subject-template normalization out of "MNI
+  Normalization Usage" into its own
+  [Longitudinal (Subject-Template) Normalization](usage_longitudinal.md)
+  page, alongside `mni-norm`/`parc-con`, with the full algorithm (subject
+  template construction, template→MNI registration, per-session transform
+  composition), execution order/caching behavior, and derivative layout.
 - Added `--mode midas`: a MIDAS-faithful processing pipeline (Maudsley et al.
   2006) using fuzzy c-means tissue segmentation, PSF-convolved tissue
   fractions, rigid MRSI→T1 registration, and per-parcel Eq. 4 pure-GM/pure-WM
