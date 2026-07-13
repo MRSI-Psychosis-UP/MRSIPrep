@@ -10,3 +10,9 @@ test_results/
 wrapper/dist/
 wrapper/build/
 *.egg-info/
+crash-*
+*.png
+*svg
+/results*
+*.nii.gz
+scripts/qc/plot_axial_slice.py
