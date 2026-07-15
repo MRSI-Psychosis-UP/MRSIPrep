@@ -17,7 +17,7 @@ class CLITests(unittest.TestCase):
         self.assertEqual(cfg.registration_t1_target, "brain")
         self.assertEqual(cfg.parcellation_mode, "synthseg")
         self.assertEqual(cfg.synthseg_mode, "robust")
-        self.assertTrue(cfg.no_pvc)
+        self.assertFalse(cfg.no_pvc)
         self.assertEqual(cfg.participant_label, ["sub-S001"])
         self.assertEqual(cfg.tissue_backend, "synthseg-fast")
         self.assertEqual(cfg.derivative_dir, Path("/tmp/derivatives/mrsiprep"))

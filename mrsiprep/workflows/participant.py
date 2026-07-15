@@ -362,10 +362,13 @@ def _step_tissue_segmentation(config, subject, session, raw_t1, t1_path, debug):
     brain_mask_override = None
     with debug.step("Tissue segmentation"):
         if config.processing_mode == "mni-norm":
-            synthseg_brain, synthseg_mask = extract_t1_synthseg(config, subject, session, raw_t1)
+            if raw_t1 is None:
+                raise FileNotFoundError(f"Missing raw T1w required for SynthSeg+FAST segmentation: sub-{subject} ses-{session}")
+            precomputed_tissue_t1 = segment_t1_synthseg_fast(config, subject, session, raw_t1)
+            p3_override = synthseg_fast_csf_probseg_path(config, subject, session)
             if config.registration_t1_target == "brain":
-                t1_path = synthseg_brain
-                brain_mask_override = synthseg_mask
+                t1_path = synthseg_fast_brain_path(config, subject, session)
+                brain_mask_override = synthseg_fast_brain_mask_path(config, subject, session)
         elif config.processing_mode == "midas":
             if raw_t1 is None:
                 raise FileNotFoundError(f"Missing raw T1w required for MIDAS fuzzy c-means segmentation: sub-{subject} ses-{session}")
@@ -404,7 +407,7 @@ def _step_registration(config, subject, session, mrsi, anat, debug, subject_temp
 
 
 def _step_tissue_probmaps(config, subject, session, anat, mrsi, registration, precomputed_tissue_t1, debug):
-    if config.processing_mode not in {"parc-con", "midas"}:
+    if config.processing_mode not in {"parc-con", "midas", "mni-norm"}:
         return None
     with debug.step("Tissue probability maps in MRSI space"):
         return run_tissue_workflow(
@@ -424,7 +427,7 @@ def _step_pvc(config, subject, session, mrsi, tissue, debug):
     mrsi.preproc_maps unchanged when full-mode PVC is not applicable."""
     corrected_maps = mrsi.preproc_maps
     tissue_4d = None
-    if config.processing_mode == "parc-con" and not config.no_pvc:
+    if config.processing_mode in {"parc-con", "mni-norm"} and not config.no_pvc:
         assert tissue is not None
         with debug.step("Partial volume correction"):
             tissue_4d = create_tissue_4d(config, subject, session, tissue.mrsi, mrsi.reference)

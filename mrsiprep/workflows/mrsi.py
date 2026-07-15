@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -28,26 +29,37 @@ class MRSIResult:
     qc_summary: Path
 
 
-def _symlink_quality_maps(config, subject: str, session: str | None, inputs: MRSIInputs) -> None:
-    links: list[tuple[Path | None, dict]] = [(inputs.snr_map, {"desc": "snr"}), (inputs.linewidth_map, {"desc": "fwhm"})]
+def _copy_native_maps(config, subject: str, session: str | None, inputs: MRSIInputs) -> None:
+    """Copy (not symlink) raw/quality maps into the mrsi/orig derivatives tree.
+
+    A symlink written from inside a container would encode a path relative
+    to the container's own mount layout (e.g. separate `/data` and `/out`
+    bind mounts), which has no reliable relationship to the host filesystem
+    outside the container -- the link would dangle there even though the
+    source file exists. Copying these small maps avoids that.
+    """
+    links: list[tuple[Path | None, dict, str]] = [
+        (inputs.snr_map, {"desc": "snr"}, "orig"),
+        (inputs.linewidth_map, {"desc": "fwhm"}, "orig"),
+    ]
     for met, path in inputs.crlb_maps.items():
-        links.append((path, {"met": met, "desc": "crlb"}))
-    for source, entities in links:
+        links.append((path, {"met": met, "desc": "crlb"}, "orig"))
+    for met, path in inputs.metabolite_maps.items():
+        links.append((path, {"met": met, "desc": "signal"}, "mrsi"))
+    for source, entities, space in links:
         if source is None or not source.exists():
             continue
-        target = mrsi_derivative(config.derivative_dir, subject, session, space="orig", suffix_override="mrsi", **entities)
+        target = mrsi_derivative(config.derivative_dir, subject, session, space=space, suffix_override="mrsi", **entities)
         target.parent.mkdir(parents=True, exist_ok=True)
         if target.is_symlink() or target.exists():
             target.unlink()
-        target.symlink_to(source.resolve())
+        shutil.copy2(source, target)
 
 
 def run_mrsi_workflow(config, subject: str, session: str | None, inputs: MRSIInputs) -> MRSIResult:
-    _symlink_quality_maps(config, subject, session, inputs)
+    _copy_native_maps(config, subject, session, inputs)
     brainmask = ensure_brainmask(config, subject, session, inputs.brainmask, inputs.water_map, inputs.metabolite_maps)
-    preproc = inputs.metabolite_maps
-    if config.processing_mode == "parc-con":
-        preproc = filter_metabolite_maps(config, subject, session, inputs.metabolite_maps, brainmask)
+    preproc = filter_metabolite_maps(config, subject, session, inputs.metabolite_maps, brainmask)
     reference = generate_reference(config, subject, session, preproc, preferred_met=config.ref_met)
     qcmasks, qc_summary = make_quality_masks(
         config,

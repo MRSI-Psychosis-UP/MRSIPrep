@@ -60,6 +60,7 @@ class MRSIPrepConfig:
     t1_pattern: str = "desc-brain_T1w"
     transform: str = ""
     filter_biharmonic: bool = True
+    filter_fwhm_mm: float | None = None
     spike_percentile: float = 99.0
     no_pvc: bool = False
     longitudinal: bool = False
@@ -129,8 +130,6 @@ class MRSIPrepConfig:
             raise ValueError("mni-norm supports SynthSeg brain or raw T1w registration targets.")
         if self.processing_mode == "parc-con" and self.parcellation_mode == "synthseg":
             raise ValueError("parc-con requires Chimera or MNI atlas parcellation.")
-        if self.processing_mode == "mni-norm":
-            self.no_pvc = True
         if self.processing_mode == "midas":
             # MIDAS mode's tissue correction is the per-parcel Eq. 4 regression,
             # not PETPVC RBV; the paper has no voxelwise PVC step. Fuzzy c-means

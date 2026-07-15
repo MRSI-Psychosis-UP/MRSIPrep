@@ -35,7 +35,7 @@ def filter_metabolite_maps(config, subject: str, session: str | None, metabolite
         img, data = load_3d_data(path, dtype=np.float32, label=f"{met} map")
         data = np.nan_to_num(data, nan=0.0)
         spike_mask = get_spike_mask(data, percentile=config.spike_percentile)
-        repaired, missing = biharmonic_repair(data, brain, spike_mask, img.header, img.affine)
+        repaired, missing = biharmonic_repair(data, brain, spike_mask, img.header, img.affine, fwhm_mm=config.filter_fwhm_mm)
         filtered[met] = save_nifti(repaired.astype(np.float32), img, out, dtype=np.float32)
         spike_out = mrsi_derivative(config.derivative_dir, subject, session, space="MRSI", met=met, desc="spikemask", suffix_override="mask")
         save_nifti(spike_mask.astype(np.uint8), img, spike_out, dtype=np.uint8)
@@ -50,13 +50,16 @@ def get_spike_mask(data: np.ndarray, percentile: float = 99.0) -> np.ndarray:
     return data > threshold
 
 
-def biharmonic_repair(data: np.ndarray, brain: np.ndarray, spike_mask: np.ndarray, header, affine: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+def biharmonic_repair(
+    data: np.ndarray, brain: np.ndarray, spike_mask: np.ndarray, header, affine: np.ndarray, fwhm_mm: float | None = None
+) -> tuple[np.ndarray, np.ndarray]:
     """Two-stage spike repair matching ``BiHarmonic.proc``.
 
     1. Replace spikes with a local 3x3x3 median (excluding the center voxel).
     2. Biharmonic-inpaint voxels that are still zero inside the brain mask.
-    3. Smooth with FWHM derived from the image's own voxel size, splicing the
-       smoothed values back in only at repaired locations.
+    3. Smooth with FWHM ``fwhm_mm`` (or, when unset, the native MRSI voxel
+       size), splicing the smoothed values back in only at repaired
+       locations.
     """
     unspiked = _inpaint_voxels_with_median(data, spike_mask)
     missing = np.zeros_like(unspiked, dtype=bool)
@@ -66,8 +69,11 @@ def biharmonic_repair(data: np.ndarray, brain: np.ndarray, spike_mask: np.ndarra
         defect = unspiked.copy()
         defect[missing] = 0
         inpainted = inpaint_biharmonic(defect, missing)
-    voxel_dims = np.array(header.get_zooms()[:3])
-    fwhm = float(np.round(voxel_dims.mean() * np.sqrt(2)))
+    if fwhm_mm is not None:
+        fwhm = float(fwhm_mm)
+    else:
+        voxel_dims = np.array(header.get_zooms()[:3])
+        fwhm = float(np.round(voxel_dims.mean() * np.sqrt(2)))
     smoothed = nil_image.smooth_img(nib.Nifti1Image(inpainted.astype(np.float32), affine), fwhm=fwhm).get_fdata()
     inpaint_mask = spike_mask | missing
     repaired = inpainted.copy()

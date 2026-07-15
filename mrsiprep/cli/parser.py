@@ -145,7 +145,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     processing_control = parser.add_argument_group("Workflow configuration")
     processing_control.add_argument("--transform", default="", help="Legacy output transform override; prefer --output-spaces.")
-    processing_control.add_argument("--no-filter", action="store_true")
+    processing_control.add_argument("--no-filter", action="store_true", help="Disable biharmonic spike filtering (enabled by default in every processing mode).")
+    processing_control.add_argument(
+        "--filter-fwhm-mm",
+        type=float,
+        default=None,
+        help="Smoothing FWHM (mm) used when splicing repaired biharmonic-filter voxels back in. "
+        "Default: derived from the native MRSI voxel size (mean voxel dimension x sqrt(2)).",
+    )
     processing_control.add_argument("--spikepc", type=float, default=99.0)
     processing_control.add_argument("--no-pvc", action="store_true")
     processing_control.add_argument(
@@ -246,6 +253,7 @@ def parse_args(argv: list[str] | None = None) -> MRSIPrepConfig:
         regional_summary=args.regional_summary,
         transform=args.transform,
         filter_biharmonic=not args.no_filter,
+        filter_fwhm_mm=args.filter_fwhm_mm,
         spike_percentile=args.spikepc,
         no_pvc=args.no_pvc,
         longitudinal=args.longitudinal,
