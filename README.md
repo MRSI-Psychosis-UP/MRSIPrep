@@ -57,6 +57,11 @@ publications:
   spectroscopic imaging in youth at risk for psychosis. *Imaging
   Neuroscience*, 4.
   [doi:10.1162/imag.a.1276](https://doi.org/10.1162/imag.a.1276)
+- Céléreau, E., Lucchetti, F., Steullet, P., Schilliger, Z., Alemán-Gómez,
+  Y., Jenni, R., Petrova, T., Forrer, S., Delavari, F., Ledoux, J.-B., et al.
+  (2026). Sex differences in brain metabolism assessed with whole-brain
+  magnetic resonance spectroscopic imaging. *bioRxiv*, 2026-06.
+  [doi:10.64898/2026.06.30.735476](https://doi.org/10.64898/2026.06.30.735476)
 
 ## License
 
