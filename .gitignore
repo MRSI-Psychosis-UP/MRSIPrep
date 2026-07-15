@@ -16,3 +16,6 @@ crash-*
 /results*
 *.nii.gz
 scripts/qc/plot_axial_slice.py
+
+# Local synthetic MRSI experiments, data, checkpoints, and generated outputs.
+/synthMRSI/
