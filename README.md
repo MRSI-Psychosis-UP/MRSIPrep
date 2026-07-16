@@ -15,7 +15,7 @@ coverage and CRLB reporting. `parc-con` mode adds SynthSeg+FAST tissue maps,
 PETPVC, and Chimera/MNI-atlas regional profile extraction for metabolic connectivty computation.
 
 **Full documentation, installation, and usage instructions are on
-[Read the Docs](https://mrsiprep.readthedocs.io/en/latest/).**
+[Read the Docs](https://mrsiprep.readthedocs.io/en/stable/).**
 
 ![MRSIPrep pipeline schematic](docs/figures/pipeline_schematic.png)
 
