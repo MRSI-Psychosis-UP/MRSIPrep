@@ -37,7 +37,7 @@ MRSIPrep was designed according to four main principles:
   analyses, regional analyses, metabolic connectomics, gradient mapping, or
   machine-learning workflows.
 
-See [Read the Docs](https://mrsiprep.readthedocs.io/en/latest/) for the full
+See [Read the Docs](https://mrsiprep.readthedocs.io/en/stable/) for the full
 workflow architecture and quality-control framework.
 
 ## Use Cases
