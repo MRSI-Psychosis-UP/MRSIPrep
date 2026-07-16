@@ -135,7 +135,7 @@ class RegistrationOverviewReportTests(unittest.TestCase):
                 nib.save(nib.load(str(moving)), out_path)
                 return out_path
 
-            with mock.patch("mrsiprep.registration.transforms.apply_image_transform", side_effect=_fake_apply):
+            with mock.patch("mrsiprep.mrsi.resampling.apply_image_transform", side_effect=_fake_apply):
                 out = write_registration_overview_report(
                     config,
                     "S001",
