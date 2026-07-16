@@ -76,6 +76,7 @@ class MRSIPrepConfig:
     work_dir: Path | None = None
     verbose: int = 1
     validate_only: bool = False
+    skip_file_integrity_check: bool = False
     check_external_libs: bool = False
     stop_on_first_crash: bool = False
 

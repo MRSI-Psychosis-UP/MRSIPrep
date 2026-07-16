@@ -56,7 +56,7 @@ def write_parcel_coverage_figure(config, subject: str, session: str | None, atla
     )
 
 
-def _resample_atlas_to_mni(config, atlas_t1: Path, t1_to_mni) -> tuple[np.ndarray, "object"]:
+def _resample_atlas_to_mni(config, subject: str, session: str | None, atlas_t1: Path, t1_to_mni) -> tuple[np.ndarray, "object"]:
     """Resample the (subject-space) T1w atlas into MNI space via the same
     T1w->MNI transform used for MRSI outputs, so glass-brain projection (which
     assumes MNI space) is actually aligned with its silhouette."""
@@ -68,7 +68,12 @@ def _resample_atlas_to_mni(config, atlas_t1: Path, t1_to_mni) -> tuple[np.ndarra
 
     resolution = resolve_mni_resolution(config.mni_resolution, atlas_t1, None)
     template = datasets.load_mni152_template(resolution)
-    out = config.work_dir / "coverage_mni_atlas.nii.gz"
+    # Subject/session-specific filename: this used to be one shared
+    # `coverage_mni_atlas.nii.gz` path written by every recording, which
+    # under `--nproc > 1` let two workers race on the same file mid-write
+    # and corrupt it (surfaced as `ImageFileError: ... is not a gzip file`).
+    ses_label = session or "none"
+    out = config.work_dir / f"sub-{subject}_ses-{ses_label}_desc-coverage_atlas.nii.gz"
     out.parent.mkdir(parents=True, exist_ok=True)
     apply_image_transform(template, atlas_t1, list(t1_to_mni), out, interpolation="genericLabel", threads=config.nthreads)
     img = nib.load(str(out))
@@ -95,7 +100,7 @@ def write_parcel_crlb_figures(config, subject: str, session: str | None, atlas_t
     if not t1_to_mni:
         return []
 
-    atlas, affine = _resample_atlas_to_mni(config, atlas_t1, t1_to_mni)
+    atlas, affine = _resample_atlas_to_mni(config, subject, session, atlas_t1, t1_to_mni)
     outputs: list[Path] = []
     for metabolite, met_df in df.groupby("metabolite"):
         if not str(metabolite):

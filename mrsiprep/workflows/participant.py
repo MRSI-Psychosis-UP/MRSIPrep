@@ -56,13 +56,18 @@ class RecordingStatus:
 
 
 def _gather_input_availability(config, subject: str, session: str | None) -> dict:
+    from mrsiprep.utils.images import nifti_validity_error
+
     layout = BIDSLayout(config.bids_dir, filters=config.bids_filters)
     recording_id = f"sub-{subject}"
     if session:
         recording_id += f"_ses-{session}"
 
+    check_integrity = not config.skip_file_integrity_check
+
     t1_path = layout.t1(subject, session, config.t1_pattern)
     t1_status = bool(t1_path and t1_path.exists())
+    t1_corrupt = bool(t1_status and check_integrity and nifti_validity_error(t1_path))
 
     inputs = load_mrsi_inputs(layout, subject, session, config.metabolites)
     total_expected = len(config.metabolites)
@@ -70,6 +75,21 @@ def _gather_input_availability(config, subject: str, session: str | None) -> dic
     crlb_found_count = len(inputs.crlb_maps)
     snr_status = bool(inputs.snr_map)
     fwhm_status = bool(inputs.linewidth_map)
+
+    corrupt_items = []
+    if check_integrity:
+        if t1_corrupt:
+            corrupt_items.append("T1w")
+        for met, path in inputs.metabolite_maps.items():
+            if nifti_validity_error(path):
+                corrupt_items.append(f"MRSI-{met}")
+        for met, path in inputs.crlb_maps.items():
+            if nifti_validity_error(path):
+                corrupt_items.append(f"CRLB-{met}")
+        if inputs.snr_map is not None and nifti_validity_error(inputs.snr_map):
+            corrupt_items.append("SNR")
+        if inputs.linewidth_map is not None and nifti_validity_error(inputs.linewidth_map):
+            corrupt_items.append("FWHM")
 
     brainmask_status = bool(inputs.brainmask)
     if config.tissue_backend == "existing":
@@ -115,6 +135,7 @@ def _gather_input_availability(config, subject: str, session: str | None) -> dic
         "tissue": tissue_label,
         "transforms": transforms,
         "freesurfer": freesurfer_status,
+        "corrupt_items": corrupt_items,
     }
 
 
@@ -132,6 +153,8 @@ def _render_preflight_table(config, summaries: list[dict], debug: Debug) -> None
 
     show_freesurfer = any(row["freesurfer"] is not None for row in summaries)
 
+    show_integrity = not config.skip_file_integrity_check
+
     table = Table(box=box.SIMPLE_HEAVY, show_lines=False, title="Input availability summary")
     table.add_column("Recording", style="cyan", no_wrap=True)
     table.add_column("T1w ref", justify="center", no_wrap=True)
@@ -141,6 +164,8 @@ def _render_preflight_table(config, summaries: list[dict], debug: Debug) -> None
     table.add_column("FWHM", justify="center", no_wrap=True)
     table.add_column("Brainmask", justify="center", no_wrap=True)
     table.add_column("Tissue files", justify="center", no_wrap=True)
+    if show_integrity:
+        table.add_column("Integrity", justify="center", no_wrap=True)
     if show_freesurfer:
         table.add_column("FreeSurfer", justify="center", no_wrap=True)
     for _, label in transform_columns:
@@ -174,6 +199,13 @@ def _render_preflight_table(config, summaries: list[dict], debug: Debug) -> None
             row["tissue"],
         ]
 
+        if show_integrity:
+            corrupt_items = row.get("corrupt_items") or []
+            if corrupt_items:
+                row_cells.append(f"[red]CORRUPT ({', '.join(corrupt_items)})[/red]")
+            else:
+                row_cells.append(CHECK_MARK)
+
         if show_freesurfer:
             if row["freesurfer"] is None:
                 row_cells.append(NA_MARK)
@@ -198,6 +230,8 @@ def _render_preflight_table(config, summaries: list[dict], debug: Debug) -> None
             missing_items.append("FWHM")
         if config.processing_mode == "parc-con" and config.tissue_backend == "existing" and "red" in row["tissue"]:
             missing_items.append("Tissue")
+        if row.get("corrupt_items"):
+            missing_items.append(f"CORRUPT ({', '.join(row['corrupt_items'])})")
 
         if missing_items:
             missing_count += 1
@@ -280,6 +314,13 @@ def run_participant_workflow(config) -> list[RecordingStatus]:
     debug = Debug(verbose=config.verbose)
 
     recordings = collect_recordings(config)
+    if recordings:
+        summaries = [
+            _gather_input_availability(config, normalize_subject(rec.subject), normalize_session(rec.session))
+            for rec in recordings
+        ]
+        _render_preflight_table(config, summaries, debug)
+
     ready: list[Recording] = []
     statuses: list[RecordingStatus] = []
     for recording in recordings:

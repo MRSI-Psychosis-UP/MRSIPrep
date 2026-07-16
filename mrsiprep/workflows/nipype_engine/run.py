@@ -10,6 +10,15 @@ Cross-recording parallelism uses a ``ProcessPoolExecutor`` gated on ``--nproc``,
 which keeps per-recording batch-safety/error isolation. The within-recording DAG
 is an inherent data-dependency chain, so each recording workflow runs with the
 Linear plugin.
+
+Under ``--nproc > 1``, each worker is a separate OS process; letting every
+worker print its own step lines directly to the shared terminal makes them
+interleave/garble (worst with the live spinner, since two processes race to
+move the same cursor). Instead, each worker's ``Debug`` is given a
+multiprocessing-safe status queue (see ``Debug.status_queue`` /
+``Debug._emit_status``) and pushes step transitions there instead of
+printing; only this module's coordinating main-process thread ever writes to
+the terminal, rendering one live-updating row per subject/session.
 """
 
 from __future__ import annotations
@@ -52,6 +61,9 @@ def execute_recordings_nipype(config, ready: "list[Recording]", subject_template
 
     Serial when ``--nproc <= 1``; otherwise fan out across recordings with a
     ProcessPoolExecutor (each worker builds and runs its own recording DAG).
+    In the parallel case, a live per-subject status table (one row per
+    recording, updated in place) replaces the plain scrolling step lines --
+    see ``_run_live_status_table``.
 
     ``subject_templates`` maps subject -> precomputed ``SubjectTemplateResult``
     (see ``mrsiprep.workflows.participant._build_subject_templates``), built
@@ -68,20 +80,126 @@ def execute_recordings_nipype(config, ready: "list[Recording]", subject_template
             for rec in ready
         ]
 
+    import multiprocessing
     from concurrent.futures import ProcessPoolExecutor, as_completed
 
+    manager = multiprocessing.Manager()
+    status_queue = manager.Queue()
+    tags = [f"sub-{rec.subject}" + (f" ses-{rec.session}" if rec.session else "") for rec in ready]
+    stop_listener, listener_thread = _start_live_status_table(config, tags, status_queue)
+
     statuses: list = []
-    with ProcessPoolExecutor(max_workers=config.nproc) as executor:
-        futures = {
-            executor.submit(_run_one_recording_nipype, config, rec.subject, rec.session, subject_templates.get(rec.subject)): rec
-            for rec in ready
-        }
-        for future in as_completed(futures):
-            statuses.append(future.result())
+    try:
+        with ProcessPoolExecutor(max_workers=config.nproc) as executor:
+            futures = {
+                executor.submit(
+                    _run_one_recording_nipype, config, rec.subject, rec.session, subject_templates.get(rec.subject), status_queue
+                ): rec
+                for rec in ready
+            }
+            for future in as_completed(futures):
+                statuses.append(future.result())
+    finally:
+        stop_listener.set()
+        listener_thread.join(timeout=5)
+        manager.shutdown()
     return statuses
 
 
-def _run_one_recording_nipype(config, subject: str, session: str | None, subject_template=None) -> "RecordingStatus":
+def _start_live_status_table(config, tags: "list[str]", status_queue):
+    """Spin up a background thread that drains ``status_queue`` and renders a
+    single ``rich.Live`` table with one row per recording (identified by its
+    ``Debug`` tag), replacing the interleaved per-worker step lines.
+
+    Falls back to no live table (workers print nothing extra either, since
+    they were handed the queue) when verbosity is 0 or stdout isn't a real
+    terminal -- a redrawing table on a piped/non-interactive stream (e.g.
+    Docker logs) would just spam raw escape codes.
+    """
+    import sys
+    import threading
+
+    from rich import box
+    from rich.console import Console
+    from rich.live import Live
+    from rich.table import Table
+
+    stop_event = threading.Event()
+
+    if config.verbose < 1 or not sys.stdout.isatty():
+        # Still drain the queue (so it doesn't fill up unbounded) but render
+        # nothing; per-recording logbooks already captured everything.
+        def _drain_only():
+            while not stop_event.is_set():
+                try:
+                    status_queue.get(timeout=0.2)
+                except Exception:
+                    continue
+
+        thread = threading.Thread(target=_drain_only, daemon=True)
+        thread.start()
+        return stop_event, thread
+
+    console = Console()
+    rows: dict[str, dict] = {tag: {"step": "queued", "state": "queued", "elapsed": None} for tag in tags}
+    start_times: dict[str, float] = {}
+
+    def _render() -> Table:
+        table = Table(box=box.SIMPLE_HEAVY, show_lines=False, title="MRSIPrep -- parallel recordings")
+        table.add_column("Recording", style="cyan", no_wrap=True)
+        table.add_column("Status", no_wrap=True)
+        table.add_column("Current step", no_wrap=True)
+        table.add_column("Elapsed", justify="right", no_wrap=True)
+        for tag in tags:
+            row = rows[tag]
+            state = row["state"]
+            color = {"queued": "grey58", "running": "orange3", "done": "green", "failed": "bold red"}.get(state, "white")
+            elapsed = row["elapsed"]
+            elapsed_str = f"{elapsed:.0f}s" if elapsed is not None else "-"
+            table.add_row(tag, f"[{color}]{state.upper()}[/{color}]", row["step"], elapsed_str)
+        return table
+
+    def _listen():
+        with Live(_render(), console=console, refresh_per_second=4) as live:
+            while not stop_event.is_set():
+                try:
+                    tag, kind, message = status_queue.get(timeout=0.2)
+                except Exception:
+                    continue
+                row = rows.setdefault(tag, {"step": "", "state": "running", "elapsed": None})
+                if kind == "always" and "START" in message:
+                    row["state"] = "running"
+                    row["step"] = "starting"
+                    start_times[tag] = time.monotonic()
+                elif kind == "always" and "FINISHED" in message:
+                    row["state"] = "done"
+                    row["step"] = "finished"
+                    if tag in start_times:
+                        row["elapsed"] = time.monotonic() - start_times[tag]
+                elif kind == "always" and "FAILED" in message:
+                    row["state"] = "failed"
+                    row["step"] = message
+                    if tag in start_times:
+                        row["elapsed"] = time.monotonic() - start_times[tag]
+                elif kind == "step":
+                    row["state"] = "running"
+                    row["step"] = message
+                elif kind == "step_done":
+                    row["step"] = f"{message} (done)"
+                elif kind == "step_failed":
+                    row["state"] = "failed"
+                    row["step"] = f"{message} (failed)"
+                if tag in start_times and row["state"] == "running":
+                    row["elapsed"] = time.monotonic() - start_times[tag]
+                live.update(_render())
+            live.update(_render())
+
+    thread = threading.Thread(target=_listen, daemon=True)
+    thread.start()
+    return stop_event, thread
+
+
+def _run_one_recording_nipype(config, subject: str, session: str | None, subject_template=None, status_queue=None) -> "RecordingStatus":
     from mrsiprep.io.naming import prefix as name_prefix
     from mrsiprep.io.naming import subject_session_dir
     from mrsiprep.utils.debug import set_logbook
@@ -95,14 +213,16 @@ def _run_one_recording_nipype(config, subject: str, session: str | None, subject
     logbook = subject_session_dir(config.derivative_dir, subject, session, "logs") / f"{name_prefix(subject, session)}_desc-mrsiprep_log.txt"
     set_logbook(logbook)
 
-    debug = Debug(verbose=config.verbose)
-    msg = f"sub-{subject}" + (f" ses-{session}" if session else "")
-    debug.separator()
+    tag = f"sub-{subject}" + (f" ses-{session}" if session else "")
+    debug = Debug(verbose=config.verbose, status_queue=status_queue)
+    if status_queue is None:
+        debug.separator()
+    msg = tag
     debug.always(f"[proc]START[/proc] {msg}")
     LOGGER.info("START %s", msg)
     start = time.monotonic()
     try:
-        wf = build_recording_workflow(config, subject, session, subject_template=subject_template)
+        wf = build_recording_workflow(config, subject, session, subject_template=subject_template, status_queue=status_queue)
         exec_graph = wf.run(plugin="Linear")
         outputs = _terminal_outputs(exec_graph, TERMINAL_NODE)
         elapsed = time.monotonic() - start

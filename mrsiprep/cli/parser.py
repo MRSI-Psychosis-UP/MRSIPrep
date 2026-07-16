@@ -185,6 +185,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     runtime = parser.add_argument_group("Other options")
     runtime.add_argument("--validate-only", action="store_true", help="Check selected subject/session inputs and exit without running preprocessing.")
+    runtime.add_argument(
+        "--skip-file-integrity-check",
+        action="store_true",
+        help="Skip forcing a full read of T1w/MRSI input files during preflight validation (existence-only checks instead). "
+        "By default every run force-reads these files first and skips any recording with a missing or corrupt/truncated input.",
+    )
     runtime.add_argument("--check-external-libs", action="store_true", help="Verify required external binaries are available and exit.")
     runtime.add_argument(
         "--stop-on-first-crash",
@@ -270,6 +276,7 @@ def parse_args(argv: list[str] | None = None) -> MRSIPrepConfig:
         overwrite_transform=args.overwrite_transform,
         overwrite_chimera=args.overwrite_chimera,
         validate_only=args.validate_only,
+        skip_file_integrity_check=args.skip_file_integrity_check,
         check_external_libs=args.check_external_libs,
         stop_on_first_crash=args.stop_on_first_crash,
         verbose=args.verbose,

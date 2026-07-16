@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -29,6 +30,15 @@ class MRSIResult:
     qc_summary: Path
 
 
+def _same_file(a: Path, b: Path) -> bool:
+    """True when `a` and `b` are the same underlying file, even if reached
+    through different (e.g. separately bind-mounted) paths."""
+    try:
+        return a.samefile(b)
+    except OSError:
+        return False
+
+
 def _copy_native_maps(config, subject: str, session: str | None, inputs: MRSIInputs) -> None:
     """Copy (not symlink) raw/quality maps into the mrsi/orig derivatives tree.
 
@@ -50,10 +60,42 @@ def _copy_native_maps(config, subject: str, session: str | None, inputs: MRSIInp
         if source is None or not source.exists():
             continue
         target = mrsi_derivative(config.derivative_dir, subject, session, space=space, suffix_override="mrsi", **entities)
+        if target.exists() and _same_file(source, target):
+            # BIDSLayout's mrsi-<space> fallback (see
+            # BIDSLayout._mrsi_input_roots) can read raw inputs straight out
+            # of mrsiprep's own output tree (mrsi/<space>/) when no separate
+            # mrsi-<space> derivatives root exists -- in that case source and
+            # target are the same file, and unlinking it before copying would
+            # destroy the only copy. Comparing resolved path strings alone is
+            # not enough to detect this: the BIDS root and derivatives root
+            # are commonly two *separate* Docker bind mounts (e.g. /data and
+            # /out) that both happen to point at the same underlying host
+            # file, so their in-container resolved paths differ even though
+            # they're the same file -- inode identity (samefile) survives
+            # that, so it's checked instead/first.
+            continue
         target.parent.mkdir(parents=True, exist_ok=True)
-        if target.is_symlink() or target.exists():
-            target.unlink()
-        shutil.copy2(source, target)
+        tmp_target = target.with_name(f".{target.name}.tmp-{os.getpid()}")
+        try:
+            shutil.copy2(source, tmp_target)
+        except FileNotFoundError:
+            # Source vanished between the exists() check above and the copy
+            # (e.g. concurrent regeneration of the input dataset) -- this is
+            # an optional/QC-only map, so skip it rather than fail the whole
+            # recording.
+            tmp_target.unlink(missing_ok=True)
+            continue
+        except BaseException:
+            # Covers KeyboardInterrupt/SIGTERM landing mid-copy too: the
+            # partial file is the scratch tmp_target, never the real target,
+            # so the existing (or absent) target is left exactly as it was.
+            tmp_target.unlink(missing_ok=True)
+            raise
+        # Atomic on POSIX (same filesystem, since tmp_target sits next to
+        # target): either the old target survives untouched or the new one
+        # lands complete -- no window where target is missing or truncated,
+        # even if a signal arrives right at this line.
+        os.replace(tmp_target, target)
 
 
 def run_mrsi_workflow(config, subject: str, session: str | None, inputs: MRSIInputs) -> MRSIResult:

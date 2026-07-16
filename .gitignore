@@ -19,3 +19,6 @@ scripts/qc/plot_axial_slice.py
 
 # Local synthetic MRSI experiments, data, checkpoints, and generated outputs.
 /synthMRSI/
+
+# Local analysis scripts/results not yet ready to publish (e.g. VBA/randomise studies).
+/experiments/

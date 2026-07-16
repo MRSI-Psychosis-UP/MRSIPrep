@@ -150,6 +150,26 @@ class BIDSLayout:
         matches = sorted(root.glob(f"*desc-p{index}_T1w.nii*"))
         return matches[0] if matches else None
 
+    def _mrsi_input_roots(self, subject: str, session: str | None, space: str) -> list[Path]:
+        """Candidate roots for raw MRSI inputs, in priority order.
+
+        The primary convention is a top-level `derivatives/mrsi-<space>/`
+        tree (used by real acquisition datasets). When that root is missing
+        or empty for this subject/session, fall back to MRSIPrep's own
+        output layout (`derivatives/mrsiprep/sub-*/ses-*/mrsi/<space>/`) --
+        this lets synthetic/test datasets that pre-populate MRSIPrep's
+        output-shaped tree (e.g. synthMRSI) be consumed directly as input
+        without a separate mrsi-<space> mirror.
+        """
+        sub = f"sub-{normalize_subject(subject)}"
+        ses = self._ses_dir(session)
+        primary = self.derivatives / f"mrsi-{space}" / sub / ses
+        roots = [primary]
+        if not primary.exists() or not any(primary.iterdir()):
+            fallback = self.derivatives / "mrsiprep" / sub / ses / "mrsi" / space
+            roots.append(fallback)
+        return roots
+
     def mrsi_map(
         self,
         subject: str,
@@ -161,28 +181,34 @@ class BIDSLayout:
         res: str | int | None = None,
         construct: bool = False,
     ) -> Path | None:
-        root = self.derivatives / f"mrsi-{space}" / f"sub-{normalize_subject(subject)}" / self._ses_dir(session)
+        roots = self._mrsi_input_roots(subject, session, space)
         filename = self._mrsi_filename(subject, session, desc, met, option, space, res)
-        direct = root / filename
-        if direct.exists() or construct:
-            return direct
-        if met:
-            for alias in METABOLITE_ALIASES.get(met, [met]):
-                filename = self._mrsi_filename(subject, session, desc, alias, option, space, res)
-                path = root / filename
-                if path.exists():
-                    return path
-        if not root.exists():
-            return None
-        regex = self._mrsi_regex(subject, session, desc, met, option, space, res)
-        matches = sorted(path for path in root.glob("*.nii*") if regex.match(path.name))
-        return matches[0] if matches else None
+        for root in roots:
+            direct = root / filename
+            if direct.exists() or (construct and root is roots[0]):
+                return direct
+            if met:
+                for alias in METABOLITE_ALIASES.get(met, [met]):
+                    alias_filename = self._mrsi_filename(subject, session, desc, alias, option, space, res)
+                    path = root / alias_filename
+                    if path.exists():
+                        return path
+            if not root.exists():
+                continue
+            regex = self._mrsi_regex(subject, session, desc, met, option, space, res)
+            matches = sorted(path for path in root.glob("*.nii*") if regex.match(path.name))
+            if matches:
+                return matches[0]
+        return None
 
     def all_mrsi_maps(self, subject: str, session: str | None, desc: str = "signal", space: str = "orig") -> list[Path]:
-        root = self.derivatives / f"mrsi-{space}" / f"sub-{normalize_subject(subject)}" / self._ses_dir(session)
-        if not root.exists():
-            return []
-        return sorted(root.glob(f"{self._prefix(subject, session)}_space-{space}_met-*_desc-{desc}*_mrsi.nii*"))
+        for root in self._mrsi_input_roots(subject, session, space):
+            if not root.exists():
+                continue
+            matches = sorted(root.glob(f"{self._prefix(subject, session)}_space-{space}_met-*_desc-{desc}*_mrsi.nii*"))
+            if matches:
+                return matches
+        return []
 
     def transform(self, subject: str, session: str | None, stage: str, direction: str = "forward") -> list[Path]:
         sub = f"sub-{normalize_subject(subject)}"

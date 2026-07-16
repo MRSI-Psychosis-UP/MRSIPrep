@@ -60,7 +60,7 @@ class Debug:
           raw output instead of being captured/suppressed.
     """
 
-    def __init__(self, verbose: int | bool = 1):
+    def __init__(self, verbose: int | bool = 1, tag: str | None = None, status_queue=None):
         custom_theme = Theme(
             {
                 "success": "green",
@@ -85,6 +85,16 @@ class Debug:
         console_width = None if self._is_live_terminal else 200
         self.console = Console(theme=custom_theme, force_terminal=force_color, color_system="standard" if force_color else None, width=console_width)
         self.verbose = int(verbose)
+        self.tag = tag
+        # When set (by the ProcessPoolExecutor fan-out under --nproc > 1),
+        # step/status transitions are pushed here instead of printed to the
+        # shared terminal directly -- a single coordinating process (see
+        # nipype_engine.run.execute_recordings_nipype) drains it and renders
+        # one live-updating row per subject, avoiding N independent workers
+        # fighting over the same terminal cursor. Per-recording logbook
+        # writes (_logbook_write) are unaffected either way -- every message
+        # still lands in that subject's own log file in full.
+        self.status_queue = status_queue
 
     def _prepare_message(self, *messages):
         if not messages:
@@ -96,6 +106,8 @@ class Debug:
             prefix = first
             items = items[1:]
         text = " ".join(str(message) for message in items) if items else ""
+        if self.tag:
+            text = f"[{self.tag}] {text}" if text else f"[{self.tag}]"
         return prefix, text
 
     @property
@@ -103,35 +115,63 @@ class Debug:
         """Whether external tools (ANTs/recon-all/mri_synthseg) should print their raw output."""
         return self.verbose >= 3
 
+    def _emit_status(self, kind: str, plain_message: str) -> bool:
+        """Push a status transition to the shared queue instead of printing.
+
+        Returns True if the message was queued (caller should skip its own
+        console.print), False when there's no queue (caller prints as usual).
+        """
+        if self.status_queue is None:
+            return False
+        try:
+            self.status_queue.put((self.tag, kind, plain_message))
+        except Exception:
+            return False
+        return True
+
     def always(self, *messages):
         """Prints regardless of verbosity level (e.g. subject start/finish, elapsed time)."""
         prefix, message = self._prepare_message(*messages)
-        self.console.print(f"{prefix}{timestamp()} {escape(message)}")
         _logbook_write("", message)
+        if self._emit_status("always", message):
+            return
+        self.console.print(f"{prefix}{timestamp()} {escape(message)}")
 
     def success(self, *messages):
         prefix, message = self._prepare_message(*messages)
         _logbook_write("SUCCESS", message)
-        if self.verbose >= 2:
-            self.console.print(f"{prefix}{timestamp()} [success][ SUCCESS ][/success] {escape(message)}")
+        if self.verbose < 2:
+            return
+        if self._emit_status("success", message):
+            return
+        self.console.print(f"{prefix}{timestamp()} [success][ SUCCESS ][/success] {escape(message)}")
 
     def error(self, *messages):
         prefix, message = self._prepare_message(*messages)
         _logbook_write("ERROR", message)
-        if self.verbose >= 2:
-            self.console.print(f"{prefix}{timestamp()} [error][  ERROR  ][/error] {escape(message)}")
+        if self.verbose < 2:
+            return
+        if self._emit_status("error", message):
+            return
+        self.console.print(f"{prefix}{timestamp()} [error][  ERROR  ][/error] {escape(message)}")
 
     def warning(self, *messages):
         prefix, message = self._prepare_message(*messages)
         _logbook_write("WARNING", message)
-        if self.verbose >= 2:
-            self.console.print(f"{prefix}{timestamp()} [warning][ WARNING ][/warning] {escape(message)}")
+        if self.verbose < 2:
+            return
+        if self._emit_status("warning", message):
+            return
+        self.console.print(f"{prefix}{timestamp()} [warning][ WARNING ][/warning] {escape(message)}")
 
     def failure(self, *messages):
         prefix, message = self._prepare_message(*messages)
         _logbook_write("FAILURE", message)
-        if self.verbose >= 2:
-            self.console.print(f"{prefix}{timestamp()} [failure][ FAILURE ][/failure] {escape(message)}")
+        if self.verbose < 2:
+            return
+        if self._emit_status("failure", message):
+            return
+        self.console.print(f"{prefix}{timestamp()} [failure][ FAILURE ][/failure] {escape(message)}")
 
     def info(self, *messages):
         prefix, message = self._prepare_message(*messages)
@@ -142,9 +182,12 @@ class Debug:
     def proc(self, *messages):
         prefix, message = self._prepare_message(*messages)
         _logbook_write("PROC", message)
-        if self.verbose >= 1:
-            self.console.print()
-            self.console.print(f"{prefix}{timestamp()} [proc][  PROC  ][/proc] {escape(message)}")
+        if self.verbose < 1:
+            return
+        if self._emit_status("proc", message):
+            return
+        self.console.print()
+        self.console.print(f"{prefix}{timestamp()} [proc][  PROC  ][/proc] {escape(message)}")
 
     def debug(self, *messages):
         """Fine-grained detail below info(), only shown at verbose >= 3."""
@@ -163,6 +206,8 @@ class Debug:
         printed a short one-line summary via e.g. `always()`, so nothing
         extra prints here below that tier).
         """
+        if self.tag:
+            summary = f"[{self.tag}] {summary}"
         _logbook_write("ERROR", summary)
         _logbook_write("TRACE", traceback_text)
         if self.verbose >= 3:
@@ -188,6 +233,25 @@ class Debug:
         prefix, message = self._prepare_message(*messages)
         escaped = escape(message)
         _logbook_write("PROC", message)
+
+        if self.status_queue is not None:
+            # Under the ProcessPoolExecutor fan-out, skip both the spinner
+            # and the plain start/end lines -- the coordinating process
+            # renders this subject's current step as one row in a shared
+            # live table instead (see nipype_engine.run), so nothing should
+            # be printed to the terminal from this worker directly.
+            self._emit_status("step", message)
+            try:
+                yield
+            except BaseException:
+                _logbook_write("FAIL", message)
+                self._emit_status("step_failed", message)
+                raise
+            else:
+                _logbook_write("DONE", message)
+                self._emit_status("step_done", message)
+            return
+
         self.console.print()
 
         if not self._is_live_terminal or not live:

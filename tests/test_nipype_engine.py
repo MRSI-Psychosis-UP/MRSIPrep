@@ -124,7 +124,7 @@ class NipypeEngineDispatchTests(unittest.TestCase):
         import mrsiprep.workflows.nipype_engine.build as build_mod
         import mrsiprep.workflows.nipype_engine.run as run_mod
 
-        def boom(config, subject, session, subject_template=None):
+        def boom(config, subject, session, subject_template=None, status_queue=None):
             raise RuntimeError("synthetic step failure")
 
         original = build_mod.build_recording_workflow

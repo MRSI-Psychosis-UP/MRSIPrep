@@ -14,6 +14,26 @@ def load_data(path: str | Path, dtype=np.float32) -> tuple[nib.Nifti1Image, np.n
     return img, np.asanyarray(img.dataobj).astype(dtype)
 
 
+def nifti_validity_error(path: str | Path) -> str | None:
+    """Force-read a NIfTI's header and voxel data; return an error message if
+    it's missing, unreadable, or truncated/corrupted, else None.
+
+    ``nib.load`` only parses the header lazily -- it does not by itself
+    detect a truncated gzip stream or corrupted data block, so this also
+    forces a full read via ``.dataobj`` (mirroring the read every mrsiprep
+    step performs downstream, just done here upfront during preflight).
+    """
+    path = Path(path)
+    if not path.exists():
+        return f"File not found: {path}"
+    try:
+        img = nib.load(str(path))
+        np.asanyarray(img.dataobj)
+    except Exception as exc:  # noqa: BLE001 - deliberately broad: any read failure means "unusable input"
+        return f"{type(exc).__name__}: {exc}"
+    return None
+
+
 def load_3d_data(path: str | Path, dtype=np.float32, label: str = "image") -> tuple[nib.Nifti1Image, np.ndarray]:
     img, data = load_data(path, dtype=dtype)
     data = np.squeeze(data)
