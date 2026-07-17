@@ -17,6 +17,17 @@ from rich.theme import Theme
 # ProcessPoolExecutor fan-out (each --nproc worker keeps its own sink).
 _LOGBOOK: Path | None = None
 
+# Per-process live-status-table queue (multiprocessing.Manager().Queue()),
+# set once per recording by _run_one_recording_nipype -- same process-local
+# pattern as _LOGBOOK above, and for the same reason: this must NOT be
+# threaded through Nipype's ctx dict. Nipype deep-copies every node's ctx
+# input between steps (for hashing/caching), and deep-copying a Manager
+# proxy tries to RPC back to the manager process to fetch the real object,
+# which fails ("cannot pickle '_thread.lock' object") -- a process-local
+# global sidesteps that entirely, since it's never part of any node's
+# serialized inputs.
+_STATUS_QUEUE = None
+
 
 def timestamp() -> str:
     """Day/month-hour:minute, e.g. 06/07-10:54."""
@@ -28,6 +39,11 @@ def set_logbook(path: str | Path | None) -> None:
     _LOGBOOK = Path(path) if path is not None else None
     if _LOGBOOK is not None:
         _LOGBOOK.parent.mkdir(parents=True, exist_ok=True)
+
+
+def set_status_queue(queue) -> None:
+    global _STATUS_QUEUE
+    _STATUS_QUEUE = queue
 
 
 def _strip_markup(message: str) -> str:
@@ -60,7 +76,7 @@ class Debug:
           raw output instead of being captured/suppressed.
     """
 
-    def __init__(self, verbose: int | bool = 1, tag: str | None = None, status_queue=None):
+    def __init__(self, verbose: int | bool = 1, tag: str | None = None):
         custom_theme = Theme(
             {
                 "success": "green",
@@ -86,15 +102,6 @@ class Debug:
         self.console = Console(theme=custom_theme, force_terminal=force_color, color_system="standard" if force_color else None, width=console_width)
         self.verbose = int(verbose)
         self.tag = tag
-        # When set (by the ProcessPoolExecutor fan-out under --nproc > 1),
-        # step/status transitions are pushed here instead of printed to the
-        # shared terminal directly -- a single coordinating process (see
-        # nipype_engine.run.execute_recordings_nipype) drains it and renders
-        # one live-updating row per subject, avoiding N independent workers
-        # fighting over the same terminal cursor. Per-recording logbook
-        # writes (_logbook_write) are unaffected either way -- every message
-        # still lands in that subject's own log file in full.
-        self.status_queue = status_queue
 
     def _prepare_message(self, *messages):
         if not messages:
@@ -121,10 +128,10 @@ class Debug:
         Returns True if the message was queued (caller should skip its own
         console.print), False when there's no queue (caller prints as usual).
         """
-        if self.status_queue is None:
+        if _STATUS_QUEUE is None:
             return False
         try:
-            self.status_queue.put((self.tag, kind, plain_message))
+            _STATUS_QUEUE.put((self.tag, kind, plain_message))
         except Exception:
             return False
         return True
@@ -234,7 +241,7 @@ class Debug:
         escaped = escape(message)
         _logbook_write("PROC", message)
 
-        if self.status_queue is not None:
+        if _STATUS_QUEUE is not None:
             # Under the ProcessPoolExecutor fan-out, skip both the spinner
             # and the plain start/end lines -- the coordinating process
             # renders this subject's current step as one row in a shared

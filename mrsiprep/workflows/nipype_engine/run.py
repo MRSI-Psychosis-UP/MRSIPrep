@@ -14,11 +14,13 @@ Linear plugin.
 Under ``--nproc > 1``, each worker is a separate OS process; letting every
 worker print its own step lines directly to the shared terminal makes them
 interleave/garble (worst with the live spinner, since two processes race to
-move the same cursor). Instead, each worker's ``Debug`` is given a
-multiprocessing-safe status queue (see ``Debug.status_queue`` /
+move the same cursor). Instead, each worker sets a process-local status
+queue (``mrsiprep.utils.debug.set_status_queue``, read by
 ``Debug._emit_status``) and pushes step transitions there instead of
 printing; only this module's coordinating main-process thread ever writes to
-the terminal, rendering one live-updating row per subject/session.
+the terminal, rendering one live-updating row per subject/session. This is
+process-local rather than threaded through Nipype's ``ctx`` deliberately --
+see ``build_recording_workflow``'s docstring for why.
 """
 
 from __future__ import annotations
@@ -202,7 +204,7 @@ def _start_live_status_table(config, tags: "list[str]", status_queue):
 def _run_one_recording_nipype(config, subject: str, session: str | None, subject_template=None, status_queue=None) -> "RecordingStatus":
     from mrsiprep.io.naming import prefix as name_prefix
     from mrsiprep.io.naming import subject_session_dir
-    from mrsiprep.utils.debug import set_logbook
+    from mrsiprep.utils.debug import set_logbook, set_status_queue
     from mrsiprep.workflows.nipype_engine.build import TERMINAL_NODE, build_recording_workflow
     from mrsiprep.workflows.participant import RecordingStatus, _format_elapsed
 
@@ -212,9 +214,13 @@ def _run_one_recording_nipype(config, subject: str, session: str | None, subject
     # timestamped Debug message is mirrored here for the duration of this run.
     logbook = subject_session_dir(config.derivative_dir, subject, session, "logs") / f"{name_prefix(subject, session)}_desc-mrsiprep_log.txt"
     set_logbook(logbook)
+    # Process-local, not threaded through ctx -- see build_recording_workflow's
+    # docstring for why (Nipype deep-copies ctx between nodes; deep-copying a
+    # Manager Queue proxy fails).
+    set_status_queue(status_queue)
 
     tag = f"sub-{subject}" + (f" ses-{session}" if session else "")
-    debug = Debug(verbose=config.verbose, status_queue=status_queue)
+    debug = Debug(verbose=config.verbose)
     if status_queue is None:
         debug.separator()
     msg = tag
@@ -222,7 +228,7 @@ def _run_one_recording_nipype(config, subject: str, session: str | None, subject
     LOGGER.info("START %s", msg)
     start = time.monotonic()
     try:
-        wf = build_recording_workflow(config, subject, session, subject_template=subject_template, status_queue=status_queue)
+        wf = build_recording_workflow(config, subject, session, subject_template=subject_template)
         exec_graph = wf.run(plugin="Linear")
         outputs = _terminal_outputs(exec_graph, TERMINAL_NODE)
         elapsed = time.monotonic() - start
@@ -246,6 +252,7 @@ def _run_one_recording_nipype(config, subject: str, session: str | None, subject
         return RecordingStatus(subject, session, "failed", error=str(exc))
     finally:
         set_logbook(None)
+        set_status_queue(None)
 
 
 def _terminal_outputs(exec_graph, terminal_name: str) -> dict:

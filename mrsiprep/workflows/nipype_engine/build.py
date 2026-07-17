@@ -22,7 +22,7 @@ def recording_base_dir(config, subject: str, session: str | None) -> Path:
     return Path(config.work_dir) / "nipype" / f"sub-{subject}" / ses
 
 
-def build_recording_workflow(config, subject: str, session: str | None, subject_template=None, status_queue=None):
+def build_recording_workflow(config, subject: str, session: str | None, subject_template=None):
     """Return a linear ``pe.Workflow`` for one recording.
 
     The returned workflow's terminal node (:data:`TERMINAL_NODE`) exposes the
@@ -37,10 +37,13 @@ def build_recording_workflow(config, subject: str, session: str | None, subject_
     ``ctx`` so ``step_registration`` can compose (session->template)+
     (template->MNI) instead of registering this session directly to MNI.
 
-    ``status_queue`` (a multiprocessing.Manager Queue, or None) is likewise
-    seeded into ``ctx`` so every ``step_*`` node's ``Debug`` instance reports
-    to the same shared live status table under ``--nproc > 1`` instead of
-    printing directly (see ``nipype_engine.run._start_live_status_table``).
+    The live-status-table queue (see ``nipype_engine.run``) is deliberately
+    NOT threaded through ``ctx`` -- Nipype deep-copies every node's ``ctx``
+    input between steps, and deep-copying a multiprocessing.Manager Queue
+    proxy tries to RPC back to the manager process and fails
+    (``TypeError: cannot pickle '_thread.lock' object``). It's set as a
+    process-local global instead (``mrsiprep.utils.debug.set_status_queue``),
+    the same pattern already used for the per-recording logbook.
     """
     import nipype.pipeline.engine as pe
 
@@ -61,7 +64,7 @@ def build_recording_workflow(config, subject: str, session: str | None, subject_
         nodes.append(node)
 
     # Seed the first node with the initial context; thread ctx through the chain.
-    nodes[0].inputs.ctx = {"subject_template": subject_template, "status_queue": status_queue}
+    nodes[0].inputs.ctx = {"subject_template": subject_template}
     for prev, nxt in zip(nodes, nodes[1:]):
         wf.connect(prev, "ctx", nxt, "ctx")
 

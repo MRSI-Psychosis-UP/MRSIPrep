@@ -41,7 +41,7 @@ def step_tissue_seg(config, subject, session, ctx):
     from mrsiprep.utils.debug import Debug
     from mrsiprep.workflows.participant import _step_tissue_segmentation
 
-    debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""), status_queue=ctx.get("status_queue"))
+    debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""))
     t1_path, precomputed_tissue_t1, p3_override, brain_mask_override = _step_tissue_segmentation(
         config, subject, session, ctx["raw_t1"], ctx["t1_path"], debug
     )
@@ -59,7 +59,7 @@ def step_anat(config, subject, session, ctx):
     from mrsiprep.utils.debug import Debug
     from mrsiprep.workflows.participant import _step_anatomical_prep
 
-    debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""), status_queue=ctx.get("status_queue"))
+    debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""))
     ctx = dict(ctx)
     ctx["anat"] = _step_anatomical_prep(config, subject, session, ctx["t1_path"], ctx["p3_override"], ctx["brain_mask_override"], debug)
     return ctx
@@ -69,7 +69,7 @@ def step_mrsi(config, subject, session, ctx):
     from mrsiprep.utils.debug import Debug
     from mrsiprep.workflows.participant import _step_mrsi_preprocessing
 
-    debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""), status_queue=ctx.get("status_queue"))
+    debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""))
     mrsi, qc_report_mrsi_preproc = _step_mrsi_preprocessing(config, subject, session, ctx["inputs"], debug)
     ctx = dict(ctx)
     ctx.update(mrsi=mrsi, qc_report_mrsi_preproc=qc_report_mrsi_preproc)
@@ -80,7 +80,7 @@ def step_registration(config, subject, session, ctx):
     from mrsiprep.utils.debug import Debug
     from mrsiprep.workflows.participant import _step_registration
 
-    debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""), status_queue=ctx.get("status_queue"))
+    debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""))
     ctx = dict(ctx)
     ctx["registration"] = _step_registration(
         config, subject, session, ctx["mrsi"], ctx["anat"], debug, subject_template=ctx.get("subject_template")
@@ -92,7 +92,7 @@ def step_tissue_probmaps(config, subject, session, ctx):
     from mrsiprep.utils.debug import Debug
     from mrsiprep.workflows.participant import _step_tissue_probmaps
 
-    debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""), status_queue=ctx.get("status_queue"))
+    debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""))
     ctx = dict(ctx)
     ctx["tissue"] = _step_tissue_probmaps(
         config, subject, session, ctx["anat"], ctx["mrsi"], ctx["registration"], ctx["precomputed_tissue_t1"], debug
@@ -122,7 +122,7 @@ def step_pvc(config, subject, session, ctx):
     from mrsiprep.utils.debug import Debug
     from mrsiprep.workflows.participant import _step_pvc
 
-    debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""), status_queue=ctx.get("status_queue"))
+    debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""))
     corrected_maps, tissue_4d = _step_pvc(config, subject, session, ctx["mrsi"], ctx["tissue"], debug)
     ctx = dict(ctx)
     ctx.update(corrected_maps=corrected_maps, tissue_4d=tissue_4d)
@@ -133,7 +133,7 @@ def step_resampling(config, subject, session, ctx):
     from mrsiprep.utils.debug import Debug
     from mrsiprep.workflows.participant import _step_resampling
 
-    debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""), status_queue=ctx.get("status_queue"))
+    debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""))
     transformed, qc_report_registration = _step_resampling(
         config, subject, session, ctx["anat"], ctx["mrsi"], ctx["registration"], ctx["corrected_maps"], ctx["raw_t1"], debug
     )
@@ -146,7 +146,7 @@ def step_synthseg_parc_qc(config, subject, session, ctx):
     from mrsiprep.utils.debug import Debug
     from mrsiprep.workflows.participant import _step_synthseg_parcellation_qc
 
-    debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""), status_queue=ctx.get("status_queue"))
+    debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""))
     preliminary_parcels, parcel_qc = _step_synthseg_parcellation_qc(config, subject, session, ctx["raw_t1"], ctx["mrsi"], ctx["registration"], debug)
     ctx = dict(ctx)
     ctx.update(preliminary_parcels=preliminary_parcels, parcel_qc=parcel_qc)
@@ -157,7 +157,7 @@ def step_parcellation(config, subject, session, ctx):
     from mrsiprep.utils.debug import Debug
     from mrsiprep.workflows.participant import _step_parcellation
 
-    debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""), status_queue=ctx.get("status_queue"))
+    debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""))
     parcels, qc_report_parcellation = _step_parcellation(
         config, subject, session, ctx["raw_t1"], ctx["mrsi"], ctx["anat"], ctx["registration"], ctx["preliminary_parcels"], debug
     )
@@ -170,7 +170,7 @@ def step_regional(config, subject, session, ctx):
     from mrsiprep.utils.debug import Debug
     from mrsiprep.workflows.participant import _step_regional_extraction
 
-    debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""), status_queue=ctx.get("status_queue"))
+    debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""))
     regional, regional_regression = _step_regional_extraction(
         config, subject, session, ctx["corrected_maps"], ctx["parcels"], ctx["mrsi"], ctx["tissue"], debug
     )
@@ -183,7 +183,7 @@ def step_connectivity(config, subject, session, ctx):
     from mrsiprep.utils.debug import Debug
     from mrsiprep.workflows.participant import _step_connectivity
 
-    debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""), status_queue=ctx.get("status_queue"))
+    debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""))
     connectivity, qc_report_connectivity = _step_connectivity(
         config, subject, session, ctx["regional"], ctx["parcels"], ctx["corrected_maps"], ctx["mrsi"], ctx["tissue"], debug
     )
@@ -209,7 +209,7 @@ def step_reports(config, subject, session, ctx):
     from mrsiprep.utils.provenance import write_provenance
     from mrsiprep.workflows.participant import _step_reports
 
-    debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""), status_queue=ctx.get("status_queue"))
+    debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""))
     anat = ctx["anat"]
     mrsi = ctx["mrsi"]
     parcels = ctx["parcels"]
