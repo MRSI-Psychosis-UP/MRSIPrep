@@ -3,7 +3,8 @@
 
 
 [![Docker Pulls](https://img.shields.io/docker/pulls/mrsiup/mrsiprep)](https://hub.docker.com/r/mrsiup/mrsiprep)
-[![Documentation Status](https://app.readthedocs.org/projects/mrsiprep/badge/?version=latest)](https://mrsiprep.readthedocs.io/en/latest/)
+[![Documentation Status](https://app.readthedocs.org/projects/mrsiprep/badge/?version=stable)](https://mrsiprep.readthedocs.io/en/stable/)
+[![codecov](https://codecov.io/gh/MRSI-Psychosis-UP/MRSIPrep/graph/badge.svg)](https://codecov.io/gh/MRSI-Psychosis-UP/MRSIPrep)
 [![License: CHUV academic non-commercial](https://img.shields.io/badge/license-academic--non--commercial-blue)](LICENSE)
 
 ## About
@@ -15,7 +16,7 @@ coverage and CRLB reporting. `parc-con` mode adds SynthSeg+FAST tissue maps,
 PETPVC, and Chimera/MNI-atlas regional profile extraction for metabolic connectivty computation.
 
 **Full documentation, installation, and usage instructions are on
-[Read the Docs](https://mrsiprep.readthedocs.io/en/latest/).**
+[Read the Docs](https://mrsiprep.readthedocs.io/en/stable/).**
 
 ![MRSIPrep pipeline schematic](docs/figures/pipeline_schematic.png)
 
@@ -37,7 +38,7 @@ MRSIPrep was designed according to four main principles:
   analyses, regional analyses, metabolic connectomics, gradient mapping, or
   machine-learning workflows.
 
-See [Read the Docs](https://mrsiprep.readthedocs.io/en/latest/) for the full
+See [Read the Docs](https://mrsiprep.readthedocs.io/en/stable/) for the full
 workflow architecture and quality-control framework.
 
 ## Use Cases
