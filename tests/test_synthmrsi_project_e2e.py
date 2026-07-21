@@ -22,9 +22,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import pytest
+
 _DATA_DIR_ENV = "MRSIPREP_E2E_DATA_DIR"
 _SKIP_PULL_ENV = "MRSIPREP_E2E_SKIP_PULL"
 _IMAGE = "mrsiup/mrsiprep:cpu"
+
+pytestmark = pytest.mark.e2e_synthmrsi_project
 
 
 def _docker_available() -> bool:
@@ -34,7 +38,6 @@ def _docker_available() -> bool:
 @unittest.skipUnless(os.environ.get(_DATA_DIR_ENV), f"set {_DATA_DIR_ENV} to an extracted SynthMRSI-Project directory to run this test")
 @unittest.skipUnless(_docker_available(), "docker is not available on PATH")
 class SynthMRSIProjectE2ETests(unittest.TestCase):
-    """pytest marker: e2e_synthmrsi_project (registered in pyproject.toml)."""
 
     def setUp(self):
         self.data_dir = Path(os.environ[_DATA_DIR_ENV]).resolve()
