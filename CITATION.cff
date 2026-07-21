@@ -1,0 +1,25 @@
+cff-version: 1.2.0
+message: "If you use MRSIPrep, cite the MRSI-Metabolic-Connectome work this package is derived from."
+title: "MRSIPrep"
+authors:
+  - family-names: Lucchetti
+    given-names: Federico
+license: "CHUV academic non-commercial research license"
+version: "0.1.0"
+references:
+  - type: dataset
+    title: "SynthMRSI-Project: synthetic MRSI BIDS test dataset for MRSIPrep"
+    authors:
+      - family-names: Lucchetti
+        given-names: Federico
+      - family-names: Céléreau
+        given-names: Edgar
+      - family-names: Klauser
+        given-names: Antoine
+      - family-names: Hagmann
+        given-names: Patric
+      - family-names: Klauser
+        given-names: Paul
+    doi: "10.5281/zenodo.21477047"
+    license: "CC0-1.0"
+    notes: "Concept DOI; always resolves to the latest published version."
