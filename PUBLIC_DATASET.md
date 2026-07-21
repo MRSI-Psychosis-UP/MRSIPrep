@@ -46,8 +46,10 @@ no regeneration support.
 
 ```bash
 curl -L -o SynthMRSI-Project.zip "https://zenodo.org/records/21477048/files/SynthMRSI-Project.zip"
-unzip SynthMRSI-Project.zip -d SynthMRSI-Project
+unzip SynthMRSI-Project.zip
 ```
+
+This extracts a `SynthMRSI-Project/` directory in your current working directory (the zip's own top-level folder) -- don't pass `-d SynthMRSI-Project`, since that would double-nest it.
 
 DOI: [10.5281/zenodo.21477047](https://doi.org/10.5281/zenodo.21477047)
 (concept DOI — always resolves to the latest version; see the project's
