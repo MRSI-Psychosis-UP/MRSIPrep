@@ -31,7 +31,7 @@ jobs:
       - name: Download SynthMRSI-Project dataset
         run: |
           curl -fL -o SynthMRSI-Project.zip "${SYNTHMRSI_PROJECT_URL}"
-          unzip -q SynthMRSI-Project.zip -d "${MRSIPREP_E2E_DATA_DIR}"
+          unzip -q SynthMRSI-Project.zip -d "${{ github.workspace }}"
 
       - name: Decode FreeSurfer license
         env:
