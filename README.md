@@ -22,20 +22,6 @@ PETPVC, and Chimera/MNI-atlas regional profile extraction for metabolic connecti
 
 ![MRSIPrep pipeline schematic](docs/figures/pipeline_schematic.png)
 
-## Test Dataset
-
-A small, public, synthetic MRSI dataset — **SynthMRSI-Project** — is
-available for anyone to download and run through MRSIPrep themselves,
-without needing access to real MRSI acquisitions. It pairs real T1w
-anatomical images (subsetted from two CC0 OpenNeuro datasets) with
-model-synthesized MRSI signal and empirical CRLB/SNR/FWHM quality maps,
-following MRSIPrep's own raw-MRSI-input convention.
-
-- Published on Zenodo: [10.5281/zenodo.21477047](https://doi.org/10.5281/zenodo.21477047) (CC0)
-- Full download and usage instructions: [PUBLIC_DATASET.md](PUBLIC_DATASET.md)
-- Used as the fixture for this repo's automated end-to-end pipeline test (see
-  the "tested on SynthMRSI-Project" badge above)
-
 ## Design Principles
 
 MRSIPrep was designed according to four main principles:
@@ -56,6 +42,20 @@ MRSIPrep was designed according to four main principles:
 
 See [Read the Docs](https://mrsiprep.readthedocs.io/en/stable/) for the full
 workflow architecture and quality-control framework.
+
+## Test Dataset
+
+A small, public, synthetic MRSI dataset — **SynthMRSI-Project** — is
+available for anyone to download and run through MRSIPrep themselves,
+without needing access to real MRSI acquisitions. It pairs real T1w
+anatomical images (subsetted from two CC0 OpenNeuro datasets) with
+model-synthesized MRSI signal and empirical CRLB/SNR/FWHM quality maps,
+following MRSIPrep's own raw-MRSI-input convention.
+
+- Published on Zenodo: [10.5281/zenodo.21477047](https://doi.org/10.5281/zenodo.21477047) (CC0)
+- Full download and usage instructions: [PUBLIC_DATASET.md](PUBLIC_DATASET.md)
+- Used as the fixture for this repo's automated end-to-end pipeline test (see
+  the "tested on SynthMRSI-Project" badge above)
 
 ## Use Cases
 
