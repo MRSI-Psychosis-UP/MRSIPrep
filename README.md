@@ -4,7 +4,7 @@
 
 ![version](https://img.shields.io/badge/version-v0.1.0-blue)
 [![e2e](https://img.shields.io/github/actions/workflow/status/MRSI-Psychosis-UP/MRSIPrep/e2e-synthmrsi-project.yml?label=e2e&color=success)](https://github.com/MRSI-Psychosis-UP/MRSIPrep/actions/workflows/e2e-synthmrsi-project.yml)
-[![docs](https://img.shields.io/readthedocs/mrsiprep?label=docs)](https://mrsiprep.readthedocs.io/en/stable/)
+[![docs](https://app.readthedocs.org/projects/mrsiprep/badge/?version=stable)](https://mrsiprep.readthedocs.io/en/stable/)
 [![doi](https://img.shields.io/badge/doi-10.5281%2Fzenodo.21477047-blue)](https://doi.org/10.5281/zenodo.21477047)
 [![docker](https://img.shields.io/badge/docker-mrsiup%2Fmrsiprep-blue?logo=docker&logoColor=white)](https://hub.docker.com/r/mrsiup/mrsiprep)
 [![license](https://img.shields.io/badge/license-academic--non--commercial-lightgrey)](LICENSE)
