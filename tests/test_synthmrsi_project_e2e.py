@@ -69,6 +69,12 @@ class SynthMRSIProjectE2ETests(unittest.TestCase):
             "--t1", "acq-mprage_T1w",
             "--metabolites", "NAANAAG,GPCPCh,CrPCr,GluGln,Ins",
             "--ref-met", "CrPCr",
+            # --synthseg-mode fast, not the default "robust": SynthSeg-robust's
+            # inference is memory-hungry enough to hit std::bad_alloc on
+            # GitHub's standard 16GB-RAM runners (confirmed via a live CI
+            # crash: "mri_synthseg exited with status -6 ... terminate
+            # called after throwing an instance of 'std::bad_alloc'").
+            "--synthseg-mode", "fast",
             "--nthreads", "4", "--nproc", "1", "--verbose", "1",
         ]
         # Stream output live (rather than capture_output=True, which buffers
