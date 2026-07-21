@@ -4,7 +4,6 @@
 
 [![Docker Pulls](https://img.shields.io/docker/pulls/mrsiup/mrsiprep)](https://hub.docker.com/r/mrsiup/mrsiprep)
 [![Documentation Status](https://app.readthedocs.org/projects/mrsiprep/badge/?version=stable)](https://mrsiprep.readthedocs.io/en/stable/)
-[![codecov](https://codecov.io/gh/MRSI-Psychosis-UP/MRSIPrep/graph/badge.svg)](https://codecov.io/gh/MRSI-Psychosis-UP/MRSIPrep)
 [![E2E SynthMRSI-Project](https://github.com/MRSI-Psychosis-UP/MRSIPrep/actions/workflows/e2e-synthmrsi-project.yml/badge.svg)](https://github.com/MRSI-Psychosis-UP/MRSIPrep/actions/workflows/e2e-synthmrsi-project.yml)
 [![License: CHUV academic non-commercial](https://img.shields.io/badge/license-academic--non--commercial-blue)](LICENSE)
 
