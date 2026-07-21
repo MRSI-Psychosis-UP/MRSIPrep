@@ -7,7 +7,7 @@ on:
 
 jobs:
   e2e:
-    runs-on: ubuntu-latest
+    runs-on: mrsiprep_runner
     timeout-minutes: 40
     env:
       MRSIPREP_E2E_DATA_DIR: ${{ github.workspace }}/SynthMRSI-Project
