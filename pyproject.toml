@@ -35,11 +35,17 @@ ants = ["antspyx"]
 gui = ["PyQt6"]
 all = ["antspyx", "PyQt6"]
 dev = ["pytest", "pytest-cov"]
+test-e2e = ["requests"]
 
 [project.scripts]
 mrsiprep = "mrsiprep.cli.run:main"
 mrsiprep-import = "mrsiprep.interfaces.bids_import:main"
 mrsiprep-import-gui = "mrsiprep.interfaces.bids_import_gui:main"
+
+[tool.pytest.ini_options]
+markers = [
+  "e2e_synthmrsi_project: real end-to-end run against the public SynthMRSI-Project fixture (needs Docker + a downloaded dataset; skipped by default)",
+]
 
 [tool.setuptools.packages.find]
 where = ["."]
