@@ -121,18 +121,37 @@ def apply_transforms(
     interpolation: str = "linear",
     verbose: bool = False,
 ) -> Path:
-    """Apply FLIRT affine transform(s). At most one affine per call (FLIRT-only
-    backend, no warp/composition needed)."""
+    """Apply FLIRT affine transform(s). Multiple affines (e.g. mrsi->t1w
+    composed with t1w->mni) are concatenated into a single matrix with
+    ``convert_xfm -concat`` before being applied in one ``flirt -applyxfm``
+    call -- FLIRT has no native multi-transform chaining like ANTs'
+    ``apply_transforms -t A -t B``.
+
+    ``transforms`` is expected in the same order ANTs uses: last-applied-first
+    to the moving image (i.e. transforms[-1] is applied to ``moving`` first,
+    transforms[0] last, matching ``mrsiprep.mrsi.resampling.transform_mrsi_maps``'
+    ``list(t1_to_mni) + list(mrsi_to_t1)`` construction).
+    """
     existing = [Path(path) for path in transforms if Path(path).exists()]
     if not existing:
         raise FSLError(f"No transform files exist in list: {transforms}")
-    if len(existing) > 1:
-        raise FSLError(f"FSL backend expects a single affine transform, got {len(existing)}: {existing}")
     fixed_path = _as_image_path(fixed)
     moving_path = _as_image_path(moving)
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    _apply_affine(fixed_path, moving_path, existing[0], out_path, interpolation=interpolation, verbose=verbose)
+    if len(existing) == 1:
+        _apply_affine(fixed_path, moving_path, existing[0], out_path, interpolation=interpolation, verbose=verbose)
+        return out_path
+    with tempfile.TemporaryDirectory(prefix="mrsiprep_fslconcat_") as tmpdir:
+        combined = Path(tmpdir) / "combined.mat"
+        # Applied to moving first -> last in ANTs-order convention.
+        applied_first, *rest = reversed(existing)
+        current = applied_first
+        for next_transform in rest:
+            require_cli("convert_xfm")
+            run_cli(["convert_xfm", "-omat", str(combined), "-concat", str(next_transform), str(current)], verbose=verbose)
+            current = combined
+        _apply_affine(fixed_path, moving_path, combined, out_path, interpolation=interpolation, verbose=verbose)
     return out_path
 
 

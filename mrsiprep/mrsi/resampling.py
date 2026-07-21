@@ -24,7 +24,7 @@ def resample_ref_met_to_t1w(
     --work-dir rather than the permanent BIDS derivatives, since nothing else
     consumes it (full T1w-space resampling is opt-in via --output-mrsi-t1w)."""
     out = resampling_work_path(config.work_dir, subject, session, space="T1w", met=config.ref_met, desc="signal")
-    if out.exists() and not config.overwrite_transform:
+    if out.exists() and not (config.overwrite_transform or config.overwrite):
         return out
     return apply_image_transform(t1_reference, ref_map, mrsi_to_t1, out, interpolation="linear", threads=config.nthreads)
 
@@ -68,7 +68,7 @@ def transform_mrsi_maps(
             out = mrsi_derivative(config.derivative_dir, subject, session, space=space, res=res, met=met, desc="signal", suffix_override="mrsi")
             space_outputs[met] = (
                 apply_image_transform(fixed, path, transforms, out, interpolation="linear", threads=threads)
-                if not out.exists() or config.overwrite_transform
+                if not out.exists() or config.overwrite_transform or config.overwrite
                 else out
             )
         for desc, met, path in _quality_items():
@@ -76,7 +76,7 @@ def transform_mrsi_maps(
             out = mrsi_derivative(config.derivative_dir, subject, session, space=space, res=res, met=met, desc=desc, suffix_override="mrsi")
             space_outputs[f"{desc}{f'-{met}' if met else ''}"] = (
                 apply_image_transform(fixed, path, transforms, out, interpolation=interpolation, threads=threads)
-                if not out.exists() or config.overwrite_transform
+                if not out.exists() or config.overwrite_transform or config.overwrite
                 else out
             )
         return space_outputs

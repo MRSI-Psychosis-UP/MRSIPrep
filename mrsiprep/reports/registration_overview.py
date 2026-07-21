@@ -79,7 +79,7 @@ def _load_mni152_head_template(resolution: int | None):
     from nilearn import datasets, image
 
     resolution = resolution or 1
-    head = image.load_img(datasets.fetch_icbm152_2009()["t1"])
+    head = image.load_img(datasets.fetch_icbm152_2009(verbose=0)["t1"])
     if resolution != 1:
         head = image.resample_img(head, np.eye(3) * resolution)
     return head
