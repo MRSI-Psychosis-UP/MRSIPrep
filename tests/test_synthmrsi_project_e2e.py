@@ -75,7 +75,9 @@ class SynthMRSIProjectE2ETests(unittest.TestCase):
             # crash: "mri_synthseg exited with status -6 ... terminate
             # called after throwing an instance of 'std::bad_alloc'").
             "--synthseg-mode", "fast",
-            "--nthreads", "4", "--nproc", "1", "--verbose", "1",
+            # Self-managed 64-core/256GB larger runner (mrsiprep_runner) --
+            # 32 threads x 2 parallel subjects uses the full runner.
+            "--nthreads", "32", "--nproc", "2", "--verbose", "1",
         ]
         # Stream output live (rather than capture_output=True, which buffers
         # everything silently until the process exits) so a hang is visible
