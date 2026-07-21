@@ -3,9 +3,9 @@
 
 
 ![version](https://img.shields.io/badge/version-v0.1.0-blue)
-[![e2e](https://img.shields.io/github/actions/workflow/status/MRSI-Psychosis-UP/MRSIPrep/e2e-synthmrsi-project.yml?label=e2e&color=success)](https://github.com/MRSI-Psychosis-UP/MRSIPrep/actions/workflows/e2e-synthmrsi-project.yml)
+[![e2e](https://img.shields.io/github/actions/workflow/status/MRSI-Psychosis-UP/MRSIPrep/e2e-synthmrsi-project.yml?label=tested%20on%20SynthMRSI-Project&color=success)](https://github.com/MRSI-Psychosis-UP/MRSIPrep/actions/workflows/e2e-synthmrsi-project.yml)
 [![docs](https://app.readthedocs.org/projects/mrsiprep/badge/?version=stable)](https://mrsiprep.readthedocs.io/en/stable/)
-[![doi](https://img.shields.io/badge/doi-10.5281%2Fzenodo.21477047-blue)](https://doi.org/10.5281/zenodo.21477047)
+[![test dataset doi](https://img.shields.io/badge/test%20dataset%20doi-10.5281%2Fzenodo.21477047-blue)](https://doi.org/10.5281/zenodo.21477047)
 [![docker](https://img.shields.io/badge/docker-mrsiup%2Fmrsiprep-blue?logo=docker&logoColor=white)](https://hub.docker.com/r/mrsiup/mrsiprep)
 [![license](https://img.shields.io/badge/license-academic--non--commercial-lightgrey)](LICENSE)
 
@@ -21,6 +21,20 @@ PETPVC, and Chimera/MNI-atlas regional profile extraction for metabolic connecti
 [Read the Docs](https://mrsiprep.readthedocs.io/en/stable/).**
 
 ![MRSIPrep pipeline schematic](docs/figures/pipeline_schematic.png)
+
+## Test Dataset
+
+A small, public, synthetic MRSI dataset — **SynthMRSI-Project** — is
+available for anyone to download and run through MRSIPrep themselves,
+without needing access to real MRSI acquisitions. It pairs real T1w
+anatomical images (subsetted from two CC0 OpenNeuro datasets) with
+model-synthesized MRSI signal and empirical CRLB/SNR/FWHM quality maps,
+following MRSIPrep's own raw-MRSI-input convention.
+
+- Published on Zenodo: [10.5281/zenodo.21477047](https://doi.org/10.5281/zenodo.21477047) (CC0)
+- Full download and usage instructions: [PUBLIC_DATASET.md](PUBLIC_DATASET.md)
+- Used as the fixture for this repo's automated end-to-end pipeline test (see
+  the "tested on SynthMRSI-Project" badge above)
 
 ## Design Principles
 
