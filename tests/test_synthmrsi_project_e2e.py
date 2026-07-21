@@ -71,8 +71,23 @@ class SynthMRSIProjectE2ETests(unittest.TestCase):
             "--ref-met", "CrPCr",
             "--nthreads", "4", "--nproc", "1", "--verbose", "1",
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        self.assertEqual(result.returncode, 0, msg=f"mrsiprep run failed:\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}")
+        # Stream output live (rather than capture_output=True, which buffers
+        # everything silently until the process exits) so a hang is visible
+        # in CI logs as it happens, not just as a wall of text after a
+        # timeout finally kills it. A hard timeout bounds worst-case runtime
+        # instead of relying on GitHub's own 6-hour job cap.
+        lines: list[str] = []
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+        try:
+            for line in process.stdout:
+                print(line, end="", flush=True)
+                lines.append(line)
+            returncode = process.wait(timeout=1200)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait()
+            self.fail(f"mrsiprep run exceeded 1200s timeout without finishing. Output so far:\n{''.join(lines)}")
+        self.assertEqual(returncode, 0, msg=f"mrsiprep run failed:\n{''.join(lines)}")
 
         for subject in ("01", "05"):
             subject_root = self.out_dir / "mrsiprep" / f"sub-{subject}" / "ses-01"
