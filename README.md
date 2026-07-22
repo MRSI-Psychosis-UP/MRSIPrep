@@ -7,6 +7,7 @@
 [![docs](https://app.readthedocs.org/projects/mrsiprep/badge/?version=stable)](https://mrsiprep.readthedocs.io/en/stable/)
 [![test dataset doi](https://img.shields.io/badge/test%20dataset%20doi-10.5281%2Fzenodo.21477047-blue)](https://doi.org/10.5281/zenodo.21477047)
 [![docker](https://img.shields.io/badge/docker-mrsiup%2Fmrsiprep-blue?logo=docker&logoColor=white)](https://hub.docker.com/r/mrsiup/mrsiprep)
+[![pypi](https://img.shields.io/pypi/v/mrsiprep-docker?logo=pypi&logoColor=white)](https://pypi.org/project/mrsiprep-docker/)
 [![license](https://img.shields.io/badge/license-academic--non--commercial-lightgrey)](LICENSE)
 
 ## About
