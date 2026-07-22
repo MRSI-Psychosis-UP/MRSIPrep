@@ -82,7 +82,7 @@ run, so `--nthreads` is the only varying parameter). Each run used a
 thread-count variants), so every number below reflects genuine
 full-pipeline computation, not a partially cached rerun.
 
-- **3 Tesla subject** — a real MRSI acquisition with an MPRAGE anatomical.
+- **3 Tesla subject** — a real MRSI acquisition with an MP2RAGE anatomical.
 - **7 Tesla subject** — a real MRSI acquisition with an MP2RAGE
   anatomical.
 
