@@ -12,10 +12,12 @@
 ## About
 
 *MRSIPrep* is a preprocessing and derivative-generation pipeline for already
-quantified whole-brain MRSI maps, run as a BIDS App via Docker. Its default `mni-norm` mode normalizes MRSI
-maps and uses fast SynthSeg cortical parcellation for parcelwise anatomical
-coverage and CRLB reporting. `parc-con` mode adds SynthSeg+FAST tissue maps,
-PETPVC, and Chimera/MNI-atlas regional profile extraction for metabolic connectivty computation.
+quantified whole-brain MRSI maps, run as a BIDS App via Docker. Its default
+`mni-norm` mode normalizes MRSI maps to a specified template for
+[voxel-based analysis](https://github.com/MRSI-Psychosis-UP/VLAD).
+`parc-con` mode adds SynthSeg+FAST tissue maps, PETPVC, and Chimera/MNI-atlas
+regional profile extraction for metabolic connectivity computation. MRSIPrep
+creates a quality-control report for each run.
 
 **Full documentation, installation, and usage instructions are on
 [Read the Docs](https://mrsiprep.readthedocs.io/en/stable/).**

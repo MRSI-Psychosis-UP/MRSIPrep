@@ -10,14 +10,32 @@ quantified whole-brain MRSI maps, run as a BIDS App via Docker.
 ## About
 
 *MRSIPrep* is a preprocessing and derivative-generation pipeline for already
-quantified whole-brain MRSI maps, run as a BIDS App via Docker. Its default `mni-norm` mode normalizes MRSI
-maps and uses fast SynthSeg cortical parcellation for parcelwise anatomical
-coverage and CRLB reporting. `parc-con` mode adds SynthSeg+FAST tissue maps,
-PETPVC, and Chimera/MNI-atlas regional profile extraction for metabolic connectivity computation.
+quantified whole-brain MRSI maps, run as a BIDS App via Docker. Its default
+`mni-norm` mode normalizes MRSI maps to a specified template for
+[voxel-based analysis](https://github.com/MRSI-Psychosis-UP/VLAD).
+`parc-con` mode adds SynthSeg+FAST tissue maps, PETPVC, and Chimera/MNI-atlas
+regional profile extraction for metabolic connectivity computation. MRSIPrep
+creates a quality-control report for each run.
 It is derived from the implementation in `MRSI-Metabolic-Connectome` and preserves the CHUV
 academic non-commercial research license.
 
 ![MRSIPrep pipeline schematic](figures/pipeline_schematic.png)
+
+## Test Dataset
+
+A small, public, synthetic MRSI dataset — **SynthMRSI-Project** — is
+available for anyone to download and run through MRSIPrep themselves,
+without needing access to real MRSI acquisitions. It pairs real T1w
+anatomical images (subsetted from two CC0 OpenNeuro datasets) with
+model-synthesized MRSI signal and empirical CRLB/SNR/FWHM quality maps,
+following MRSIPrep's own raw-MRSI-input convention
+(`derivatives/mrsi-orig/`).
+
+Published on Zenodo:
+[10.5281/zenodo.21477047](https://doi.org/10.5281/zenodo.21477047) (CC0).
+See [PUBLIC_DATASET.md](https://github.com/MRSI-Psychosis-UP/MRSIPrep/blob/main/PUBLIC_DATASET.md)
+in the repository for full download and usage instructions. This dataset is
+also the fixture for MRSIPrep's own automated end-to-end pipeline test.
 
 ## What it uses
 
