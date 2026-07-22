@@ -22,8 +22,8 @@ runtime scales with acquisition resolution as well as thread count.
 
 | | 3 Tesla | 7 Tesla |
 |---|---|---|
-| Scanner | Magnetom TrioTim (Siemens Healthineers, Forchheim, Germany) | Magnetom Terra.X (Siemens Healthineers, Forchheim, Germany) |
-| Coil | — | 32-channel head coil |
+| Scanner | Magnetom TrioTim | Magnetom Terra.X |
+| Coil | 32-channel | 32-channel |
 
 ## MRSI Acquisition: ECCENTRIC
 
@@ -34,25 +34,22 @@ whole-brain metabolic imaging at ultra-high magnetic field"), a
 compressed-sensing-accelerated concentric-ring k-space trajectory
 designed for fast, high-resolution whole-brain MRSI.
 
-The 7 Tesla protocol uses ECCENTRIC-FID-MRSI, the more recent "LA3T"
-variant of the sequence.
-
 ### Metabolite acquisition
 
 | Parameter | 3 Tesla | 7 Tesla |
 |---|---|---|
 | Field of view | 220 × 220 × 130 mm³ | 220 × 220 × 110 mm³ |
-| Slab thickness | — | 100 mm |
+| Slab thickness | 95 mm | 100 mm |
 | Nominal voxel size | 5.0 × 5.0 × 5.2 mm³ | 3.4 × 3.4 × 3.5 mm³ |
-| Scan resolution | 44 × 44 × 25 | — |
+| Scan resolution | 44 × 44 × 25 | 64 × 64 × 31 |
 | TR | 457 ms | 400 ms |
 | TE₁ / TE₂ | 0.78 ms / 65 ms | 0.68 ms |
 | Flip angle | 45° | 35° |
 | Spectral bandwidth | 1320 Hz | 2280 Hz |
 | Vector size | 512 points | 688 FID points |
-| Acquisition duration | 389 ms | — |
-| Spatial encoding | ECCENTRIC trajectory, acceleration factor 2.5, circle radius 0.25 k_max | ECCENTRIC trajectory |
-| Total acquisition time | 6 min 54 s | 11 min 52 s (incl. 59 s water reference) |
+| Spatial encoding | ECCENTRIC trajectory, circle radius 0.25 k_max | ECCENTRIC trajectory, circle radius 0.25 k_max |
+| Acceleration factor | 2.5 | 2.5 |
+| Total acquisition time | 6 min 54 s | 11 min 52 s |
 
 ### Water reference
 
@@ -61,18 +58,12 @@ field correction, and metabolite intensity normalization.
 
 | Parameter | 3 Tesla | 7 Tesla |
 |---|---|---|
-| Field of view | 220 × 220 × 130 mm³ | — |
+| Field of view | 220 × 220 × 130 mm³ | 220 × 220 × 110 mm³ |
 | Nominal voxel size / resolution | 10.0 × 10.0 × 10.0 mm³ | 10 × 10 × 10 mm³ |
 | Scan resolution | 22 × 22 × 13 | — |
 | TR | 460 ms | 404 ms |
 | TE₁ / TE₂ | 0.72 ms / 65 ms | 0.59 ms |
 | Flip angle | 45° | 35° |
-| Spectral bandwidth | 1320 Hz | — |
-| Vector size | 512 points | — |
-| Acquisition duration | 389 ms | — |
-| Water suppression | off | — |
-| Acceleration factor | 2.0 | — |
-| ECCENTRIC circle radius | 0.25 k_max | — |
 | Acquisition time | 1 min 21 s | 59 s |
 
 ### Reconstruction and quantification
@@ -91,8 +82,7 @@ run, so `--nthreads` is the only varying parameter). Each run used a
 thread-count variants), so every number below reflects genuine
 full-pipeline computation, not a partially cached rerun.
 
-- **3 Tesla subject** — a synthetic MRSI signal on a real T1w anatomy (from
-  the public [Test Dataset](index.md#test-dataset)).
+- **3 Tesla subject** — a real MRSI acquisition with an MPRAGE anatomical.
 - **7 Tesla subject** — a real MRSI acquisition with an MP2RAGE
   anatomical.
 
@@ -126,25 +116,6 @@ which aren't wrapped in a named, timed pipeline step.
 
 ## Interpretation
 
-- **Total wall-clock time is essentially flat across `--nthreads` 8→32**
-  for both subjects (variation is within ~2%, i.e. measurement noise, not
-  a real trend). The two steps that dominate runtime — MRSI-T1w-MNI
-  registration (ANTs) and SynthSeg tissue segmentation — do not scale
-  meaningfully past roughly 8 threads on this hardware/dataset size. If
-  you are choosing `--nthreads` for a batch of parallel subjects
-  (`--nproc N`), there is little benefit to requesting more than ~8-12
-  threads per subject process; it's more effective to increase `--nproc`
-  (more subjects at once) than `--nthreads` per subject, once you're past
-  that point.
-- **7 Tesla data takes roughly 4x longer than the 3 Tesla subject**
-  (~20.5 minutes vs. ~5.1 minutes). The T1w volume alone has **~7.2x**
-  more voxels at 7T (higher-resolution MP2RAGE), which directly explains
-  most of the registration and tissue-segmentation cost, since both
-  operate on the full anatomical volume; the MRSI grid itself only has
-  ~2.1x more useful voxels, so the anatomical resolution — not the MRSI
-  resolution — is the dominant cost driver here.
-- These numbers are for **`mni-norm` mode** only; `parc-con` mode adds
-  SynthSeg+FAST tissue maps, PETPVC, and Chimera/MNI-atlas parcellation on
-  top, and (if using Chimera's FreeSurfer `recon-all` dependency) is
-  substantially slower — expect on the order of 1-3+ hours per subject,
-  not reflected in this benchmark.
+* **Runtime is nearly unchanged from 8 to 32 threads** for both subjects, with variations of only ~2%. ANTs registration and SynthSeg show little scaling beyond ~8 threads, so for batch processing it is generally better to use ~8–12 threads per subject and increase `--nproc` rather than allocate more threads to each subject.
+
+* **The 7T subject takes about 4× longer than the 3T subject** (~20.5 vs. ~5.1 minutes). This is mainly due to the 7T T1w image having ~7.2× more voxels, which increases registration and segmentation costs. The MRSI grid has only ~2.1× more usable voxels, making anatomical—not MRSI—resolution the main runtime driver.
