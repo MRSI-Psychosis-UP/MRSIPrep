@@ -7,7 +7,7 @@
 [![docs](https://app.readthedocs.org/projects/mrsiprep/badge/?version=stable)](https://mrsiprep.readthedocs.io/en/stable/)
 [![test dataset doi](https://img.shields.io/badge/test%20dataset%20doi-10.5281%2Fzenodo.21477047-blue)](https://doi.org/10.5281/zenodo.21477047)
 [![docker](https://img.shields.io/badge/docker-mrsiup%2Fmrsiprep-blue?logo=docker&logoColor=white)](https://hub.docker.com/r/mrsiup/mrsiprep)
-[![pypi](https://img.shields.io/pypi/v/mrsiprep-docker?logo=pypi&logoColor=white)](https://pypi.org/project/mrsiprep-docker/)
+[![pypi](https://img.shields.io/pypi/v/mrsiprep?logo=pypi&logoColor=white)](https://pypi.org/project/mrsiprep/)
 [![license](https://img.shields.io/badge/license-academic--non--commercial-lightgrey)](LICENSE)
 
 ## About
@@ -22,6 +22,22 @@ creates a quality-control report for each run.
 
 **Full documentation, installation, and usage instructions are on
 [Read the Docs](https://mrsiprep.readthedocs.io/en/stable/).**
+
+Two separate PyPI packages are published, mirroring fMRIPrep's own
+`fmriprep`/`fmriprep-docker` split:
+
+- **[`mrsiprep-docker`](https://pypi.org/project/mrsiprep-docker/)** — a
+  lightweight, dependency-free wrapper that builds and runs the correct
+  `docker run` command using regular BIDS App syntax. **Recommended for
+  typical use** (`pip install mrsiprep-docker`); Docker is the only
+  requirement.
+- **[`mrsiprep`](https://pypi.org/project/mrsiprep/)** — the actual Python/
+  Nipype pipeline codebase, the same code that runs inside the Docker
+  image. Not recommended as a bare-metal install for typical users: it
+  still requires FreeSurfer, FSL, ANTs, PETPVC, and Chimera to be
+  separately installed and on `$PATH`. Intended for HPC/cluster
+  environments or custom container builds where these tools are already
+  managed by other means.
 
 ![MRSIPrep pipeline schematic](docs/figures/pipeline_schematic.png)
 

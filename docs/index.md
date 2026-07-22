@@ -19,6 +19,22 @@ creates a quality-control report for each run.
 It is derived from the implementation in `MRSI-Metabolic-Connectome` and preserves the CHUV
 academic non-commercial research license.
 
+Two separate PyPI packages are published, mirroring fMRIPrep's own
+`fmriprep`/`fmriprep-docker` split:
+
+- **[`mrsiprep-docker`](https://pypi.org/project/mrsiprep-docker/)** — a
+  lightweight, dependency-free wrapper that builds and runs the correct
+  `docker run` command using regular BIDS App syntax. Recommended for
+  typical use (`pip install mrsiprep-docker`); Docker is the only
+  requirement.
+- **[`mrsiprep`](https://pypi.org/project/mrsiprep/)** — the actual Python/
+  Nipype pipeline codebase, the same code that runs inside the Docker
+  image. Not recommended as a bare-metal install for typical users: it
+  still requires FreeSurfer, FSL, ANTs, PETPVC, and Chimera to be
+  separately installed and on `$PATH`. Intended for HPC/cluster
+  environments or custom container builds where these tools are already
+  managed by other means.
+
 ![MRSIPrep pipeline schematic](figures/pipeline_schematic.png)
 
 ## Test Dataset
