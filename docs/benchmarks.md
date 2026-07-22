@@ -34,72 +34,46 @@ whole-brain metabolic imaging at ultra-high magnetic field"), a
 compressed-sensing-accelerated concentric-ring k-space trajectory
 designed for fast, high-resolution whole-brain MRSI.
 
-### 3 Tesla protocol
+The 7 Tesla protocol uses ECCENTRIC-FID-MRSI, the more recent "LA3T"
+variant of the sequence.
 
-**Metabolite acquisition:**
+### Metabolite acquisition
 
-| Parameter | Value |
-|---|---|
-| Field of view | 220 × 220 × 130 mm³ |
-| Nominal voxel size | 5.0 × 5.0 × 5.2 mm³ |
-| Scan resolution | 44 × 44 × 25 |
-| TR | 457 ms |
-| TE₁ / TE₂ | 0.78 ms / 65 ms |
-| Flip angle | 45° |
-| Spectral bandwidth | 1320 Hz |
-| Vector size | 512 points |
-| Acquisition duration | 389 ms |
-| Spatial encoding | ECCENTRIC trajectory, acceleration factor 2.5, circle radius 0.25 k_max |
-| Total acquisition time | 6 min 54 s |
+| Parameter | 3 Tesla | 7 Tesla |
+|---|---|---|
+| Field of view | 220 × 220 × 130 mm³ | 220 × 220 × 110 mm³ |
+| Slab thickness | — | 100 mm |
+| Nominal voxel size | 5.0 × 5.0 × 5.2 mm³ | 3.4 × 3.4 × 3.5 mm³ |
+| Scan resolution | 44 × 44 × 25 | — |
+| TR | 457 ms | 400 ms |
+| TE₁ / TE₂ | 0.78 ms / 65 ms | 0.68 ms |
+| Flip angle | 45° | 35° |
+| Spectral bandwidth | 1320 Hz | 2280 Hz |
+| Vector size | 512 points | 688 FID points |
+| Acquisition duration | 389 ms | — |
+| Spatial encoding | ECCENTRIC trajectory, acceleration factor 2.5, circle radius 0.25 k_max | ECCENTRIC trajectory |
+| Total acquisition time | 6 min 54 s | 11 min 52 s (incl. 59 s water reference) |
 
-**Water reference** (matched spatial coverage, lower resolution — used for
-coil combination, field correction, and metabolite intensity
-normalization):
+### Water reference
 
-| Parameter | Value |
-|---|---|
-| Field of view | 220 × 220 × 130 mm³ |
-| Nominal voxel size | 10.0 × 10.0 × 10.0 mm³ |
-| Scan resolution | 22 × 22 × 13 |
-| TR | 460 ms |
-| TE₁ / TE₂ | 0.72 ms / 65 ms |
-| Flip angle | 45° |
-| Spectral bandwidth | 1320 Hz |
-| Vector size | 512 points |
-| Acquisition duration | 389 ms |
-| Water suppression | off |
-| Acceleration factor | 2.0 |
-| ECCENTRIC circle radius | 0.25 k_max |
-| Acquisition time | 1 min 21 s |
+Matched spatial coverage, lower resolution — used for coil combination,
+field correction, and metabolite intensity normalization.
 
-### 7 Tesla protocol
-
-ECCENTRIC-FID-MRSI, the more recent "LA3T" variant of the sequence.
-
-**Metabolite acquisition:**
-
-| Parameter | Value |
-|---|---|
-| Field of view | 220 × 220 × 110 mm³ |
-| Slab thickness | 100 mm |
-| Spatial resolution | 3.4 × 3.4 × 3.5 mm³ |
-| TE | 0.68 ms |
-| TR | 400 ms |
-| Flip angle | 35° |
-| Bandwidth | 2280 Hz |
-| Vector size | 688 FID points |
-
-**Water reference:**
-
-| Parameter | Value |
-|---|---|
-| Resolution | 10 × 10 × 10 mm³ |
-| TE | 0.59 ms |
-| TR | 404 ms |
-| Flip angle | 35° |
-
-**Total acquisition time**: 11 min 52 s, including 59 s for the water
-reference acquisition.
+| Parameter | 3 Tesla | 7 Tesla |
+|---|---|---|
+| Field of view | 220 × 220 × 130 mm³ | — |
+| Nominal voxel size / resolution | 10.0 × 10.0 × 10.0 mm³ | 10 × 10 × 10 mm³ |
+| Scan resolution | 22 × 22 × 13 | — |
+| TR | 460 ms | 404 ms |
+| TE₁ / TE₂ | 0.72 ms / 65 ms | 0.59 ms |
+| Flip angle | 45° | 35° |
+| Spectral bandwidth | 1320 Hz | — |
+| Vector size | 512 points | — |
+| Acquisition duration | 389 ms | — |
+| Water suppression | off | — |
+| Acceleration factor | 2.0 | — |
+| ECCENTRIC circle radius | 0.25 k_max | — |
+| Acquisition time | 1 min 21 s | 59 s |
 
 ### Reconstruction and quantification
 
