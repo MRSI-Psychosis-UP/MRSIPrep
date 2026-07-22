@@ -61,6 +61,17 @@ following MRSIPrep's own raw-MRSI-input convention.
 - Used as the fixture for this repo's automated end-to-end pipeline test (see
   the "tested on SynthMRSI-Project" badge above)
 
+**SynthMRSI-Project is never modified after publication** — its Zenodo
+record is fixed and citable. A separate, unpublished internal dataset,
+**SynthMRSI-VBA-Project**, is used instead for voxel-based-analysis
+validation work (region-based abnormality injection, ANTs-vs-FSL
+registration-backend comparison via `randomise`). It shares the same T1w
+subjects as SynthMRSI-Project but is generated independently with
+`--inject-abnormal`, so it can carry deliberately-injected ground-truth
+abnormalities without touching the published, immutable dataset. See
+[`synthMRSI/SYNTHMRSI_PROJECT.md`](synthMRSI/SYNTHMRSI_PROJECT.md) for the
+full generation and validation commands.
+
 ## Use Cases
 
 Code derived from this pipeline has been used in the following peer-reviewed
