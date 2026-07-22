@@ -1,4 +1,4 @@
-name: E2E SynthMRSI-Project
+name: E2E mni-norm
 
 on:
   workflow_dispatch:
@@ -42,4 +42,4 @@ jobs:
           echo "FS_LICENSE=${{ github.workspace }}/freesurfer_license.txt" >> "${GITHUB_ENV}"
 
       - name: Run end-to-end test
-        run: pytest -m e2e_synthmrsi_project --no-cov tests/test_synthmrsi_project_e2e.py
+        run: pytest -m e2e_synthmrsi_project --no-cov tests/test_synthmrsi_project_e2e.py -k mni_norm
