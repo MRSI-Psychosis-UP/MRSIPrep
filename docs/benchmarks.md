@@ -7,6 +7,8 @@ runtime scales with acquisition resolution as well as thread count.
 
 ## Hardware
 
+### Compute (this benchmark)
+
 | Component | Spec |
 |---|---|
 | CPU | Intel Core i9-14900K, 24 cores / 32 threads, up to 6.0 GHz |
@@ -16,14 +18,104 @@ runtime scales with acquisition resolution as well as thread count.
 | Docker | 29.4.1 |
 | MRSIPrep image | `mrsiup/mrsiprep:cpu` |
 
-## Method
+### MRI scanners
 
-Two single-subject runs, one per dataset, repeated at `--nthreads` 8, 12,
-16, and 32 (`--nproc 1` throughout — one subject per run, so `--nthreads`
-is the only varying parameter). Each run used a **fresh `--work-dir`**
-(no Nipype caching carried over between thread-count variants), so every
-number below reflects genuine full-pipeline computation, not a partially
-cached rerun.
+| | 3 Tesla | 7 Tesla |
+|---|---|---|
+| Scanner | Magnetom TrioTim (Siemens Healthineers, Forchheim, Germany) | Magnetom Terra.X (Siemens Healthineers, Forchheim, Germany) |
+| Coil | — | 32-channel head coil |
+
+## MRSI Acquisition: ECCENTRIC
+
+Both datasets were acquired with the **ECCENTRIC** FID-MRSI sequence
+([Klauser et al., 2024, *Imaging Neuroscience*](https://direct.mit.edu/imag/article/doi/10.1162/imag_a_00313/124597/ECCENTRIC-A-fast-and-unrestrained-approach-for),
+"ECCENTRIC: A fast and unrestrained approach for high-resolution
+whole-brain metabolic imaging at ultra-high magnetic field"), a
+compressed-sensing-accelerated concentric-ring k-space trajectory
+designed for fast, high-resolution whole-brain MRSI.
+
+### 3 Tesla protocol
+
+**Metabolite acquisition:**
+
+| Parameter | Value |
+|---|---|
+| Field of view | 220 × 220 × 130 mm³ |
+| Nominal voxel size | 5.0 × 5.0 × 5.2 mm³ |
+| Scan resolution | 44 × 44 × 25 |
+| TR | 457 ms |
+| TE₁ / TE₂ | 0.78 ms / 65 ms |
+| Flip angle | 45° |
+| Spectral bandwidth | 1320 Hz |
+| Vector size | 512 points |
+| Acquisition duration | 389 ms |
+| Spatial encoding | ECCENTRIC trajectory, acceleration factor 2.5, circle radius 0.25 k_max |
+| Total acquisition time | 6 min 54 s |
+
+**Water reference** (matched spatial coverage, lower resolution — used for
+coil combination, field correction, and metabolite intensity
+normalization):
+
+| Parameter | Value |
+|---|---|
+| Field of view | 220 × 220 × 130 mm³ |
+| Nominal voxel size | 10.0 × 10.0 × 10.0 mm³ |
+| Scan resolution | 22 × 22 × 13 |
+| TR | 460 ms |
+| TE₁ / TE₂ | 0.72 ms / 65 ms |
+| Flip angle | 45° |
+| Spectral bandwidth | 1320 Hz |
+| Vector size | 512 points |
+| Acquisition duration | 389 ms |
+| Water suppression | off |
+| Acceleration factor | 2.0 |
+| ECCENTRIC circle radius | 0.25 k_max |
+| Acquisition time | 1 min 21 s |
+
+### 7 Tesla protocol
+
+ECCENTRIC-FID-MRSI, the more recent "LA3T" variant of the sequence.
+
+**Metabolite acquisition:**
+
+| Parameter | Value |
+|---|---|
+| Field of view | 220 × 220 × 110 mm³ |
+| Slab thickness | 100 mm |
+| Spatial resolution | 3.4 × 3.4 × 3.5 mm³ |
+| TE | 0.68 ms |
+| TR | 400 ms |
+| Flip angle | 35° |
+| Bandwidth | 2280 Hz |
+| Vector size | 688 FID points |
+
+**Water reference:**
+
+| Parameter | Value |
+|---|---|
+| Resolution | 10 × 10 × 10 mm³ |
+| TE | 0.59 ms |
+| TR | 404 ms |
+| Flip angle | 35° |
+
+**Total acquisition time**: 11 min 52 s, including 59 s for the water
+reference acquisition.
+
+### Reconstruction and quantification
+
+Both MRSI acquisitions were reconstructed using a compressed-sensing SENSE
+low-rank framework with total-generalized-variation regularization and
+simultaneous lipid suppression. Metabolite quantification was performed
+with **LCModel**.
+
+## MRSIPrep Benchmark Method
+
+Two single-subject `mrsiprep` runs, one per dataset, repeated at
+`--nthreads` 8, 12, 16, and 32 (`--nproc 1` throughout — one subject per
+run, so `--nthreads` is the only varying parameter). Each run used a
+**fresh `--work-dir`** (no Nipype caching carried over between
+thread-count variants), so every number below reflects genuine
+full-pipeline computation, not a partially cached rerun.
 
 - **3 Tesla subject** — a synthetic MRSI signal on a real T1w anatomy (from
   the public [Test Dataset](index.md#test-dataset)).
@@ -51,26 +143,12 @@ T1w volume, not the coarser MRSI grid.
 
 ## Results
 
-### 3 Tesla subject
+![MRSIPrep runtime by pipeline step and --nthreads, 3 Tesla vs 7 Tesla](figures/benchmark_nthreads.png)
 
-| `--nthreads` | Tissue seg. | MRSI preproc. | MRSI-T1w-MNI reg. | Tissue prob. maps | PVC | Resampling | SynthSeg QC | Regional extraction | **Total** |
-|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| 8  | 72.7s | 2.3s | 194.8s | 0.7s | 0.2s | 11.4s | 9.5s | 0.8s | **309.7s** |
-| 12 | 72.0s | 2.3s | 196.4s | 0.7s | 0.2s | 11.2s | 9.4s | 0.7s | **310.2s** |
-| 16 | 69.8s | 2.3s | 194.1s | 0.7s | 0.2s | 11.2s | 9.3s | 0.7s | **305.5s** |
-| 32 | 65.6s | 2.3s | 195.1s | 0.7s | 0.2s | 11.4s | 9.6s | 0.7s | **303.1s** |
-
-### 7 Tesla subject
-
-| `--nthreads` | Tissue seg. | MRSI preproc. | MRSI-T1w-MNI reg. | Tissue prob. maps | PVC | Resampling | SynthSeg QC | Regional extraction | **Total** |
-|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| 8  | 475.9s | 15.2s | 662.5s | 4.6s | 0.2s | 24.6s | 40.7s | 1.6s | **1245.1s** (20m45s) |
-| 12 | 472.1s | 15.1s | 661.0s | 4.6s | 0.2s | 24.5s | 39.7s | 1.5s | **1237.9s** (20m38s) |
-| 16 | 467.0s | 14.6s | 662.6s | 4.6s | 0.3s | 24.3s | 37.9s | 1.5s | **1232.0s** (20m32s) |
-| 32 | 465.8s | 14.8s | 666.3s | 4.6s | 0.2s | 30.7s | 45.6s | 1.6s | **1251.0s** (20m51s) |
-
-(`Anatomical preparation`, `Connectivity`, and `Reports` steps were all
-≤0.02s in every run and are omitted from the table.)
+Stacked bar height = total wall-clock elapsed time (label above each bar);
+segments show each pipeline step's share. "Container startup / other
+overhead" covers Docker startup and the CLI's own preflight input-check,
+which aren't wrapped in a named, timed pipeline step.
 
 ## Interpretation
 
