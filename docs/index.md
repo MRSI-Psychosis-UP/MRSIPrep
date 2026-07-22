@@ -176,6 +176,14 @@ usage_parcellation
 
 ```{toctree}
 :maxdepth: 1
+:caption: 'Benchmarks:'
+:hidden:
+
+benchmarks
+```
+
+```{toctree}
+:maxdepth: 1
 :hidden:
 
 changelog
