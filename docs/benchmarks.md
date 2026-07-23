@@ -148,53 +148,56 @@ validation script).
 
 ### Results
 
-![CrPCr resampled to MNI space, overlaid on the full-head MNI152 template, all 6 registration variants, 3 Tesla subject](figures/registration_backend_mni_overlay.png)
+**3 Tesla subject**, all 6 backend/target combinations, axial slice, same
+intensity scale throughout:
 
-Axial slice, same intensity scale across all 6 panels. The full-head
-(non-skull-stripped) MNI152 template makes the skull boundary visible as a
-bright ring — signal extending past it, or with a jagged/scalloped rather
-than smooth outer edge, indicates voxels that have leaked beyond the true
-brain boundary during registration.
+![CrPCr resampled to MNI space, overlaid on the full-head MNI152 template, 3 Tesla subject, 2 columns (brain / brain+CSF) x 3 rows (ANTs / FLIRT / FLIRT+FNIRT)](figures/registration_backend_mni_overlay_3t.png)
 
-**Voxels of the resampled MRSI brainmask falling outside each reference mask (lower is better):**
+**7 Tesla subject**, same layout and intensity-scale convention (its own
+scale, since 7T signal levels differ from 3T):
 
-| Backend | Target | T1w brain outside | T1w brain+CSF outside | MNI brain outside |
-|---|---|---:|---:|---:|
-| **3 Tesla subject** | | | | |
-| ANTs | brain | 235,260 (16.2%) | — | 419,612 (18.2%) |
-| ANTs | brain+CSF | 234,683 (16.1%) | 227,705 (15.6%) | 410,039 (17.9%) |
-| FSL FLIRT | brain | 510,625 (29.8%) | — | 962,120 (34.0%) |
-| FSL FLIRT | brain+CSF | 512,023 (29.8%) | 504,875 (29.4%) | 959,834 (33.9%) |
-| FSL FLIRT+FNIRT | brain | 292,456 (19.3%) | — | 610,207 (24.5%) |
-| FSL FLIRT+FNIRT | brain+CSF | 291,099 (19.2%) | 284,186 (18.8%) | 605,568 (24.3%) |
-| **7 Tesla subject** | | | | |
-| ANTs | brain | 305,658 (11.4%) | — | 196,378 (10.4%) |
-| ANTs | brain+CSF | 307,668 (11.5%) | 362,652 (13.5%) | 214,775 (11.3%) |
-| FSL FLIRT | brain | 487,919 (17.0%) | — | 340,324 (16.8%) |
-| FSL FLIRT | brain+CSF | 488,551 (17.1%) | 544,319 (19.1%) | 373,542 (18.1%) |
-| FSL FLIRT+FNIRT | brain | 247,273 (10.1%) | — | 169,484 (9.8%) |
-| FSL FLIRT+FNIRT | brain+CSF | 249,455 (10.2%) | 293,234 (11.9%) | 192,864 (10.9%) |
+![CrPCr resampled to MNI space, overlaid on the full-head MNI152 template, 7 Tesla subject, 2 columns (brain / brain+CSF) x 3 rows (ANTs / FLIRT / FLIRT+FNIRT)](figures/registration_backend_mni_overlay_7t.png)
+
+The full-head (non-skull-stripped) MNI152 template makes the skull
+boundary visible as a bright ring; voxels with values below 0.1 are
+rendered transparent so the underlying template stays visible through
+low-signal regions. Signal extending past the skull ring, or with a
+jagged/scalloped rather than smooth outer edge, indicates voxels that have
+leaked beyond the true brain boundary during registration — visible here
+for both FSL variants at both field strengths, and especially pronounced
+(plus visibly asymmetric between hemispheres) for the FSL backend at 7T.
+
+**Resampled MRSI voxels falling outside the MNI152 brain mask, by backend and T1w target:**
+
+![Bar chart: percentage of resampled MRSI voxels outside the MNI152 brain mask, grouped by registration backend (ANTs, FSL FLIRT, FSL FLIRT+FNIRT) and T1w target (brain, brain+CSF), faceted by 3 Tesla vs 7 Tesla](figures/registration_backend_mni_outside_comparison.png)
 
 ### Interpretation
 
-* **ANTs gives the best-contained registration at 3T**, both numerically
-  (lowest "outside brain" fraction in T1w and MNI space) and visually — the
-  overlay figure shows the smoothest, most anatomically faithful outer
-  boundary. At 7T, FSL FLIRT+FNIRT is roughly on par with ANTs numerically,
-  though the overlay still shows a visibly more irregular (jagged) skull-
-  adjacent edge for both FSL variants than for ANTs.
+* **ANTs is the clear winner at both field strengths.** It has the lowest
+  MNI-outside-brain fraction of any backend at 3T (17.9–18.2%, vs. 24.3–
+  24.5% for FSL FLIRT+FNIRT and 33.9–34.0% for FSL FLIRT-only) and is
+  essentially tied with FSL FLIRT+FNIRT at 7T (10.4–11.3% vs. 9.8–10.9%).
+  The overlay figures confirm this visually: ANTs produces the smoothest,
+  most anatomically faithful outer boundary at both field strengths, while
+  both FSL variants show a visibly irregular, jagged edge — most obviously
+  at 7T, where the FSL backend's coverage is also noticeably asymmetric
+  between hemispheres.
 
 * **Adding FNIRT to the FSL backend substantially reduces leakage versus
-  FLIRT-only** — roughly a third fewer outside-brain voxels at 3T (19.2–
-  19.3% vs. 29.8%) and about 40% fewer at 7T (10.1–10.2% vs. 17.0–17.1%),
-  consistent across both the T1w and MNI comparisons. This is why FNIRT is
-  now the default for `--registration-backend fsl`.
+  FLIRT-only** — roughly a third fewer outside-brain voxels at 3T (24.3–
+  24.5% vs. 33.9–34.0%) and about 40% fewer at 7T (9.8–10.9% vs. 16.8–
+  18.1%). This is why FNIRT is now the default for
+  `--registration-backend fsl`.
 
-* **Brain vs. brain+CSF as the T1w registration target makes only a small
-  difference** (typically within 1-2 percentage points, and not
-  consistently in one direction) to how many MRSI voxels land outside the
-  brain boundary, for any backend. It does not, on its own, resolve the
-  leakage seen with the FSL backend — the registration method itself (not
-  the T1w target) is the dominant factor. `brain+CSF` remains useful when
-  the analysis question specifically concerns CSF-compartment signal, but
-  it is not a fix for FSL's wider skull-boundary leakage relative to ANTs.
+* **Brain vs. brain+CSF as the T1w registration target has a small effect
+  that flips direction between field strengths.** At 3T, brain+CSF is
+  very slightly better than brain-only for every backend (by 0.1–0.3
+  percentage points). At 7T, brain+CSF is consistently *worse* than
+  brain-only for every backend (by 0.9–1.3 percentage points) — the
+  opposite of what higher spatial resolution alone would predict (more
+  voxels landing purely in CSF should, in principle, make a CSF-inclusive
+  target relatively more helpful, not less, at finer resolution). The
+  effect is small enough in both directions, and its sign reverses between
+  the two subjects here, that it should not be read as a reliable
+  advantage for either target — the registration backend and deformable
+  stage are the dominant factors, not the brain-vs-brain+CSF choice.
