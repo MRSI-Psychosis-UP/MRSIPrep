@@ -74,8 +74,9 @@ def build_parser() -> argparse.ArgumentParser:
         "--registration-backend",
         choices=["ants", "fsl", "flirt-fnirt", "flirt_fnirt", "flirt/fnirt"],
         default="ants",
-        help="Registration toolchain. 'ants' is the default; 'fsl'/'flirt-fnirt' uses FLIRT affine registration "
-        "(no deformable stage -- FNIRT is not implemented).",
+        help="Registration toolchain. 'ants' is the default and generally most accurate (rigid+affine+SyN). "
+        "'fsl'/'flirt-fnirt' uses FLIRT+FNIRT (deformable) for MRSI-to-T1w by default; pass --no-fsl-deformable "
+        "for FLIRT-only (faster, less accurate).",
     )
     registration.add_argument(
         "--ants-mrsi-to-t1-transform",
@@ -92,10 +93,54 @@ def build_parser() -> argparse.ArgumentParser:
         "--fsl-mrsi-to-t1-init",
         choices=["flirt", "usesqform"],
         default="flirt",
-        help="FSL MRSI-to-T1w initialization. 'usesqform' applies the NIfTI qform/sform geometry with FLIRT.",
+        help="FSL MRSI-to-T1w initialization. 'usesqform' applies the NIfTI qform/sform geometry with FLIRT and no "
+        "further optimization. 'flirt' (default) seeds FLIRT from that same qform/sform frame, then runs a local "
+        "(no-search) optimization from it -- FLIRT's own unrestricted global search was found to reliably diverge "
+        "on MRSI-reference-vs-T1w registration and is not offered.",
     )
     registration.add_argument("--fsl-t1-to-mni-dof", type=int, choices=[6, 7, 9, 12], default=12)
-    registration.add_argument("--fsl-cost", default="mutualinfo", help="FLIRT cost function for FSL registrations.")
+    registration.add_argument(
+        "--fsl-cost",
+        default="corratio",
+        help="FLIRT cost function for FSL registrations. Default changed from FLIRT's own 'mutualinfo' default to "
+        "'corratio': mutualinfo was found to diverge on the small, low-contrast MRSI reference maps used for "
+        "MRSI-to-T1w registration.",
+    )
+    registration.add_argument(
+        "--fsl-deformable",
+        dest="fsl_deformable",
+        action="store_true",
+        default=True,
+        help="Add an FNIRT deformable stage after FLIRT for the fsl MRSI-to-T1w registration, to more closely "
+        "mimic ANTs' default SyN warp. On by default when --registration-backend fsl is selected (confirmed to "
+        "give consistently better MRSI-brainmask/T1w-brain overlap than FLIRT-only across a 3T and a 7T subject, "
+        "see experiments/registration_backend_benchmark.py); pass --no-fsl-deformable for FLIRT-only (faster, "
+        "seconds instead of several minutes per subject). Has no effect on --registration-backend ants or on "
+        "--mode midas (rigid-only by design).",
+    )
+    registration.add_argument(
+        "--no-fsl-deformable",
+        dest="fsl_deformable",
+        action="store_false",
+        help="Use FLIRT-only for the fsl MRSI-to-T1w registration (no FNIRT deformable stage). See --fsl-deformable.",
+    )
+    registration.add_argument(
+        "--fsl-fnirt-warpres",
+        type=int,
+        nargs=3,
+        metavar=("X", "Y", "Z"),
+        default=None,
+        help="FNIRT --warpres (B-spline control-point grid spacing, mm) for the fsl-deformable MRSI-to-T1w stage. "
+        "Default: auto-computed as ~2x the MRSI reference image's own native voxel size per axis, floored at 6mm "
+        "(a higher-resolution MRSI acquisition can support a finer deformation grid without just fitting noise; "
+        "validated at warpres=10mm for 5mm MRSI data -- see mrsiprep.interfaces.fsl.default_fnirt_warpres). Pass "
+        "three values (e.g. --fsl-fnirt-warpres 6 6 6) to override.",
+    )
+    registration.add_argument(
+        "--fsl-fnirt-lambda",
+        default="300,200,150,150",
+        help="FNIRT --lambda regularization-weight schedule for the fsl-deformable MRSI-to-T1w stage.",
+    )
     registration.add_argument("--normalization", choices=["simple", "ants-syn", "existing"], default="simple")
     registration.add_argument("--output-spaces", nargs="+", default=["MNI152NLin2009cAsym"])
     registration.add_argument(
@@ -316,6 +361,9 @@ def parse_args(argv: list[str] | None = None) -> MRSIPrepConfig:
         fsl_mrsi_to_t1_init=args.fsl_mrsi_to_t1_init,
         fsl_t1_to_mni_dof=args.fsl_t1_to_mni_dof,
         fsl_cost=args.fsl_cost,
+        fsl_deformable=args.fsl_deformable,
+        fsl_fnirt_warpres=tuple(args.fsl_fnirt_warpres) if args.fsl_fnirt_warpres else None,
+        fsl_fnirt_lambda=args.fsl_fnirt_lambda,
         normalization=args.normalization,
         output_spaces=args.output_spaces,
         output_mrsi_t1w=args.output_mrsi_t1w,
