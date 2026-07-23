@@ -5,7 +5,7 @@ authors:
   - family-names: Lucchetti
     given-names: Federico
 license: "CHUV academic non-commercial research license"
-version: "1.4.0"
+version: "1.4.1"
 references:
   - type: dataset
     title: "SynthMRSI-Project: synthetic MRSI BIDS test dataset for MRSIPrep"
