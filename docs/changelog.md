@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- Added an FNIRT deformable stage to the FSL registration backend for
+  MRSI→T1w (`--fsl-deformable`, **on by default** when
+  `--registration-backend fsl` is selected; `--no-fsl-deformable` reverts
+  to FLIRT-only), plus `--fsl-fnirt-warpres` (auto-computed from the MRSI
+  reference's own native voxel size when unset) and `--fsl-fnirt-lambda`.
+  Also fixed FLIRT's own defaults for this pipeline
+  (`--fsl-cost` now `corratio`, seeded from the image's qform/sform frame
+  with `-nosearch`): FLIRT's previous defaults (`mutualinfo`, unrestricted
+  search) were found to reliably diverge on the small, low-contrast MRSI
+  reference maps used here. `registration_t1_target=brain-csf` is now
+  accepted under `--mode mni-norm` too (previously restricted to `brain`/
+  `raw` with no technical justification — SynthSeg parcellation always
+  parcellates the raw T1w directly, independent of the registration
+  target). See `experiments/registration_backend_benchmark.py` for the
+  validation comparing backends and targets on real 3T/7T subjects.
 - Split `--longitudinal` subject-template normalization out of "MNI
   Normalization Usage" into its own
   [Longitudinal (Subject-Template) Normalization](usage_longitudinal.md)

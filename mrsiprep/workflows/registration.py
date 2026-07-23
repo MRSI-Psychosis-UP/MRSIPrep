@@ -22,17 +22,22 @@ def run_registration_workflow(
     mrsi_reference: Path,
     registration_t1: Path,
     registration_mask: Path | None = None,
+    mrsi_mask: Path | None = None,
     subject_template=None,
 ) -> RegistrationResult:
     """``subject_template`` is an optional precomputed ``SubjectTemplateResult``
     (see ``mrsiprep.registration.subject_template``), built once per subject
     when ``--longitudinal`` is on and the subject has 2+ sessions. When
     present, T1-to-MNI is composed via (session->template)+(template->MNI)
-    instead of registering this session directly to MNI."""
+    instead of registering this session directly to MNI.
+
+    ``mrsi_mask`` (the MRSI brainmask, in MRSI-native space) is only used by
+    the ``fsl`` backend's FNIRT stage, as the moving-side mask FNIRT needs
+    alongside the T1w-side ``registration_mask``."""
     if config.processing_mode == "midas":
         mrsi_to_t1 = run_mrsi_to_t1_rigid_mi(config, subject, session, mrsi_reference, registration_t1, fixed_mask=registration_mask)
     else:
-        mrsi_to_t1 = run_mrsi_to_t1(config, subject, session, mrsi_reference, registration_t1, fixed_mask=registration_mask)
+        mrsi_to_t1 = run_mrsi_to_t1(config, subject, session, mrsi_reference, registration_t1, fixed_mask=registration_mask, moving_mask=mrsi_mask)
     t1_to_mni = None
     if "MNI152NLin2009cAsym" in config.output_spaces or config.parcellation_mode == "mni" or "mni" in config.transform:
         if subject_template is not None and session is not None:

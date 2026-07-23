@@ -443,7 +443,14 @@ def _step_mrsi_preprocessing(config, subject, session, inputs, debug):
 def _step_registration(config, subject, session, mrsi, anat, debug, subject_template=None):
     with debug.step("MRSI-T1w-MNI registration"):
         return run_registration_workflow(
-            config, subject, session, mrsi.reference, anat.registration_t1w, anat.registration_mask, subject_template=subject_template
+            config,
+            subject,
+            session,
+            mrsi.reference,
+            anat.registration_t1w,
+            anat.registration_mask,
+            mrsi_mask=mrsi.brainmask,
+            subject_template=subject_template,
         )
 
 
