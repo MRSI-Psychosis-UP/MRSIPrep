@@ -34,6 +34,49 @@ ventricles, and inner/outer CSF, including extra-ventricular CSF label 24) —
 only SynthSeg background (label 0) is excluded from the brain mask, so FAST
 sees the complete CSF compartment when estimating tissue probabilities.
 
+## Try it now: demo on the public SynthMRSI-Project dataset
+
+No BIDS dataset of your own yet? Download the small, public, synthetic
+**SynthMRSI-Project** dataset (32 subjects, real T1w + model-synthesized
+MRSI signal, CC0) and run MRSIPrep against it directly:
+
+```bash
+# 1. Download and extract the public test dataset (~300-400MB)
+curl -L -o SynthMRSI-Project.zip \
+  "https://zenodo.org/records/21477048/files/SynthMRSI-Project.zip"
+unzip SynthMRSI-Project.zip
+
+# 2. Pull the CPU image
+docker pull mrsiup/mrsiprep:cpu
+
+# 3. Run a single subject in mni-norm mode (a couple of minutes on a
+#    modern multi-core machine)
+docker run --rm \
+  -v "$(pwd)/SynthMRSI-Project:/data:ro" \
+  -v "$(pwd)/SynthMRSI-Project/derivatives:/out" \
+  -v /path/to/your/freesurfer/license.txt:/opt/freesurfer/license.txt:ro \
+  -e FS_LICENSE=/opt/freesurfer/license.txt \
+  mrsiup/mrsiprep:cpu \
+  /data /out participant \
+  --participant-label 01 \
+  --session-label 01 \
+  --mode mni-norm \
+  --t1 acq-mprage_T1w \
+  --metabolites NAANAAG,GPCPCh,CrPCr,GluGln,Ins \
+  --ref-met CrPCr \
+  --nthreads 8 --nproc 2 --verbose 2
+
+# 4. Open the QC report to confirm it worked
+xdg-open SynthMRSI-Project/derivatives/mrsiprep/sub-01/ses-01/reports/coverage/sub-01_ses-01_desc-report.html
+```
+
+Drop `--participant-label 01` to process all 32 subjects (scale runtime by
+`32 / --nproc`). You'll need a free FreeSurfer license file (from
+https://surfer.nmr.mgh.harvard.edu/registration.html) for `mri_synthseg`.
+See [PUBLIC_DATASET.md](https://github.com/MRSI-Psychosis-UP/MRSIPrep/blob/main/PUBLIC_DATASET.md)
+in the repository for the dataset's full description, ground-truth files,
+and expected output layout.
+
 Check all selected subject/session inputs without running preprocessing:
 
 ```bash
@@ -281,9 +324,11 @@ general-purpose neuroimaging pipeline. In particular:
 - It has no fieldmap/BOLD/functional-MRI handling — those are out of scope
   entirely, since the inputs are already-quantified MRSI metabolite maps
   rather than raw k-space or functional time series.
-- Registration can use ANTs (default) or FSL FLIRT via
-  `--registration-backend flirt-fnirt` (affine only; FNIRT is not implemented); there is no TemplateFlow catalog, and
-  normalization targets are limited to MNI152 (`MNI152NLin2009cAsym`) plus native T1w/MRSI space — see
+- Registration can use ANTs (default, rigid+affine+SyN) or FSL via
+  `--registration-backend fsl` (FLIRT affine by default; add
+  `--fsl-deformable` for an FNIRT deformable stage on the MRSI-to-T1w step);
+  there is no TemplateFlow catalog, and normalization targets are limited to
+  MNI152 (`MNI152NLin2009cAsym`) plus native T1w/MRSI space — see
   [MNI Normalization Usage](usage_normalization.md).
 - `--longitudinal` builds one ANTs subject-template across sessions
   (requires `--registration-backend ants`) — see
