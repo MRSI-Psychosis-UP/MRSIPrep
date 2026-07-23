@@ -6,7 +6,10 @@ from pathlib import Path
 
 import pandas as pd
 
+from mrsiprep.io.mrsinmrs import load_mrsinmrs, resolve_mrsinmrs
 from mrsiprep.io.naming import coverage_report_html
+
+_MRSINMRS_URL = "https://pubmed.ncbi.nlm.nih.gov/33559967/"
 
 
 def generate_subject_report(config, subject: str, session: str | None, outputs: dict) -> Path:
@@ -51,6 +54,8 @@ def generate_subject_report(config, subject: str, session: str | None, outputs: 
         f"<p>BIDS directory: <code>{config.bids_dir}</code></p>",
         f"<p>Output directory: <code>{config.derivative_dir}</code></p>",
         f"<p>Processing mode: <code>{config.processing_mode}</code></p>",
+        "<h2>MRSI Acquisition (MRSinMRS)</h2>",
+        _mrsinmrs_html(config, subject, session),
         "<h2>MRSI QC</h2>",
         qc_html or "<p>No QC table available.</p>",
         "<h2>Parcelwise Coverage and CRLB</h2>",
@@ -64,9 +69,56 @@ def generate_subject_report(config, subject: str, session: str | None, outputs: 
     ]
     for key, value in sorted(outputs.items()):
         lines.append(f"<li><strong>{key}</strong>: <code>{value}</code></li>")
-    lines.extend(["</ul>", "</body></html>"])
+    lines.append("</ul>")
+    lines.append("<h2>Citations</h2>")
+    lines.append(_citations_html(config))
+    lines.extend(["</body></html>"])
     out.write_text("\n".join(lines), encoding="utf-8")
     return out
+
+
+def _mrsinmrs_html(config, subject: str, session: str | None) -> str:
+    """MRSI acquisition/hardware/reconstruction parameters, per the MRSinMRS
+    minimum reporting standard (Lin et al. 2021), read from an optional
+    dataset-level mrsinmrs.json. Absent by default -- this is opt-in
+    metadata, not a required input."""
+    try:
+        parsed = load_mrsinmrs(config.bids_dir)
+    except ValueError as exc:
+        return f"<p>Could not read mrsinmrs.json: {exc}</p>"
+    resolved = resolve_mrsinmrs(parsed, subject, session)
+    if not resolved:
+        return (
+            f"<p>No <code>mrsinmrs.json</code> found at the BIDS root. Consider adding one to report "
+            f"MRSI acquisition parameters per the <a href='{_MRSINMRS_URL}'>MRSinMRS</a> minimum reporting "
+            "standard (Lin et al. 2021).</p>"
+        )
+    rows = []
+    for key in sorted(resolved):
+        if key == "SequenceCitation":
+            continue
+        rows.append(f"<tr><td>{key}</td><td>{resolved[key]}</td></tr>")
+    table = "<table><tr><th>Parameter</th><th>Value</th></tr>" + "".join(rows) + "</table>"
+    citation = resolved.get("SequenceCitation")
+    citation_html = f"<p>Sequence reference: <a href='{citation}'>{citation}</a></p>" if citation else ""
+    return table + citation_html
+
+
+def _citations_html(config) -> str:
+    parts = [
+        "<p>MRSIPrep: see <code>CITATION.cff</code> in the "
+        "<a href='https://github.com/MRSI-Psychosis-UP/MRSIPrep'>MRSIPrep repository</a> for how to cite this "
+        "software.</p>",
+        f"<p>MRSI acquisition reporting follows the <a href='{_MRSINMRS_URL}'>MRSinMRS</a> minimum reporting "
+        "standard (Lin et al. 2021).</p>",
+    ]
+    citation = getattr(config, "preset_citation", None)
+    if citation:
+        text = citation.get("text", citation.get("label", ""))
+        url = citation.get("url") or (f"https://doi.org/{citation['doi']}" if citation.get("doi") else None)
+        cited = f"<a href='{url}'>{text}</a>" if url else text
+        parts.append(f"<p>Processing parameters replicate: {cited}</p>")
+    return "\n".join(parts)
 
 
 def _parcel_figures_html(report_dir: Path) -> str:
