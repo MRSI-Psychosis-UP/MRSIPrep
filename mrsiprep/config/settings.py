@@ -79,6 +79,7 @@ class MRSIPrepConfig:
     skip_file_integrity_check: bool = False
     check_external_libs: bool = False
     stop_on_first_crash: bool = False
+    preset_citation: dict | None = None
 
     def __post_init__(self) -> None:
         if not self.metabolites:

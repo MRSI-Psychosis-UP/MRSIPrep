@@ -3,10 +3,16 @@
 from __future__ import annotations
 
 import argparse
+import json
+import sys
+from dataclasses import fields as _dataclass_fields
 from pathlib import Path
 
 from mrsiprep.config.defaults import QUALITY_DEFAULTS
 from mrsiprep.config.settings import MRSIPrepConfig
+
+PRESETS_DIR = Path(__file__).resolve().parent.parent / "config" / "presets"
+_MRSIPREP_CONFIG_FIELDS = {f.name for f in _dataclass_fields(MRSIPrepConfig)}
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -184,6 +190,18 @@ def build_parser() -> argparse.ArgumentParser:
     overwrite.add_argument("--overwrite-chimera", action="store_true", help="Force re-run Chimera parcellation even if the output dseg file already exists.")
 
     runtime = parser.add_argument_group("Other options")
+    runtime.add_argument(
+        "--config-preset",
+        default=None,
+        help="Load processing-parameter defaults from a named built-in preset (see --list-presets) or a path to a "
+        "custom preset JSON file with the same shape. Explicit CLI flags always override preset values. Presets "
+        "reproduce the exact parameters of a published study; the report's Citations section credits the source.",
+    )
+    runtime.add_argument(
+        "--list-presets",
+        action="store_true",
+        help="Print available built-in --config-preset names and their source citation, then exit.",
+    )
     runtime.add_argument("--validate-only", action="store_true", help="Check selected subject/session inputs and exit without running preprocessing.")
     runtime.add_argument(
         "--skip-file-integrity-check",
@@ -208,9 +226,75 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def list_presets() -> dict[str, dict]:
+    """Built-in preset name -> parsed preset dict (including _citation)."""
+    presets = {}
+    for path in sorted(PRESETS_DIR.glob("*.json")):
+        presets[path.stem] = json.loads(path.read_text())
+    return presets
+
+
+def load_preset(name_or_path: str) -> dict:
+    """Load a preset by built-in name or filesystem path.
+
+    Returns the raw parsed dict, including the reserved "_citation" key
+    (callers are responsible for stripping it before using the rest as
+    MRSIPrepConfig field defaults).
+    """
+    builtin = PRESETS_DIR / f"{name_or_path}.json"
+    path = builtin if builtin.exists() else Path(name_or_path)
+    if not path.exists():
+        available = ", ".join(sorted(list_presets())) or "(none)"
+        raise ValueError(f"Unknown --config-preset '{name_or_path}'. Built-in presets: {available}")
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Could not parse --config-preset {path}: {exc}") from exc
+    if not isinstance(data, dict):
+        raise ValueError(f"--config-preset {path} must contain a JSON object at the top level.")
+    return data
+
+
+def print_presets() -> None:
+    presets = list_presets()
+    if not presets:
+        print("No built-in presets available.")
+        return
+    for name, data in presets.items():
+        citation = data.get("_citation", {})
+        text = citation.get("text") or citation.get("label", "")
+        doi = citation.get("doi")
+        suffix = f" (doi:{doi})" if doi else ""
+        print(f"{name}: {text}{suffix}")
+
+
 def parse_args(argv: list[str] | None = None) -> MRSIPrepConfig:
-    args = build_parser().parse_args(argv)
-    return MRSIPrepConfig(
+    argv = list(sys.argv[1:] if argv is None else argv)
+
+    preset_parser = argparse.ArgumentParser(add_help=False)
+    preset_parser.add_argument("--config-preset", default=None)
+    preset_args, _ = preset_parser.parse_known_args(argv)
+
+    parser = build_parser()
+    if preset_args.config_preset:
+        preset = dict(load_preset(preset_args.config_preset))
+        citation = preset.pop("_citation", None)
+        unknown = set(preset) - _MRSIPREP_CONFIG_FIELDS
+        if unknown:
+            raise ValueError(f"--config-preset '{preset_args.config_preset}' has unsupported field(s): {sorted(unknown)}")
+        parser.set_defaults(**preset)
+        # argparse's `required=True` checks whether the option string was seen
+        # on the command line, not whether a value is present -- set_defaults()
+        # alone does not satisfy it. The preset already supplies a value, so
+        # relax `required` for exactly the fields it covers.
+        for action in parser._actions:
+            if action.dest in preset:
+                action.required = False
+    else:
+        citation = None
+
+    args = parser.parse_args(argv)
+    config = MRSIPrepConfig(
         bids_dir=args.bids_dir,
         output_dir=args.output_dir,
         analysis_level=args.analysis_level,
@@ -281,6 +365,8 @@ def parse_args(argv: list[str] | None = None) -> MRSIPrepConfig:
         stop_on_first_crash=args.stop_on_first_crash,
         verbose=args.verbose,
     )
+    config.preset_citation = citation
+    return config
 
 
 def _parse_comma_list(value: str) -> list[str]:

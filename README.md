@@ -38,7 +38,12 @@ MRSIPrep was designed according to four main principles:
   acquisition protocol and scientific question.
 - **Transparency** — automated quality-control reports summarize spatial
   registration, metabolite coverage, voxel-level quality metrics, tissue
-  composition, and atlas projection.
+  composition, and atlas projection, including the acquisition's
+  [MRSinMRS](https://pubmed.ncbi.nlm.nih.gov/33559967/) sequence parameters
+  (from an optional `mrsinmrs.json`) and a citation section. Published-study
+  parameter sets can be reproduced with `--config-preset <name>`
+  (see `--list-presets`), which also credits the source publication in the
+  report.
 - **Analysis agnosticism** — MRSIPrep does not impose a specific downstream
   analysis; it generates standardized derivatives usable for voxelwise
   analyses, regional analyses, metabolic connectomics, gradient mapping, or
