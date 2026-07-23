@@ -31,7 +31,7 @@ def ants_transform_prefix(root: Path, subject: str, session: str | None, stage: 
     raise ValueError(f"Unsupported transform stage: {stage}")
 
 
-def transform_paths(prefix: Path, direction: str = "forward", include_missing: bool = True, backend: str = "ants") -> list[Path]:
+def transform_paths(prefix: Path, direction: str = "forward", include_missing: bool = True, backend: str = "ants", deformable: bool = False) -> list[Path]:
     if backend == "ants":
         if direction == "forward":
             paths = [prefix.with_suffix(".syn.nii.gz"), prefix.with_suffix(".affine.mat")]
@@ -40,11 +40,20 @@ def transform_paths(prefix: Path, direction: str = "forward", include_missing: b
         else:
             raise ValueError(f"Unsupported direction: {direction}")
     elif backend == "fsl":
-        # FLIRT-only: a single affine per direction, no deformable stage.
+        # FLIRT-only: a single affine per direction. flirt+FNIRT (deformable):
+        # warp + affine per direction -- apply_transforms() prefers the warp
+        # (it already encodes the affine, see interfaces.fsl.register_fnirt)
+        # and ignores the affine entry when both are present, but both are
+        # listed here so all_exist()/existence checks see the full set of
+        # files this registration actually produced.
         if direction == "forward":
             paths = [prefix.with_suffix(".flirt.mat")]
+            if deformable:
+                paths = [prefix.with_suffix(".fnirt_warp.nii.gz"), *paths]
         elif direction == "inverse":
             paths = [prefix.with_suffix(".flirt_inv.mat")]
+            if deformable:
+                paths = [*paths, prefix.with_suffix(".fnirt_warp_inv.nii.gz")]
         else:
             raise ValueError(f"Unsupported direction: {direction}")
     else:
@@ -66,8 +75,12 @@ def apply_image_transform(fixed, moving, transforms: list[Path], out_path: Path,
     return apply_transforms(fixed, moving, transforms, out_path, interpolation=interpolation, threads=threads)
 
 
+_FSL_TRANSFORM_SUFFIXES = (".flirt.mat", ".flirt_inv.mat", ".fnirt_warp.nii.gz", ".fnirt_warp_inv.nii.gz")
+
+
 def _is_fsl_transform(path: Path) -> bool:
-    """FSL (FLIRT) transform files use ``.flirt.mat``/``.flirt_inv.mat`` --
-    distinct suffixes from ANTs' ``.affine.mat``/``.syn.nii.gz``/etc., so this
-    is an unambiguous filename check, not content-sniffing."""
-    return path.name.endswith(".flirt.mat") or path.name.endswith(".flirt_inv.mat")
+    """FSL (FLIRT/FNIRT) transform files use distinct suffixes
+    (``.flirt.mat``/``.flirt_inv.mat``/``.fnirt_warp.nii.gz``/
+    ``.fnirt_warp_inv.nii.gz``) from ANTs' ``.affine.mat``/``.syn.nii.gz``/
+    etc., so this is an unambiguous filename check, not content-sniffing."""
+    return path.name.endswith(_FSL_TRANSFORM_SUFFIXES)

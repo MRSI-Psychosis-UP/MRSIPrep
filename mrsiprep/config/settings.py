@@ -30,7 +30,10 @@ class MRSIPrepConfig:
     fsl_mrsi_to_t1_dof: int = 6
     fsl_mrsi_to_t1_init: str = "flirt"
     fsl_t1_to_mni_dof: int = 12
-    fsl_cost: str = "mutualinfo"
+    fsl_cost: str = "corratio"
+    fsl_deformable: bool = True
+    fsl_fnirt_warpres: tuple[int, int, int] | None = None
+    fsl_fnirt_lambda: str = "300,200,150,150"
     normalization: str = "simple"
     output_spaces: list[str] = field(default_factory=lambda: ["MNI152NLin2009cAsym"])
     output_mrsi_t1w: bool = False
@@ -128,8 +131,13 @@ class MRSIPrepConfig:
             self.parcellation_mode = "synthseg" if self.processing_mode in {"mni-norm", "midas"} else "chimera"
         if self.processing_mode == "mni-norm" and self.parcellation_mode != "synthseg":
             raise ValueError("mni-norm only supports SynthSeg parcellation. Use --mode parc-con for Chimera or MNI atlases.")
-        if self.processing_mode == "mni-norm" and self.registration_t1_target not in {"brain", "raw"}:
-            raise ValueError("mni-norm supports SynthSeg brain or raw T1w registration targets.")
+        # brain-csf is allowed under mni-norm: SynthSeg parcellation always
+        # parcellates the raw T1w directly, independent of
+        # registration_t1w/registration_t1_target, so there is no coupling
+        # between the registration target and mni-norm's forced SynthSeg
+        # parcellation that would make brain-csf unsafe here.
+        if self.registration_t1_target not in {"brain", "raw", "brain-csf"}:
+            raise ValueError(f"Unsupported registration target: {self.registration_t1_target}")
         if self.processing_mode == "parc-con" and self.parcellation_mode == "synthseg":
             raise ValueError("parc-con requires Chimera or MNI atlas parcellation.")
         if self.processing_mode == "midas":

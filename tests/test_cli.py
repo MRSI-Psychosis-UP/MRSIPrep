@@ -50,7 +50,7 @@ class CLITests(unittest.TestCase):
             "12",
         ])
         self.assertEqual(cfg.registration_backend, "fsl")
-        self.assertEqual(cfg.fsl_cost, "mutualinfo")
+        self.assertEqual(cfg.fsl_cost, "corratio")
 
     def test_cli_parc_con_mode_defaults_to_chimera_and_synthseg_brain(self):
         cfg = parse_args(["/tmp/bids", "/tmp/out", "participant", "--mode", "parc-con"])
@@ -99,6 +99,20 @@ class CLITests(unittest.TestCase):
         with self.assertRaises(ValueError):
             parse_args(["/tmp/bids", "/tmp/out", "participant", "--parcellation-mode", "chimera"])
 
+    def test_cli_mni_norm_accepts_brain_csf_registration_target(self):
+        cfg = parse_args(["/tmp/bids", "/tmp/out", "participant", "--registration-t1-target", "brain-csf"])
+        self.assertEqual(cfg.processing_mode, "mni-norm")
+        self.assertEqual(cfg.registration_t1_target, "brain-csf")
+
+    def test_config_rejects_unsupported_registration_target(self):
+        from mrsiprep.config.settings import MRSIPrepConfig
+
+        with self.assertRaises(ValueError):
+            MRSIPrepConfig(
+                "/tmp/bids", "/tmp/out", "participant",
+                metabolites=["CrPCr"], ref_met="CrPCr", registration_t1_target="bogus",
+            )
+
     def test_cli_synthseg_fast_option(self):
         cfg = parse_args(["/tmp/bids", "/tmp/out", "participant", "--tissue-backend", "synthseg-fast"])
         self.assertEqual(cfg.tissue_backend, "synthseg-fast")
@@ -111,6 +125,27 @@ class CLITests(unittest.TestCase):
     def test_cli_validate_only_option(self):
         cfg = parse_args(["/tmp/bids", "/tmp/out", "participant", "--validate-only"])
         self.assertTrue(cfg.validate_only)
+
+    def test_cli_fsl_deformable_defaults_on(self):
+        cfg = parse_args(["/tmp/bids", "/tmp/out", "participant"])
+        self.assertTrue(cfg.fsl_deformable)
+        self.assertIsNone(cfg.fsl_fnirt_warpres)
+        self.assertEqual(cfg.fsl_fnirt_lambda, "300,200,150,150")
+
+    def test_cli_no_fsl_deformable_opts_out(self):
+        cfg = parse_args(["/tmp/bids", "/tmp/out", "participant", "--registration-backend", "fsl", "--no-fsl-deformable"])
+        self.assertFalse(cfg.fsl_deformable)
+
+    def test_cli_fsl_deformable_warpres_override(self):
+        cfg = parse_args([
+            "/tmp/bids", "/tmp/out", "participant",
+            "--registration-backend", "fsl",
+            "--fsl-fnirt-warpres", "6", "6", "6",
+            "--fsl-fnirt-lambda", "100,100,100",
+        ])
+        self.assertTrue(cfg.fsl_deformable)
+        self.assertEqual(cfg.fsl_fnirt_warpres, (6, 6, 6))
+        self.assertEqual(cfg.fsl_fnirt_lambda, "100,100,100")
 
     def test_cli_fs_subjects_dir_option(self):
         cfg = parse_args([

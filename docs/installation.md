@@ -63,6 +63,23 @@ for the full option list.
 You will still need a BIDS dataset with already-quantified MRSI maps; see
 [Basic Usage](usage_basic.md) for the full command-line walkthrough.
 
+## Minimum hardware requirements
+
+| Resource | Minimum | Notes |
+|---|---|---|
+| RAM (Docker-allocated) | **8 GB** | Below this, `mri_synthseg` reliably crashes with `std::bad_alloc` / exit status `-9` (SIGKILL from the OOM killer) — confirmed reproducible with as little as 4 GB allocated to the Docker VM, and previously hit on GitHub Actions' standard 16 GB runners under concurrent `--nproc`. `--synthseg-mode fast` uses somewhat less memory than `robust` (the default) but is not a substitute for adequate RAM. |
+| CPU cores | **4** | `recon-all` (parc-con + Chimera) and `mri_synthseg` are the most CPU-heavy steps; `--nthreads`/`--nproc` (see [Basic Usage](usage_basic.md)) should stay within the machine's actual core count — MRSIPrep coerces `--nthreads` down automatically if `nproc * nthreads` would exceed it. |
+| Disk | A few GB per subject/session | Nipype's `--work-dir` cache (SynthSeg/FAST intermediates, resampled QC scratch maps) is the bulk of this; safe to delete between runs (see "The Nipype workflow engine" in [Basic Usage](usage_basic.md)). |
+
+**On memory specifically**: if running multiple subjects concurrently
+(`--nproc > 1`), each concurrent recording's `mri_synthseg`/`recon-all`
+process needs its own share of RAM — the 8 GB minimum above is per
+*concurrent* subject, not a fixed total. A batch run with `--nproc 4` should
+have roughly `4 x 8 GB` = 32 GB available, not just 8 GB total, or reduce
+`--nproc` instead. If you hit `mri_synthseg exited with status -9` or
+`recon-all` disappearing mid-run with no other error, this is almost always
+insufficient memory, not a data or configuration problem.
+
 ## Container internals
 
 Two things run automatically inside the container on every invocation
