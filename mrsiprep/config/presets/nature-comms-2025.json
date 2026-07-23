@@ -1,0 +1,29 @@
+{
+  "_citation": {
+    "label": "nature-comms-2025",
+    "text": "Lucchetti, F., Céléreau, E., Steullet, P., Alemán-Gómez, Y., Hagmann, P., Klauser, A., & Klauser, P. (2025). Constructing the human brain metabolic connectome with MR spectroscopic imaging reveals cerebral biochemical organization. Nature Communications, 16.",
+    "doi": "10.1038/s41467-025-66124-w",
+    "url": "https://doi.org/10.1038/s41467-025-66124-w"
+  },
+  "processing_mode": "parc-con",
+  "metabolites": ["CrPCr", "GluGln", "GPCPCh", "NAANAAG", "Ins"],
+  "quality_metrics": ["snr", "linewidth"],
+  "snr_min": 4.0,
+  "linewidth_max": 0.1,
+  "crlb_max": 20.0,
+  "tissue_backend": "existing",
+  "registration_backend": "ants",
+  "ants_mrsi_to_t1_transform": "sr",
+  "ref_met": "CrPCr",
+  "parcellation_mode": "chimera",
+  "chimera_scheme": "LFMIHIFIFS",
+  "chimera_scale": 3,
+  "write_connectivity": true,
+  "connectivity_space": "MRSI",
+  "connectivity_n_perturbations": 50,
+  "connectivity_sigma_scale": 2.0,
+  "connectivity_exclude_parcels": "wm",
+  "spike_percentile": 99.0,
+  "registration_t1_target": "brain",
+  "csf_pv_threshold": 0.95
+}

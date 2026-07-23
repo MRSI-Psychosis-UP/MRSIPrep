@@ -1,0 +1,23 @@
+{
+  "_citation": {
+    "label": "imaging-neurosci-2026",
+    "text": "Céléreau, E., Lucchetti, F., Alemán-Gómez, Y., Dwir, D., Cleusix, M., Ledoux, J.-B., Jenni, R., Conchon, C., Bach Cuadra, M., Schilliger, Z., Solida, A., Armando, M., Plessen, K. J., Hagmann, P., Conus, P., Klauser, A., & Klauser, P. (2026). High-resolution whole-brain magnetic resonance spectroscopic imaging in youth at risk for psychosis. Imaging Neuroscience, 4.",
+    "doi": "10.1162/imag.a.1276",
+    "url": "https://doi.org/10.1162/imag.a.1276"
+  },
+  "processing_mode": "mni-norm",
+  "metabolites": ["CrPCr", "GluGln", "GPCPCh", "NAANAAG", "Ins"],
+  "quality_metrics": ["snr", "linewidth"],
+  "snr_min": 4.0,
+  "linewidth_max": 0.1,
+  "crlb_max": 20.0,
+  "tissue_backend": "existing",
+  "registration_backend": "ants",
+  "ants_mrsi_to_t1_transform": "sr",
+  "ants_t1_to_mni_transform": "s",
+  "ref_met": "CrPCr",
+  "spike_percentile": 99.0,
+  "registration_t1_target": "brain",
+  "csf_pv_threshold": 0.95,
+  "mni_resolution": "5mm"
+}

@@ -24,6 +24,14 @@ creates a quality-control report for each run.
 It is derived from the implementation in `MRSI-Metabolic-Connectome` and preserves the CHUV
 academic non-commercial research license.
 
+Every report includes the acquisition's [MRSinMRS](https://pubmed.ncbi.nlm.nih.gov/33559967/)
+minimum-reporting-standard sequence parameters (read from an optional
+`mrsinmrs.json` at the BIDS root) and a citation section, so results are
+easy to trace back to both the software and the acquisition protocol used.
+Published-study parameter sets can be reproduced directly with
+`--config-preset <name>` (see `--list-presets`); the report then credits
+the source publication.
+
 ![MRSIPrep pipeline schematic](figures/pipeline_schematic.png)
 
 ## Test Dataset

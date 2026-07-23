@@ -125,3 +125,69 @@ class CLITests(unittest.TestCase):
             "/tmp/fs",
         ])
         self.assertEqual(cfg.freesurfer_dir, Path("/tmp/fs"))
+
+
+class ConfigPresetTests(unittest.TestCase):
+    def test_nature_comms_2025_preset_sets_parc_con_parameters(self):
+        cfg = _parse_args([
+            "/tmp/bids",
+            "/tmp/out",
+            "participant",
+            "--config-preset",
+            "nature-comms-2025",
+        ])
+        self.assertEqual(cfg.processing_mode, "parc-con")
+        self.assertEqual(cfg.tissue_backend, "existing")
+        self.assertEqual(cfg.registration_backend, "ants")
+        self.assertEqual(cfg.parcellation_mode, "chimera")
+        self.assertEqual(cfg.chimera_scheme, "LFMIHIFIFS")
+        self.assertTrue(cfg.write_connectivity)
+        self.assertEqual(cfg.connectivity_space, "MRSI")
+        self.assertEqual(cfg.metabolites, ["CrPCr", "GluGln", "GPCPCh", "NAANAAG", "Ins"])
+        self.assertIsNotNone(cfg.preset_citation)
+        self.assertEqual(cfg.preset_citation["doi"], "10.1038/s41467-025-66124-w")
+
+    def test_imaging_neurosci_2026_preset_sets_mni_norm_parameters(self):
+        cfg = _parse_args([
+            "/tmp/bids",
+            "/tmp/out",
+            "participant",
+            "--config-preset",
+            "imaging-neurosci-2026",
+        ])
+        self.assertEqual(cfg.processing_mode, "mni-norm")
+        self.assertEqual(cfg.tissue_backend, "existing")
+        self.assertEqual(cfg.ants_t1_to_mni_transform, "s")
+        self.assertEqual(cfg.mni_resolution, "5mm")
+        self.assertIsNotNone(cfg.preset_citation)
+        self.assertEqual(cfg.preset_citation["doi"], "10.1162/imag.a.1276")
+
+    def test_explicit_cli_flag_overrides_preset_value(self):
+        cfg = _parse_args([
+            "/tmp/bids",
+            "/tmp/out",
+            "participant",
+            "--config-preset",
+            "imaging-neurosci-2026",
+            "--mni-resolution",
+            "2mm",
+        ])
+        self.assertEqual(cfg.mni_resolution, "2mm")
+
+    def test_no_preset_leaves_preset_citation_none(self):
+        cfg = parse_args(["/tmp/bids", "/tmp/out", "participant"])
+        self.assertIsNone(cfg.preset_citation)
+
+    def test_unknown_preset_name_raises(self):
+        with self.assertRaises(ValueError):
+            _parse_args([
+                "/tmp/bids",
+                "/tmp/out",
+                "participant",
+                "--config-preset",
+                "does-not-exist",
+                "--metabolites",
+                "CrPCr",
+                "--ref-met",
+                "CrPCr",
+            ])
