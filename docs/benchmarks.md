@@ -80,7 +80,10 @@ Two single-subject `mrsiprep` runs, one per dataset, repeated at
 run, so `--nthreads` is the only varying parameter). Each run used a
 **fresh `--work-dir`** (no Nipype caching carried over between
 thread-count variants), so every number below reflects genuine
-full-pipeline computation, not a partially cached rerun.
+full-pipeline computation, not a partially cached rerun. All 8 runs (2
+subjects × 4 thread counts) were executed **strictly sequentially, one at
+a time**, with no other run or concurrent load on the machine, to rule
+out cross-run resource contention affecting the timings.
 
 - **3 Tesla subject** — a real MRSI acquisition with an MP2RAGE anatomical.
 - **7 Tesla subject** — a real MRSI acquisition with an MP2RAGE
@@ -116,9 +119,9 @@ which aren't wrapped in a named, timed pipeline step.
 
 ## Interpretation
 
-* **Runtime is nearly unchanged from 8 to 32 threads** for both subjects, with variations of only ~2%. ANTs registration and SynthSeg show little scaling beyond ~8 threads, so for batch processing it is generally better to use ~8–12 threads per subject and increase `--nproc` rather than allocate more threads to each subject.
+* **Runtime is essentially flat from 8 to 32 threads** for both subjects when each run is isolated from other load: 3T ranges 300–318s (~6% spread) and 7T ranges 1227–1235s (under 1% spread), with no consistent downward trend past 8 threads. ANTs registration (the largest single segment at both field strengths) and SynthSeg tissue segmentation show effectively no benefit from more than ~8 threads, so for batch processing it is generally better to use ~8 threads per subject and increase `--nproc` (running more subjects in parallel) rather than allocate more threads to each individual subject.
 
-* **The 7T subject takes about 4× longer than the 3T subject** (~20.5 vs. ~5.1 minutes). This is mainly due to the 7T T1w image having ~7.2× more voxels, which increases registration and segmentation costs. The MRSI grid has only ~2.1× more usable voxels, making anatomical—not MRSI—resolution the main runtime driver.
+* **The 7T subject takes about 4× longer than the 3T subject** (~20.5 vs. ~5.1 minutes). This is mainly due to the 7T T1w image having ~7.2× more voxels, which increases registration and segmentation costs. The MRSI grid has only ~2.1× more usable voxels, making anatomical — not MRSI — resolution the main runtime driver. Tissue segmentation (`mri_synthseg`) and MRSI-T1w-MNI registration (ANTs rigid+affine+SyN) together account for the large majority of total runtime at both field strengths.
 
 ## Registration Frameworks
 
