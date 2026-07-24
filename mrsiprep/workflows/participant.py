@@ -48,6 +48,8 @@ from mrsiprep.workflows.tissue import run_tissue_workflow, segment_t1_fuzzy_cmea
 
 @dataclass
 class RecordingStatus:
+    """Outcome of processing (or validating) one subject/session recording."""
+
     subject: str
     session: str | None
     status: str
@@ -309,6 +311,14 @@ def _build_subject_templates(config, ready: list[Recording], debug: Debug) -> di
 
 
 def run_participant_workflow(config) -> list[RecordingStatus]:
+    """Run the full mrsiprep pipeline for every recording matched by ``config``.
+
+    This is the top-level entry point invoked by the CLI (``mrsiprep`` /
+    ``run_participant_workflow`` in :mod:`mrsiprep.cli.run`): it discovers
+    recordings, validates inputs, builds subject templates for
+    ``--longitudinal`` runs, then dispatches each ready recording to the
+    Nipype execution engine.
+    """
     ensure_work_dirs(config)
     init_derivative(config.derivative_dir)
     debug = Debug(verbose=config.verbose)
@@ -349,6 +359,12 @@ def run_participant_workflow(config) -> list[RecordingStatus]:
 
 
 def validate_participant_inputs(config) -> list[RecordingStatus]:
+    """Dry-run input validation for every recording matched by ``config``.
+
+    Same discovery/validation logic as :func:`run_participant_workflow`
+    but never dispatches processing -- used by ``--validate-only`` to
+    report which recordings are ready without running the pipeline.
+    """
     debug = Debug(verbose=config.verbose)
     recordings = collect_recordings(config)
     summaries = [

@@ -11,6 +11,8 @@ from mrsiprep.registration.t1_to_mni import T1ToMNIResult, compose_longitudinal_
 
 @dataclass
 class RegistrationResult:
+    """Forward/inverse transforms produced by :func:`run_registration_workflow`."""
+
     mrsi_to_t1: MRSIToT1Result
     t1_to_mni: T1ToMNIResult | None
 

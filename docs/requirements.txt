@@ -2,3 +2,12 @@ sphinx
 sphinx-rtd-theme
 myst-parser
 sphinx-argparse
+numpy
+scipy
+pandas
+nibabel
+nilearn
+matplotlib
+scikit-image
+rich
+nipype>=1.8

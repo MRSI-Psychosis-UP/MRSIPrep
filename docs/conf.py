@@ -7,7 +7,10 @@ from pathlib import Path
 # config.defaults, io.bids) is dependency-light by design -- no numpy/nipype/
 # nibabel required at import time -- specifically so sphinx-argparse can
 # introspect the live parser here without needing the full scientific stack
-# installed in the docs build environment.
+# installed in the docs build environment. The API reference pages (below)
+# do need the full stack, listed in docs/requirements.txt -- antspyx is
+# never imported at module level anywhere in mrsiprep (only lazily inside
+# interfaces/ants.py), so it's deliberately excluded from that list.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 project = "MRSIPrep"
@@ -17,7 +20,20 @@ author = "Federico Lucchetti"
 extensions = [
     "myst_parser",
     "sphinxarg.ext",
+    "sphinx.ext.autodoc",
+    "sphinx.ext.autosummary",
+    "sphinx.ext.napoleon",
+    "sphinx.ext.viewcode",
 ]
+
+autosummary_generate = True
+autodoc_default_options = {
+    "members": True,
+    "undoc-members": False,
+    "show-inheritance": False,
+}
+autodoc_typehints = "description"
+autodoc_mock_imports = ["antspyx"]
 
 # sphinxarg.ext's ArgParseDomain doesn't implement merge_domaindata, which
 # Sphinx requires for parallel reads -- Read the Docs always builds with

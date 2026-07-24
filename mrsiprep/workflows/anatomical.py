@@ -14,6 +14,8 @@ from mrsiprep.io.naming import anat_derivative
 
 @dataclass
 class AnatomicalResult:
+    """T1w images/masks selected for registration, from :func:`prepare_anatomical`."""
+
     t1w: Path
     raw_t1w: Path | None
     brain_mask: Path | None
@@ -30,6 +32,12 @@ def prepare_anatomical(
     p3_override: Path | None = None,
     brain_mask_override: Path | None = None,
 ) -> AnatomicalResult:
+    """Resolve which T1w image/mask registration should target.
+
+    Dispatches on ``config.registration_t1_target`` (``brain``,
+    ``brain-csf``, or ``raw``); for ``brain-csf`` this builds a fresh
+    skull-stripped-plus-CSF T1w and mask via :func:`create_brain_csf_t1`.
+    """
     layout = BIDSLayout(config.bids_dir, filters=config.bids_filters)
     raw_t1 = layout.raw_t1(subject, session)
     brain_mask = brain_mask_override or layout.brain_mask(subject, session)
@@ -70,6 +78,13 @@ def prepare_anatomical(
 
 
 def create_brain_csf_t1(skull_t1: Path, raw_t1: Path, p3: Path, out_t1: Path, out_mask: Path, threshold: float = 0.95, overwrite: bool = False) -> tuple[Path, Path]:
+    """Re-add the CSF compartment to a skull-stripped T1w for the ``brain-csf`` registration target.
+
+    Combines the ``skull_t1`` brain mask with voxels where the CAT12 CSF
+    probability map (``p3``) exceeds ``threshold``, then masks ``raw_t1``
+    with the union -- so CSF-adjacent MRSI signal isn't clipped at the
+    brain-only boundary.
+    """
     if out_t1.exists() and out_mask.exists() and not overwrite:
         return out_t1, out_mask
 
