@@ -140,30 +140,22 @@ the same 3 Tesla and 7 Tesla subjects used above, varying
 `experiments/registration_backend_benchmark.py` (not published; internal
 validation script).
 
-**Two versions of the "outside brain" metric are reported below, because
-the first version turned out to be a misleading measure of registration
-quality on its own:**
+**"Covered"** is defined as: the native-resolution MRSI acquisition
+brainmask (mrsiprep's own real coverage mask, not a signal threshold),
+resampled with **nearest-neighbor** interpolation (which cannot invent
+smeared boundary values the way linear/spline interpolation does), **and**
+requiring the resampled CRLB map ≤ 20 (mrsiprep's own default
+`--crlb-max`, its existing per-voxel quality criterion) at that location —
+only voxels passing both conditions count as real, quantifiable MRSI
+coverage. (An earlier version of this metric used "resampled signal
+nonzero" as the coverage criterion, which overstated leakage by counting
+linear/spline interpolation smear at the boundary as coverage; the
+mask+CRLB definition above avoids that.)
 
-- **Original metric**: "covered" = wherever the resampled reference
-  metabolite (CrPCr) signal map is nonzero. This overstates leakage,
-  because resampling a coarse (~5mm/~3.4mm) native MRSI grid onto a fine
-  1mm MNI grid via linear/spline interpolation smears real signal a
-  little past its true edge — those smeared near-zero residual voxels
-  still count as "signal," inflating the outside-brain count with
-  interpolation artifacts rather than genuine registration error.
-- **Corrected metric**: "covered" = the native-resolution MRSI acquisition
-  brainmask (mrsiprep's own real coverage mask, not a signal threshold),
-  resampled with **nearest-neighbor** interpolation (which cannot invent
-  smeared boundary values the way linear/spline interpolation does), **and**
-  requiring the resampled CRLB map ≤ 20 (mrsiprep's own default
-  `--crlb-max`, its existing per-voxel quality criterion) at that location.
-  Only voxels passing both conditions count as real, quantifiable MRSI
-  coverage.
-
-Both are computed against the same three reference masks: the T1w
-brain-only mask, the T1w brain+CSF mask, and the MNI152 template's own
-standard brain mask (in MNI space) — counting how many "covered" voxels
-fall **outside** each reference mask.
+This is computed against three reference masks: the T1w brain-only mask,
+the T1w brain+CSF mask, and the MNI152 template's own standard brain mask
+(in MNI space) — counting how many "covered" voxels fall **outside** each
+reference mask.
 
 ### Results
 
@@ -186,46 +178,50 @@ leaked beyond the true brain boundary during registration — visible here
 for both FSL variants at both field strengths, most noticeably as a
 coarser, less anatomically detailed outer edge than ANTs produces.
 
-**Original vs. corrected "outside brain" metric, by backend (brain
-target; brain+CSF is within ±1-2 points of these and shows the same
-pattern):**
+**Resampled MRSI voxels falling outside the MNI152 brain mask, by
+backend (brain target; brain+CSF is within ±1-2 points of these and shows
+the same pattern):**
 
-![Bar chart: original (signal>0) vs. corrected (native mask + CRLB<=20) percentage of resampled MRSI voxels outside the MNI152 brain mask, by registration backend, faceted by 3 Tesla vs 7 Tesla](figures/registration_backend_mni_outside_comparison.png)
+![Bar chart: percentage of resampled MRSI voxels outside the MNI152 brain mask, by registration backend, faceted by 3 Tesla vs 7 Tesla](figures/registration_backend_mni_outside_comparison.png)
+
+**Total `mni-norm` wall-clock runtime by registration backend** (same two
+subjects, averaged across the `brain`/`brain+CSF` targets):
+
+![Bar chart: total mni-norm runtime in minutes, by registration backend (ANTs, FSL FLIRT, FSL FLIRT+FNIRT), for 3 Tesla vs 7 Tesla](figures/registration_backend_runtime.png)
 
 ### Interpretation
 
-* **The correction roughly halves the apparent leakage for ANTs and FSL
-  FLIRT, confirming most of the original metric's "outside brain" count
-  was interpolation smear, not real registration error.** ANTs drops from
-  18.0%→9.6% (3T) and 12.9%→10.6% (7T); FSL FLIRT-only drops from
-  34.0%→11.4% (3T) and 19.8%→12.0% (7T). Even the corrected numbers are
-  not "wrong registration" in a literal sense — a thin shell of boundary
-  voxels is an inherently larger fraction of total 3D volume than it
-  looks on any single 2D slice, so some nonzero baseline is expected even
-  for a hypothetically perfect registration.
+* **ANTs and FSL FLIRT-only are close on outside-brain leakage** (9.6% vs.
+  11.4% at 3T; 10.6% vs. 12.0% at 7T). ANTs still wins, consistent with
+  the overlay figures showing its sharper, more anatomically detailed
+  result, but the margin is modest. Even these numbers are not "wrong
+  registration" in a literal sense — a thin shell of boundary voxels is an
+  inherently larger fraction of total 3D volume than it looks on any
+  single 2D slice, so some nonzero baseline is expected even for a
+  hypothetically perfect registration.
 
-* **ANTs and FSL FLIRT-only are now close** under the corrected metric
-  (9.6% vs. 11.4% at 3T; 10.6% vs. 12.0% at 7T) — the large gap in the
-  original metric was mostly an artifact of the two methods producing
-  different amounts of interpolation smear, not a large true difference
-  in anatomical accuracy. ANTs still wins, consistent with the overlay
-  figures showing its sharper, more anatomically detailed result, but the
-  margin is much smaller than the original metric suggested.
-
-* **FSL FLIRT+FNIRT's corrected number is a known measurement artifact,
-  not evidence FNIRT is worse.** Its corrected leakage barely changes (3T:
-  24.4%→22.9%; 7T: 16.3%→19.6%) — worse, in relative terms, than either
-  affine-only method. This is because the corrected metric resamples a
+* **FSL FLIRT+FNIRT's higher outside-brain number here (22.9% at 3T,
+  19.6% at 7T) is a known measurement artifact of this specific metric,
+  not evidence FNIRT produces worse registration.** The metric resamples a
   **binary** coverage mask with **nearest-neighbor** interpolation through
   each transform, and a nonlinear warp (FNIRT's deformable field, unlike
-  ANTs' and FLIRT's affine transforms used here for this specific mask
-  resampling) can locally stretch space and dilate a binary mask's
-  footprint independent of whether the underlying registration is more or
-  less anatomically accurate. The overlay figures and the original
-  signal-based metric — both of which resample the actual continuous
-  signal rather than a binary mask — remain the better evidence that
-  FNIRT genuinely improves on FLIRT-only, consistent with FNIRT's default
-  status for `--registration-backend fsl`.
+  ANTs' and FLIRT's affine transforms) can locally stretch space and
+  dilate a binary mask's footprint independent of whether the underlying
+  registration is more or less anatomically accurate. The overlay figures
+  — which show the actual continuous resampled signal, not a binary mask
+  — remain the better evidence that FNIRT genuinely improves on
+  FLIRT-only.
+
+* **FNIRT's accuracy comes at a substantial runtime cost.** At 3T, FNIRT
+  (11.6 min) costs roughly 3.8× FLIRT-only (3.1 min) and is comparable to
+  ANTs (9.3 min). At 7T, the gap widens sharply: FNIRT (53.0 min) is
+  roughly 4.7× FLIRT-only (11.2 min) and nearly 2× ANTs itself (27.0 min)
+  — FNIRT is the slowest of all three options at 7T despite ANTs still
+  giving the best registration quality. For batch processing where
+  runtime matters and the FSL toolchain is required for another reason,
+  FLIRT-only may be preferable to FNIRT despite its higher leakage;
+  otherwise ANTs remains the best combination of accuracy and runtime at
+  both field strengths.
 
 * **Brain vs. brain+CSF as the T1w registration target has a small effect
   that flips direction between field strengths** (this pattern is
