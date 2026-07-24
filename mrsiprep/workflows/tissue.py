@@ -17,6 +17,8 @@ from mrsiprep.utils.images import load_3d_data, save_nifti
 
 @dataclass
 class TissueResult:
+    """GM/WM/CSF probability maps in T1w and MRSI space, from :func:`run_tissue_workflow`."""
+
     t1: dict[str, Path]
     mrsi: dict[str, Path]
 
@@ -52,6 +54,14 @@ def run_tissue_workflow(
     t1_to_mrsi_transforms: list[Path],
     precomputed_tissue_t1: dict[str, Path] | None = None,
 ) -> TissueResult:
+    """Segment tissue class probabilities in T1w space and resample to MRSI space.
+
+    Backend is selected via ``config.tissue_backend`` (SynthSeg+FAST by
+    default for ``mni-norm``/``parc-con``; fuzzy c-means for ``--mode
+    midas``, via :func:`segment_t1_fuzzy_cmeans`). MRSI-space resampling
+    uses PSF convolution to match the MRSI acquisition's point-spread
+    function.
+    """
     backend = config.tissue_backend
     if precomputed_tissue_t1 is not None:
         tissue_t1 = precomputed_tissue_t1

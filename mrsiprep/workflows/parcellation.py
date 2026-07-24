@@ -8,6 +8,10 @@ from mrsiprep.parcellation.synthseg import run_synthseg_parcellation
 
 
 def run_parcellation_workflow(config, subject, session, mrsi_reference, registration_result, raw_t1=None, t1_reference=None):
+    """Dispatch to the configured parcellation backend (``synthseg``, ``chimera``, or ``mni``)
+    and project the resulting atlas labels into MRSI-native space via ``registration_result``'s
+    inverse transforms.
+    """
     if config.parcellation_mode == "synthseg":
         if raw_t1 is None:
             raise FileNotFoundError("SynthSeg parcellation requires a raw T1w image.")
