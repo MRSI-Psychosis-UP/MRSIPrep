@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- Replaced the Registration Frameworks benchmark's mask-based "outside
+  brain" voxel-count metric with a **signal-weighted leakage** metric
+  (fraction of resampled CrPCr signal *mass*, not raw voxel count, falling
+  outside the reference brain mask). The mask-based metric, while an
+  improvement over its own predecessor, over-penalized FSL FLIRT+FNIRT
+  specifically: nearest-neighbor-resampling a binary coverage mask
+  through FNIRT's nonlinear warp locally dilates the mask's footprint
+  independent of true registration accuracy. Weighting by actual signal
+  magnitude removes this artifact; under the corrected metric, ANTs has
+  the least leakage at both field strengths, followed by FSL FLIRT-only,
+  with FSL FLIRT+FNIRT leaking the most signal mass of the three — the
+  opposite ranking of FNIRT vs. FLIRT-only that the mask-based metric had
+  shown at 7T. See `docs/benchmarks.md`.
 - Corrected the Registration Frameworks benchmark's "outside brain mask"
   metric: it now resamples the native-resolution MRSI acquisition
   brainmask with nearest-neighbor interpolation and requires CRLB ≤ 20
