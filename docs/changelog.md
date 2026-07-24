@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Corrected the Registration Frameworks benchmark's "outside brain mask"
+  metric: it now resamples the native-resolution MRSI acquisition
+  brainmask with nearest-neighbor interpolation and requires CRLB ≤ 20
+  (mrsiprep's own `--crlb-max` default) rather than treating any nonzero
+  resampled signal as "covered" — the previous signal-based metric
+  overstated leakage by counting linear/spline interpolation smear at the
+  brain boundary as real coverage. Also added a wall-clock runtime
+  comparison (ANTs vs. FSL FLIRT vs. FSL FLIRT+FNIRT, 3T vs. 7T) to the
+  same benchmark section, showing FNIRT's substantial extra cost
+  (especially at 7T: ~53 min vs. ~27 min for ANTs vs. ~11 min for
+  FLIRT-only). See `docs/benchmarks.md`.
 - Added an FNIRT deformable stage to the FSL registration backend for
   MRSI→T1w (`--fsl-deformable`, **on by default** when
   `--registration-backend fsl` is selected; `--no-fsl-deformable` reverts
