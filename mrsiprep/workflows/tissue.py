@@ -17,7 +17,12 @@ from mrsiprep.utils.images import load_3d_data, save_nifti
 
 @dataclass
 class TissueResult:
-    """GM/WM/CSF probability maps in T1w and MRSI space, from :func:`run_tissue_workflow`."""
+    """GM/WM/CSF probability maps in T1w and MRSI space, from :func:`run_tissue_workflow`.
+
+    :ivar t1: T1w-space tissue probability maps, keyed by label
+        (``"GM"``, ``"WM"``, ``"CSF"``).
+    :ivar mrsi: The same tissue classes, resampled onto the MRSI grid.
+    """
 
     t1: dict[str, Path]
     mrsi: dict[str, Path]
@@ -28,6 +33,17 @@ def segment_t1_fuzzy_cmeans(config, subject: str, session: str | None, t1_path: 
 
     Writes GM/WM/CSF probseg NIfTIs using the same ``anat_derivative`` naming
     as ``segment_t1_synthseg_fast``, so downstream consumers need no changes.
+
+    :param config: Run-wide :class:`mrsiprep.config.settings.MRSIPrepConfig`.
+    :param subject: BIDS subject label, without the ``sub-`` prefix.
+    :param session: BIDS session label without the ``ses-`` prefix, or
+        ``None`` for session-less datasets.
+    :param t1_path: Skull-stripped T1w image to segment.
+    :param brain_mask_path: Brain mask matching ``t1_path``, thresholded
+        at 0.5 to select voxels the c-means clustering runs over.
+    :returns: Dict of ``{"GM": path, "WM": path, "CSF": path}``, skipped
+        (returned as-is) if all three already exist and neither
+        ``config.overwrite_seg`` nor ``config.overwrite`` is set.
     """
     outputs = {
         label: anat_derivative(config.derivative_dir, subject, session, space="T1w", label=label, suffix_override="probseg")
@@ -56,11 +72,32 @@ def run_tissue_workflow(
 ) -> TissueResult:
     """Segment tissue class probabilities in T1w space and resample to MRSI space.
 
-    Backend is selected via ``config.tissue_backend`` (SynthSeg+FAST by
-    default for ``mni-norm``/``parc-con``; fuzzy c-means for ``--mode
-    midas``, via :func:`segment_t1_fuzzy_cmeans`). MRSI-space resampling
-    uses PSF convolution to match the MRSI acquisition's point-spread
-    function.
+    T1w-space segmentation is selected via ``config.tissue_backend``:
+    ``"synthseg-fast"`` runs SynthSeg + FSL FAST, ``"existing"`` reuses a
+    precomputed CAT12 segmentation found in the BIDS layout. Resampling
+    to MRSI space uses PSF convolution (matching the MRSI acquisition's
+    point-spread function) when ``config.processing_mode == "midas"`` --
+    following Maudsley et al. 2006 -- and plain transform-based resampling
+    otherwise.
+
+    :param config: Run-wide :class:`mrsiprep.config.settings.MRSIPrepConfig`.
+    :param subject: BIDS subject label, without the ``sub-`` prefix.
+    :param session: BIDS session label without the ``ses-`` prefix, or
+        ``None`` for session-less datasets.
+    :param t1_path: Skull-stripped T1w image to segment (ignored if
+        ``precomputed_tissue_t1`` is given).
+    :param brain_mask: T1w-space brain mask; may be ``None`` depending on backend.
+    :param mrsi_reference: Reference-metabolite image defining the target
+        MRSI grid for resampling.
+    :param t1_to_mrsi_transforms: Inverse (T1w→MRSI) transform chain, as
+        produced by :attr:`mrsiprep.workflows.registration.RegistrationResult.mrsi_to_t1`'s
+        ``inverse``.
+    :param precomputed_tissue_t1: If given, skip T1w-space segmentation
+        entirely and resample these maps directly -- used when a
+        subject-template longitudinal run already computed them once.
+    :returns: :class:`TissueResult` with T1w- and MRSI-space GM/WM/CSF maps.
+    :raises ValueError: If ``config.tissue_backend`` isn't one of the
+        supported values.
     """
     backend = config.tissue_backend
     if precomputed_tissue_t1 is not None:

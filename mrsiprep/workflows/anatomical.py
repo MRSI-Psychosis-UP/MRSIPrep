@@ -14,7 +14,22 @@ from mrsiprep.io.naming import anat_derivative
 
 @dataclass
 class AnatomicalResult:
-    """T1w images/masks selected for registration, from :func:`prepare_anatomical`."""
+    """T1w images/masks selected for registration, from :func:`prepare_anatomical`.
+
+    :ivar t1w: The skull-stripped T1w passed in as ``t1_path`` (SynthSeg
+        or CAT12 brain extraction output, depending on ``config.tissue_backend``).
+    :ivar raw_t1w: The original, non-skull-stripped T1w acquisition, if
+        found in the BIDS layout; ``None`` if the dataset only provides a
+        pre-skull-stripped image.
+    :ivar brain_mask: Brain-only mask corresponding to ``t1w``, if available.
+    :ivar registration_t1w: The T1w image registration should actually
+        target -- equal to ``t1w`` for the ``brain`` target, ``raw_t1w``
+        for ``raw``, or a freshly built brain+CSF composite for ``brain-csf``.
+    :ivar registration_mask: Mask matching ``registration_t1w`` (``None``
+        for the ``raw`` target, which registers without a fixed mask).
+    :ivar target_kind: The resolved ``config.registration_t1_target``
+        value (``"brain"``, ``"brain-csf"``, or ``"raw"``).
+    """
 
     t1w: Path
     raw_t1w: Path | None
@@ -34,9 +49,34 @@ def prepare_anatomical(
 ) -> AnatomicalResult:
     """Resolve which T1w image/mask registration should target.
 
-    Dispatches on ``config.registration_t1_target`` (``brain``,
-    ``brain-csf``, or ``raw``); for ``brain-csf`` this builds a fresh
-    skull-stripped-plus-CSF T1w and mask via :func:`create_brain_csf_t1`.
+    Dispatches on ``config.registration_t1_target``:
+
+    - ``"brain"`` -- register directly to the skull-stripped ``t1_path``
+      (the common case).
+    - ``"brain-csf"`` -- build a fresh T1w with the CSF compartment
+      re-added to the skull-stripped image (via :func:`create_brain_csf_t1`,
+      using the CAT12 p3 CSF probability map), so CSF-adjacent MRSI
+      signal isn't clipped at the brain-only boundary. Requires both a
+      raw T1w acquisition and a p3 map to be found in the BIDS layout.
+    - ``"raw"`` -- register to the original, non-skull-stripped T1w with
+      no fixed mask.
+
+    :param config: Run-wide :class:`mrsiprep.config.settings.MRSIPrepConfig`.
+    :param subject: BIDS subject label, without the ``sub-`` prefix.
+    :param session: BIDS session label without the ``ses-`` prefix, or
+        ``None`` for session-less datasets.
+    :param t1_path: Skull-stripped T1w image (SynthSeg/CAT12 brain
+        extraction output).
+    :param p3_override: Explicit CAT12 p3 CSF probseg path, bypassing
+        BIDS-layout lookup; used by ``brain-csf`` when set.
+    :param brain_mask_override: Explicit brain mask path, bypassing
+        BIDS-layout lookup.
+    :returns: :class:`AnatomicalResult` describing which image/mask pair
+        downstream registration should use.
+    :raises FileNotFoundError: If ``target_kind`` is ``"brain-csf"`` or
+        ``"raw"`` and the required raw T1w / p3 map isn't found.
+    :raises ValueError: If ``config.registration_t1_target`` isn't one of
+        the three supported values.
     """
     layout = BIDSLayout(config.bids_dir, filters=config.bids_filters)
     raw_t1 = layout.raw_t1(subject, session)
@@ -83,7 +123,21 @@ def create_brain_csf_t1(skull_t1: Path, raw_t1: Path, p3: Path, out_t1: Path, ou
     Combines the ``skull_t1`` brain mask with voxels where the CAT12 CSF
     probability map (``p3``) exceeds ``threshold``, then masks ``raw_t1``
     with the union -- so CSF-adjacent MRSI signal isn't clipped at the
-    brain-only boundary.
+    brain-only boundary. ``skull_t1``, ``raw_t1``, and ``p3`` must share
+    the same shape and affine.
+
+    :param skull_t1: Skull-stripped T1w (defines the brain-only mask via
+        ``> 0``).
+    :param raw_t1: Original, non-skull-stripped T1w acquisition -- only
+        its CSF-region voxels are used.
+    :param p3: CAT12 CSF tissue-probability map, same grid as ``skull_t1``.
+    :param out_t1: Output path for the brain+CSF composite T1w.
+    :param out_mask: Output path for the corresponding brain+CSF binary mask.
+    :param threshold: Minimum CSF probability (in ``p3``) for a voxel
+        outside the brain mask to be classified as CSF and included.
+    :param overwrite: Recompute even if ``out_t1``/``out_mask`` already exist.
+    :returns: ``(out_t1, out_mask)``.
+    :raises ValueError: If the three input images don't share a shape or affine.
     """
     if out_t1.exists() and out_mask.exists() and not overwrite:
         return out_t1, out_mask
