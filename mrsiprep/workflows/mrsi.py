@@ -17,6 +17,8 @@ from mrsiprep.mrsi.reference import generate_reference
 
 @dataclass
 class MRSIResult:
+    """Native-space MRSI derivatives produced by :func:`run_mrsi_workflow`."""
+
     raw_maps: dict[str, Path]
     preproc_maps: dict[str, Path]
     corrected_maps: dict[str, Path]
@@ -99,6 +101,13 @@ def _copy_native_maps(config, subject: str, session: str | None, inputs: MRSIInp
 
 
 def run_mrsi_workflow(config, subject: str, session: str | None, inputs: MRSIInputs) -> MRSIResult:
+    """Preprocess one recording's native-space MRSI maps.
+
+    Copies raw inputs into the derivatives tree, ensures a brainmask,
+    filters metabolite maps (spike/biharmonic repair), builds the
+    reference-metabolite image, and computes voxel-level quality masks
+    (SNR/CRLB/FWHM thresholds).
+    """
     _copy_native_maps(config, subject, session, inputs)
     brainmask = ensure_brainmask(config, subject, session, inputs.brainmask, inputs.water_map, inputs.metabolite_maps)
     preproc = filter_metabolite_maps(config, subject, session, inputs.metabolite_maps, brainmask)

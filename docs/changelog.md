@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- Added an fMRIPrep-style **API Reference** page (`docs/api.md`), built
+  with Sphinx `autodoc`/`autosummary` over `mrsiprep.workflows.*`,
+  `mrsiprep.registration.*`, `mrsiprep.interfaces.*`, `mrsiprep.mrsi.*`,
+  `mrsiprep.tissue.*`, `mrsiprep.parcellation.*`/`mrsiprep.connectivity.*`,
+  and `mrsiprep.io.*` — for anyone calling mrsiprep's pipeline stages
+  directly from Python (`import mrsiprep`) rather than through the CLI.
+  Added short docstrings to previously-undocumented top-level entry
+  points (`run_participant_workflow`, `run_mrsi_workflow`,
+  `run_tissue_workflow`, `run_parcellation_workflow`,
+  `run_connectivity_workflow`, `prepare_anatomical`, and their
+  `*Result` dataclasses) so the generated pages are useful rather than
+  bare signatures. The docs build now installs the full scientific stack
+  (numpy/scipy/nibabel/nilearn/nipype/etc., no `antspyx`, which mrsiprep
+  never imports at module level) via `docs/requirements.txt`, on top of
+  the existing dependency-light CLI-reference build.
 - Reran the `--nthreads` scaling runtime benchmark (3T/7T, 8/12/16/32
   threads) with all 8 runs executed strictly sequentially and in
   isolation, to rule out cross-run resource contention affecting the
