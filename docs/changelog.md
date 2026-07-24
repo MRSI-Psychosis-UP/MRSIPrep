@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Added a transform-type table to the Registration Frameworks benchmark,
+  documenting exactly what runs at the MRSI→T1w and T1w→MNI stages for
+  each of the three compared configurations (ANTs rigid+affine+SyN vs.
+  affine+SyN; FSL FLIRT-only affine; FSL FLIRT+FNIRT affine+deformable
+  for MRSI→T1w only, since `--fsl-deformable` does not affect the
+  T1w→MNI stage, which stays FLIRT affine-only for both FSL variants).
+  See `docs/benchmarks.md`.
 - Replaced the Registration Frameworks benchmark's mask-based "outside
   brain" voxel-count metric with a **signal-weighted leakage** metric
   (fraction of resampled CrPCr signal *mass*, not raw voxel count, falling
