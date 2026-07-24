@@ -27,15 +27,36 @@ def run_registration_workflow(
     mrsi_mask: Path | None = None,
     subject_template=None,
 ) -> RegistrationResult:
-    """``subject_template`` is an optional precomputed ``SubjectTemplateResult``
-    (see ``mrsiprep.registration.subject_template``), built once per subject
-    when ``--longitudinal`` is on and the subject has 2+ sessions. When
-    present, T1-to-MNI is composed via (session->template)+(template->MNI)
-    instead of registering this session directly to MNI.
+    """Register one recording's MRSI reference to T1w, and T1w to MNI if requested.
 
-    ``mrsi_mask`` (the MRSI brainmask, in MRSI-native space) is only used by
-    the ``fsl`` backend's FNIRT stage, as the moving-side mask FNIRT needs
-    alongside the T1w-side ``registration_mask``."""
+    MRSI→T1w always runs, via :func:`mrsiprep.registration.mrsi_to_t1.run_mrsi_to_t1`
+    (or the MIDAS-faithful rigid+mutual-information variant,
+    :func:`~mrsiprep.registration.mrsi_to_t1.run_mrsi_to_t1_rigid_mi`, when
+    ``config.processing_mode == "midas"``). T1w→MNI only runs when MNI
+    output space, MNI parcellation, or an MNI transform is actually
+    requested by ``config``.
+
+    :param config: Run-wide :class:`mrsiprep.config.settings.MRSIPrepConfig`.
+    :param subject: BIDS subject label, without the ``sub-`` prefix.
+    :param session: BIDS session label without the ``ses-`` prefix, or
+        ``None`` for session-less datasets.
+    :param mrsi_reference: Reference-metabolite image driving MRSI→T1w registration.
+    :param registration_t1: T1w image to register to (see
+        :func:`mrsiprep.workflows.anatomical.prepare_anatomical`'s
+        ``registration_t1w``).
+    :param registration_mask: T1w-side fixed mask for registration, if any.
+    :param mrsi_mask: MRSI-native brainmask; only used by the ``fsl``
+        backend's FNIRT stage, as the moving-side mask FNIRT needs
+        alongside ``registration_mask``.
+    :param subject_template: Optional precomputed
+        :class:`~mrsiprep.registration.subject_template.SubjectTemplateResult`,
+        built once per subject when ``--longitudinal`` is on and the
+        subject has 2+ sessions. When present, T1w-to-MNI is composed via
+        (session→template)+(template→MNI) instead of registering this
+        session directly to MNI.
+    :returns: :class:`RegistrationResult` with the MRSI→T1w transforms
+        always set, and T1w→MNI transforms set only when that stage ran.
+    """
     if config.processing_mode == "midas":
         mrsi_to_t1 = run_mrsi_to_t1_rigid_mi(config, subject, session, mrsi_reference, registration_t1, fixed_mask=registration_mask)
     else:

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Expanded the `mrsiprep.workflows.*` entry-point docstrings (all
+  `run_*_workflow` functions, `prepare_anatomical`,
+  `segment_t1_fuzzy_cmeans`, `create_brain_csf_t1`,
+  `collect_recordings`, and their `*Result` dataclasses) from one-line
+  summaries to full parameter/return/raises documentation, so the API
+  Reference page (below) matches fMRIPrep's depth instead of showing
+  mostly bare signatures.
 - Added an fMRIPrep-style **API Reference** page (`docs/api.md`), built
   with Sphinx `autodoc`/`autosummary` over `mrsiprep.workflows.*`,
   `mrsiprep.registration.*`, `mrsiprep.interfaces.*`, `mrsiprep.mrsi.*`,
