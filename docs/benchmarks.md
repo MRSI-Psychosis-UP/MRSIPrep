@@ -131,6 +131,23 @@ FLIRT+FNIRT** — each against both supported T1w registration targets,
 CSF compartment re-added, since CSF also produces real MRSI signal that a
 brain-only target would otherwise clip at the boundary).
 
+**Transform used at each registration stage, by backend:**
+
+| Backend | MRSI → T1w | T1w → MNI |
+|---|---|---|
+| ANTs | Rigid + Affine + SyN (deformable), `antsRegistrationSyN[sr]` | Affine + SyN (deformable), `antsRegistrationSyN[s]` |
+| FSL FLIRT-only | Affine only (FLIRT, 12 DOF, `corratio` cost) | Affine only (FLIRT, 12 DOF) |
+| FSL FLIRT+FNIRT | Affine (FLIRT) + deformable warp (FNIRT, `--fsl-deformable`) | Affine only (FLIRT, 12 DOF) — FNIRT is not used for this stage |
+
+Note that `--fsl-deformable` only adds a deformable (FNIRT) stage to the
+**MRSI→T1w** registration; the **T1w→MNI** stage is always FLIRT affine-only
+under the FSL backend, in both the FLIRT-only and FLIRT+FNIRT variants
+compared here. ANTs' own T1w→MNI stage (`antsRegistrationSyN[s]`) starts
+from an affine initialization rather than a separate rigid stage (unlike
+its MRSI→T1w stage, which uses an explicit rigid step first since MRSI and
+T1w start further apart geometrically), then adds its own SyN deformable
+warp.
+
 ### Method
 
 Full `mrsiprep --mode mni-norm` runs (not isolated registration calls) on
