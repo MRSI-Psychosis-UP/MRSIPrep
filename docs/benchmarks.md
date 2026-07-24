@@ -164,8 +164,8 @@ rendered transparent so the underlying template stays visible through
 low-signal regions. Signal extending past the skull ring, or with a
 jagged/scalloped rather than smooth outer edge, indicates voxels that have
 leaked beyond the true brain boundary during registration — visible here
-for both FSL variants at both field strengths, and especially pronounced
-(plus visibly asymmetric between hemispheres) for the FSL backend at 7T.
+for both FSL variants at both field strengths, most noticeably as a
+coarser, less anatomically detailed outer edge than ANTs produces.
 
 **Resampled MRSI voxels falling outside the MNI152 brain mask, by backend and T1w target:**
 
@@ -174,19 +174,17 @@ for both FSL variants at both field strengths, and especially pronounced
 ### Interpretation
 
 * **ANTs is the clear winner at both field strengths.** It has the lowest
-  MNI-outside-brain fraction of any backend at 3T (17.9–18.2%, vs. 24.3–
-  24.5% for FSL FLIRT+FNIRT and 33.9–34.0% for FSL FLIRT-only) and is
-  essentially tied with FSL FLIRT+FNIRT at 7T (10.4–11.3% vs. 9.8–10.9%).
-  The overlay figures confirm this visually: ANTs produces the smoothest,
-  most anatomically faithful outer boundary at both field strengths, while
-  both FSL variants show a visibly irregular, jagged edge — most obviously
-  at 7T, where the FSL backend's coverage is also noticeably asymmetric
-  between hemispheres.
+  MNI-outside-brain fraction of any backend at both 3T (17.9–18.2%, vs.
+  24.3–24.5% for FSL FLIRT+FNIRT and 33.9–34.0% for FSL FLIRT-only) and 7T
+  (12.5–13.3%, vs. 15.7–17.0% for FSL FLIRT+FNIRT and 19.1–20.4% for FSL
+  FLIRT-only). The overlay figures confirm this visually: ANTs produces
+  the sharpest, most anatomically detailed result at both field strengths,
+  while both FSL variants look visibly coarser/blurrier by comparison.
 
 * **Adding FNIRT to the FSL backend substantially reduces leakage versus
   FLIRT-only** — roughly a third fewer outside-brain voxels at 3T (24.3–
-  24.5% vs. 33.9–34.0%) and about 40% fewer at 7T (9.8–10.9% vs. 16.8–
-  18.1%). This is why FNIRT is now the default for
+  24.5% vs. 33.9–34.0%) and about 18–20% fewer at 7T (15.7–17.0% vs.
+  19.1–20.4%). This is why FNIRT is now the default for
   `--registration-backend fsl`.
 
 * **Brain vs. brain+CSF as the T1w registration target has a small effect
