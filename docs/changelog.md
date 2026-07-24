@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Reran the `--nthreads` scaling runtime benchmark (3T/7T, 8/12/16/32
+  threads) with all 8 runs executed strictly sequentially and in
+  isolation, to rule out cross-run resource contention affecting the
+  timings (a prior run showed slightly more thread-count variation, run
+  under less controlled conditions). Under isolation, runtime is
+  essentially flat across the whole thread range at both field strengths
+  (3T: 300-318s, ~6% spread; 7T: 1227-1235s, under 1% spread), confirming
+  more than ~8 threads per subject gives negligible benefit. See
+  `docs/benchmarks.md`.
 - Added a transform-type table to the Registration Frameworks benchmark,
   documenting exactly what runs at the MRSI→T1w and T1w→MNI stages for
   each of the three compared configurations (ANTs rigid+affine+SyN vs.
