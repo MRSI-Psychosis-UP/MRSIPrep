@@ -17,7 +17,36 @@ from mrsiprep.mrsi.reference import generate_reference
 
 @dataclass
 class MRSIResult:
-    """Native-space MRSI derivatives produced by :func:`run_mrsi_workflow`."""
+    """Native-space MRSI derivatives produced by :func:`run_mrsi_workflow`.
+
+    All paths are in MRSI-native space; per-metabolite maps are keyed by
+    metabolite name (e.g. ``"CrPCr"``, matching ``--metabolites``/``--ref-met``).
+
+    :ivar raw_maps: Metabolite signal maps as copied into the derivatives
+        tree, unmodified from ``derivatives/mrsi-orig/``.
+    :ivar preproc_maps: Metabolite maps after spike detection and
+        biharmonic repair (see :func:`mrsiprep.mrsi.filtering.filter_metabolite_maps`).
+    :ivar corrected_maps: Currently identical to ``preproc_maps`` -- kept
+        as a separate field for downstream consumers that expect a
+        post-tissue-correction map, even though tissue correction happens
+        later in :mod:`mrsiprep.tissue.correction`, not in this workflow.
+    :ivar crlb_maps: Per-metabolite Cramér-Rao lower bound maps, copied
+        through unchanged from the raw inputs.
+    :ivar snr_map: Whole-brain signal-to-noise-ratio map, if the input
+        BIDS layout provided one.
+    :ivar linewidth_map: Whole-brain linewidth/FWHM map, if provided.
+    :ivar water_map: Water-reference image, if provided (used for coil
+        combination / normalization upstream of mrsiprep, not recomputed
+        here).
+    :ivar brainmask: MRSI-native brainmask, either taken from the inputs
+        or derived when missing (see :func:`mrsiprep.mrsi.masks.ensure_brainmask`).
+    :ivar reference: The reference-metabolite image used to drive
+        MRSI→T1w registration (``config.ref_met``, default ``CrPCr``).
+    :ivar qcmasks: Per-metabolite voxel-quality masks (SNR/CRLB/FWHM
+        thresholds applied), keyed the same way as ``preproc_maps``.
+    :ivar qc_summary: Path to the per-recording QC summary table
+        produced alongside ``qcmasks``.
+    """
 
     raw_maps: dict[str, Path]
     preproc_maps: dict[str, Path]
@@ -103,10 +132,23 @@ def _copy_native_maps(config, subject: str, session: str | None, inputs: MRSIInp
 def run_mrsi_workflow(config, subject: str, session: str | None, inputs: MRSIInputs) -> MRSIResult:
     """Preprocess one recording's native-space MRSI maps.
 
-    Copies raw inputs into the derivatives tree, ensures a brainmask,
-    filters metabolite maps (spike/biharmonic repair), builds the
-    reference-metabolite image, and computes voxel-level quality masks
-    (SNR/CRLB/FWHM thresholds).
+    Copies raw inputs into the derivatives tree, ensures a brainmask
+    exists (deriving one from the water/metabolite maps if the input
+    layout didn't provide one), filters metabolite maps (spike detection
+    and biharmonic repair), builds the reference-metabolite image used to
+    drive registration, and computes voxel-level quality masks from the
+    SNR/CRLB/FWHM thresholds in ``config``.
+
+    :param config: Run-wide :class:`mrsiprep.config.settings.MRSIPrepConfig`.
+    :param subject: BIDS subject label, without the ``sub-`` prefix.
+    :param session: BIDS session label without the ``ses-`` prefix, or
+        ``None`` for session-less datasets.
+    :param inputs: The recording's raw MRSI inputs as discovered by
+        :func:`mrsiprep.io.loaders.load_mrsi_inputs` (metabolite/CRLB
+        maps, SNR/linewidth/water maps, brainmask -- any of which may be
+        ``None`` except ``metabolite_maps``).
+    :returns: :class:`MRSIResult` with all derivatives written to
+        ``config.derivative_dir`` and referenced by path.
     """
     _copy_native_maps(config, subject, session, inputs)
     brainmask = ensure_brainmask(config, subject, session, inputs.brainmask, inputs.water_map, inputs.metabolite_maps)

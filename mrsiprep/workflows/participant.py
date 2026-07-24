@@ -48,7 +48,20 @@ from mrsiprep.workflows.tissue import run_tissue_workflow, segment_t1_fuzzy_cmea
 
 @dataclass
 class RecordingStatus:
-    """Outcome of processing (or validating) one subject/session recording."""
+    """Outcome of processing (or validating) one subject/session recording.
+
+    :ivar subject: BIDS subject label, without the ``sub-`` prefix.
+    :ivar session: BIDS session label without the ``ses-`` prefix, or
+        ``None`` for session-less datasets.
+    :ivar status: One of ``"skipped"`` (failed validation before
+        processing started), ``"success"``, or ``"failed"`` (raised
+        during Nipype execution).
+    :ivar outputs: Output paths produced for this recording, keyed by a
+        short name (e.g. ``"t1w"``, ``"qc_summary"``, ``"regional_table"``);
+        empty for skipped recordings.
+    :ivar error: Human-readable error message, set when ``status`` is
+        ``"skipped"`` or ``"failed"``.
+    """
 
     subject: str
     session: str | None
@@ -259,6 +272,18 @@ def _render_preflight_table(config, summaries: list[dict], debug: Debug) -> None
 
 
 def collect_recordings(config) -> list[Recording]:
+    """Resolve the (subject, session) recordings a run should process.
+
+    Resolution order: an explicit ``--participants-file`` (one
+    ``sub[,ses]`` pair per line) takes precedence; otherwise
+    ``--participant-label``/``--session-label`` are combined pairwise;
+    otherwise every recording is discovered by scanning ``config.bids_dir``.
+
+    :param config: Run-wide :class:`mrsiprep.config.settings.MRSIPrepConfig`.
+    :returns: List of :class:`mrsiprep.io.bids.Recording`, not yet
+        validated -- validity is checked later, per-recording, by
+        :func:`run_participant_workflow`/:func:`validate_participant_inputs`.
+    """
     if config.participants_file:
         return [Recording(sub, ses) for sub, ses in read_participant_pairs(config.participants_file)]
     subjects = config.participant_label or []
@@ -313,11 +338,24 @@ def _build_subject_templates(config, ready: list[Recording], debug: Debug) -> di
 def run_participant_workflow(config) -> list[RecordingStatus]:
     """Run the full mrsiprep pipeline for every recording matched by ``config``.
 
-    This is the top-level entry point invoked by the CLI (``mrsiprep`` /
-    ``run_participant_workflow`` in :mod:`mrsiprep.cli.run`): it discovers
-    recordings, validates inputs, builds subject templates for
-    ``--longitudinal`` runs, then dispatches each ready recording to the
-    Nipype execution engine.
+    This is the top-level entry point called by the CLI
+    (:mod:`mrsiprep.cli.run`) for ``participant``-level runs. Steps:
+
+    1. Ensure work/derivative directories exist.
+    2. Resolve recordings via :func:`collect_recordings` and validate each
+       one's inputs; failures are recorded as ``"skipped"`` and excluded
+       from processing (other recordings still run).
+    3. If ``config.longitudinal``, build one subject-level T1w template
+       per subject with 2+ ready sessions, used to seed each session's
+       T1w→MNI registration.
+    4. Dispatch all ready recordings to the Nipype execution engine
+       (:func:`mrsiprep.workflows.nipype_engine.run.execute_recordings_nipype`),
+       which runs each recording's per-step cached workflow and reports
+       ``"success"``/``"failed"`` per recording.
+
+    :param config: Run-wide :class:`mrsiprep.config.settings.MRSIPrepConfig`.
+    :returns: One :class:`RecordingStatus` per recording matched by
+        ``config`` (empty list if none matched).
     """
     ensure_work_dirs(config)
     init_derivative(config.derivative_dir)
@@ -362,8 +400,18 @@ def validate_participant_inputs(config) -> list[RecordingStatus]:
     """Dry-run input validation for every recording matched by ``config``.
 
     Same discovery/validation logic as :func:`run_participant_workflow`
-    but never dispatches processing -- used by ``--validate-only`` to
-    report which recordings are ready without running the pipeline.
+    (including the same preflight input-availability table) but never
+    builds subject templates or dispatches to Nipype -- used by
+    ``--validate-only`` to report which recordings are ready without
+    running the pipeline.
+
+    :param config: Run-wide :class:`mrsiprep.config.settings.MRSIPrepConfig`.
+    :returns: One :class:`RecordingStatus` per recording matched by
+        ``config``, with ``status`` either ``"failed"`` (validation
+        failed; ``outputs`` empty) or ``"success"`` (validation passed;
+        ``outputs`` populated with keys ``"t1w"``, ``"metabolites"``,
+        ``"snr"``, ``"linewidth"``, ``"brainmask"`` -- nothing is
+        actually processed).
     """
     debug = Debug(verbose=config.verbose)
     recordings = collect_recordings(config)
