@@ -65,6 +65,7 @@ class MRSIPrepConfig:
     filter_biharmonic: bool = True
     filter_fwhm_mm: float | None = None
     spike_percentile: float = 99.0
+    spike_max_cluster_voxels: int | None = None
     no_pvc: bool = False
     longitudinal: bool = False
     transform_spikemask: bool = False
