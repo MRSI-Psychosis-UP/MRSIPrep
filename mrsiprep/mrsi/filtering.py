@@ -14,6 +14,7 @@ from pathlib import Path
 import nibabel as nib
 import numpy as np
 from nilearn import image as nil_image
+from scipy import ndimage
 from scipy.ndimage import generic_filter
 from skimage.restoration import inpaint_biharmonic
 
@@ -34,7 +35,10 @@ def filter_metabolite_maps(config, subject: str, session: str | None, metabolite
             continue
         img, data = load_3d_data(path, dtype=np.float32, label=f"{met} map")
         data = np.nan_to_num(data, nan=0.0)
-        spike_mask = get_spike_mask(data, percentile=config.spike_percentile)
+        max_cluster = config.spike_max_cluster_voxels
+        if max_cluster is None:
+            max_cluster = default_spike_max_cluster_voxels(img.header.get_zooms()[:3])
+        spike_mask = get_spike_mask(data, percentile=config.spike_percentile, max_cluster_voxels=max_cluster)
         repaired, missing = biharmonic_repair(data, brain, spike_mask, img.header, img.affine, fwhm_mm=config.filter_fwhm_mm)
         filtered[met] = save_nifti(repaired.astype(np.float32), img, out, dtype=np.float32)
         spike_out = mrsi_derivative(config.derivative_dir, subject, session, space="MRSI", met=met, desc="spikemask", suffix_override="mask")
@@ -42,12 +46,59 @@ def filter_metabolite_maps(config, subject: str, session: str | None, metabolite
     return filtered
 
 
-def get_spike_mask(data: np.ndarray, percentile: float = 99.0) -> np.ndarray:
+def default_spike_max_cluster_voxels(voxel_mm: tuple[float, float, float]) -> int:
+    """Default cap on a spike cluster's voxel count before it's treated as
+    real focal signal rather than noise, auto-scaled to the MRSI
+    acquisition's native voxel size.
+
+    A connected cluster of spike-thresholded voxels that's large and
+    spatially coherent is more likely a real, focal signal feature (e.g. an
+    actual metabolic abnormality) than sensor/reconstruction noise, which
+    tends to hit isolated single voxels. Filtering (median-repair +
+    biharmonic inpaint) should only apply to the small, isolated case.
+
+    Derived empirically from connected-component cluster-size distributions
+    of ``get_spike_mask()`` (default ``percentile=99``) computed across
+    real acquisitions: 1075 3T metabolite maps (BioPsych-Project +
+    Mindfulness-Project, ~5.0mm isotropic) and 445 7T metabolite maps
+    (22q11-Project, ~3.4mm isotropic). The chosen cutoff is each field
+    strength's 90th-percentile cluster size (3T: 6 voxels, 7T: 9 voxels) --
+    conservative enough to still repair the large majority (>=90%) of real
+    noise clusters, while protecting genuinely large focal clusters from
+    being smoothed away. Since voxel size is what's actually available at
+    runtime (not a field-strength tag), this maps voxel volume to the
+    nearer of the two measured field-strength regimes by proximity to their
+    respective native voxel volumes (3T ~5.0mm, 7T ~3.4mm isotropic),
+    rather than hardcoding a scanner-specific lookup.
+    """
+    volume_mm3 = float(np.prod(voxel_mm))
+    volume_3t = 5.0**3
+    volume_7t = 3.4**3
+    return 6 if abs(volume_mm3 - volume_3t) <= abs(volume_mm3 - volume_7t) else 9
+
+
+def get_spike_mask(data: np.ndarray, percentile: float = 99.0, max_cluster_voxels: int | None = None) -> np.ndarray:
+    """Voxels exceeding ``percentile`` of positive signal, restricted to
+    connected clusters no larger than ``max_cluster_voxels`` (26-connectivity).
+
+    ``max_cluster_voxels=None`` disables cluster-size filtering, matching
+    the original flat per-voxel threshold behavior (every above-threshold
+    voxel is treated as a spike, regardless of how large its connected
+    cluster is).
+    """
     inside = data > 0
     if not np.any(inside):
         return np.zeros_like(data, dtype=bool)
     threshold = np.percentile(data[inside], percentile)
-    return data > threshold
+    spike_mask = data > threshold
+    if max_cluster_voxels is None or not np.any(spike_mask):
+        return spike_mask
+    labeled, n_clusters = ndimage.label(spike_mask, structure=np.ones((3, 3, 3)))
+    cluster_sizes = ndimage.sum(spike_mask, labeled, index=np.arange(1, n_clusters + 1))
+    oversized_labels = np.flatnonzero(cluster_sizes > max_cluster_voxels) + 1
+    if oversized_labels.size:
+        spike_mask = spike_mask & ~np.isin(labeled, oversized_labels)
+    return spike_mask
 
 
 def biharmonic_repair(

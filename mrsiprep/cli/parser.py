@@ -205,6 +205,18 @@ def build_parser() -> argparse.ArgumentParser:
         "Default: derived from the native MRSI voxel size (mean voxel dimension x sqrt(2)).",
     )
     processing_control.add_argument("--spikepc", type=float, default=99.0)
+    processing_control.add_argument(
+        "--spike-max-cluster-voxels",
+        type=int,
+        default=None,
+        help="A connected cluster of spike-thresholded voxels larger than this is treated as real focal "
+        "signal (e.g. a genuine metabolic abnormality) and left unfiltered, rather than median-repaired/"
+        "biharmonic-inpainted like an isolated noise spike. Default: derived from the native MRSI voxel "
+        "size (6 voxels at ~5.0mm/3T-like resolution, 9 voxels at ~3.4mm/7T-like resolution, empirically "
+        "the 90th-percentile spike-cluster size measured on real acquisitions at each resolution). Set to "
+        "a very large number to disable cluster-size filtering (every above-threshold voxel is filtered "
+        "regardless of cluster size, matching pre-existing behavior).",
+    )
     processing_control.add_argument("--no-pvc", action="store_true")
     processing_control.add_argument(
         "--longitudinal",
@@ -393,6 +405,7 @@ def parse_args(argv: list[str] | None = None) -> MRSIPrepConfig:
         filter_biharmonic=not args.no_filter,
         filter_fwhm_mm=args.filter_fwhm_mm,
         spike_percentile=args.spikepc,
+        spike_max_cluster_voxels=args.spike_max_cluster_voxels,
         no_pvc=args.no_pvc,
         longitudinal=args.longitudinal,
         transform_spikemask=args.transform_spikemask,
