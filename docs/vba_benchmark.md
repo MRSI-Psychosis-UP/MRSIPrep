@@ -156,3 +156,115 @@ of total discriminative power.
   the runtime comparison on the [Benchmarks](benchmarks.md) page) does
   not translate into better — and for deep structures, translates into
   markedly worse — detection power than FLIRT-only.
+
+## GM-precise boundary tracking (CrPCr / Precuneus only)
+
+The CrPCr/Precuneus injection above used the raw AAL atlas parcel, which
+is only ~62% gray matter in native T1w space (35,227 mm³ total parcel vs.
+21,789 mm³ at CAT12 GM-probability &gt;0.5) — its coarse boundary sweeps
+into adjacent white matter rather than tightly tracing the folded
+cortical ribbon. Bulk-overlap metrics like Dice can't tell whether a
+detected cluster actually *tracks the true convoluted GM boundary*, or
+just overlaps the same general neighborhood. This follow-up re-injects
+CrPCr's abnormality restricted to gray matter only, then adds a
+boundary-distance metric to directly measure boundary-tracking accuracy.
+
+### GM-only region source
+
+Instead of intersecting the AAL parcel with a separate gray-matter
+probability map, the injection's region *source* itself was switched to
+`mri_synthseg --parc`'s own DKT cortical labels
+(`ctx-lh-precuneus`/`ctx-rh-precuneus`) for the same template subject —
+these are inherently gray-matter-only, per-gyrus regions, so no separate
+masking step is needed. The combined bilateral region shrinks from
+35,227 mm³ (AAL) to 20,425 mm³ (SynthSeg) in native T1w space, and its
+boundary is visibly more convoluted:
+
+![CrPCr injection region: bilateral Precuneus, gray-matter-only, from a SynthSeg parcellation of the MNI152 template itself](figures/vba_injection_region_crpcr_gm.png)
+
+Only CrPCr's injection region changed — GluGln/Thalamus and the other
+three metabolites keep their original AAL-based regions unchanged
+(Thalamus is already a compact subcortical nucleus, not a folded cortical
+structure, so the boundary-complexity question doesn't apply there). The
+signal was re-filtered (same cluster-size-aware spike filter) and
+re-resampled into MNI space through each backend's already-computed
+registration transforms — no registration rerun, since registration
+depends only on anatomy, not on the injected signal.
+
+### Detection vs. the GM-precise ground truth
+
+The population ground-truth mask used earlier in this report (the mean
+of all 16 `group=1` subjects' own injection masks) is appropriate for
+the AAL-parcel comparison above, but is the wrong reference here: each
+subject's own injected region is correctly gray-matter-only and
+convoluted, but averaging 16 of them across their own individual
+inter-subject registration variance smooths the union back out into a
+diffuse, AAL-shaped blob (confirmed directly: no voxel is inside the
+injected region for more than 50% of `group=1` subjects). Instead, the
+ground-truth outline below is `mri_synthseg --parc`'s own segmentation
+of the **MNI152 template itself** — the same fixed anatomical space
+every backend's detected voxels are already shown in, so no
+inter-subject registration variance is introduced and the true
+gyrus-following boundary stays sharp:
+
+![CrPCr (GM-only Precuneus injection): voxels significant at alpha=0.05 (filled) vs. SynthSeg GM-precise Precuneus on the MNI152 template (blue outline), for ANTs, FSL FLIRT, and FSL FLIRT+FNIRT](figures/vba_detection_crpcr_gm.png)
+
+| Backend | Dice | Sensitivity | Precision | ROC-AUC | PR-AUC |
+|---|---|---|---|---|---|
+| ANTs | 0.341 | 0.244 | 0.569 | 0.810 | 0.313 |
+| FSL FLIRT-only | 0.326 | 0.250 | 0.470 | 0.773 | 0.238 |
+| FSL FLIRT+FNIRT | 0.017 | 0.009 | 0.721 | 0.815 | 0.268 |
+
+Dice drops relative to the AAL-parcel version of this benchmark for
+ANTs and FSL FLIRT-only (both ~0.33 here vs. their AAL-parcel results) —
+expected, since a tight, convoluted GM boundary is a harder target to
+hit exactly than a bulk parcel. More strikingly, **FSL FLIRT+FNIRT's
+Dice collapses to 0.017** — visibly almost no detected voxels at
+`alpha=0.05` in the figure above — while its ROC-AUC (0.815) is
+actually the *highest* of the three backends. This combination means
+FLIRT+FNIRT's `corrp` map does carry real discriminative signal, but it
+is spread too diffusely (or offset) to ever cross the TFCE-corrected
+significance threshold in the right place, rather than lacking signal
+altogether.
+
+### Boundary-distance metric
+
+Dice and ROC/PR-AUC summarize bulk voxel overlap and threshold-sweep
+discriminative power, but neither directly measures *where* a detected
+cluster's edge sits relative to the true boundary. `experiments/compare_ground_truth_boundary.py`
+extracts the voxel-surface of the alpha=0.05 detected mask and of the
+GM-precise ground-truth mask (the same MNI152-template SynthSeg
+Precuneus segmentation used above), then reports the symmetric mean
+surface distance and Hausdorff distance (mm) between them:
+
+| Backend | Mean surface distance (mm) | Hausdorff distance (mm) |
+|---|---|---|
+| ANTs | 5.47 | 23.07 |
+| FSL FLIRT-only | 6.46 | 33.11 |
+| FSL FLIRT+FNIRT | 17.94 | 45.52 |
+
+### Interpretation
+
+* **ANTs tracks the true gray-matter boundary most closely** (5.47mm mean
+  surface distance — close to the 2mm voxel resolution itself), narrowly
+  ahead of FSL FLIRT-only (6.46mm) — the same ranking as Dice and
+  consistent with the earlier AAL-parcel results on this metabolite.
+
+* **FSL FLIRT+FNIRT's boundary is roughly 3x farther from the true
+  GM boundary than ANTs** (17.94mm mean, 45.52mm Hausdorff, vs. ANTs'
+  5.47mm/23.07mm) — this is the clearest signal in this follow-up that
+  FNIRT's nonlinear warp, whatever discriminative power it retains
+  (reflected in its ROC-AUC), is not spatially anchoring that signal to
+  the correct convoluted cortical shape. Combined with its collapsed
+  Dice, this reinforces the same conclusion as the Registration
+  Frameworks benchmark's leakage finding: FNIRT's warp trades spatial
+  precision for something that superficially still separates
+  group1/group0 in aggregate, which is the wrong tradeoff for
+  voxel-based analyses of focal cortical abnormalities.
+
+* **Ranking is unchanged from the coarser AAL-parcel benchmark** (ANTs
+  ≥ FSL FLIRT-only ≫ FSL FLIRT+FNIRT), but the gap between FLIRT+FNIRT
+  and the other two backends widens substantially once the target
+  requires tracking a genuinely convoluted boundary rather than bulk
+  overlap with a smooth parcel — a harder, more realistic test of
+  cortical-abnormality detection.
