@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+- Added **cluster-size-aware spike filtering**: `get_spike_mask()` now
+  only median-repairs/biharmonic-inpaints a connected cluster of
+  spike-thresholded voxels when its size is at or below
+  `--spike-max-cluster-voxels` (new flag; default auto-derived from the
+  MRSI acquisition's native voxel size — 6 voxels at ~5.0mm/3T-like
+  resolution, 9 voxels at ~3.4mm/7T-like resolution). Previously every
+  voxel above the `--spikepc` percentile threshold was filtered
+  regardless of how large or spatially coherent its cluster was, which
+  could remove genuine focal signal (a real, spatially uniform metabolic
+  abnormality reads identically to a spike artifact under a flat
+  per-voxel threshold). The default cutoffs were derived from a real
+  spike-cluster-size survey: the 90th-percentile connected-cluster size
+  across 1075 3T metabolite maps (BioPsych-Project + Mindfulness-Project)
+  and 445 7T metabolite maps (22q11-Project).
+- Added a new **Voxel-Based Detection Benchmark** page
+  (`docs/vba_benchmark.md`), validating whether MRSIPrep's three
+  registration backends (ANTs, FSL FLIRT-only, FSL FLIRT+FNIRT) can
+  recover a known, deliberately-injected metabolic abnormality via
+  `randomise` VBA, using the cluster-size-aware spike filter above. ANTs
+  has the best detection power on both tested metabolites (CrPCr/
+  Precuneus, GluGln/Thalamus); FSL FLIRT+FNIRT is competitive with ANTs
+  on CrPCr but collapses to near-chance on GluGln/Thalamus, consistent
+  with FNIRT's nonlinear warp mattering most for small deep structures.
 - Expanded the `mrsiprep.workflows.*` entry-point docstrings (all
   `run_*_workflow` functions, `prepare_anatomical`,
   `segment_t1_fuzzy_cmeans`, `create_brain_csf_t1`,
