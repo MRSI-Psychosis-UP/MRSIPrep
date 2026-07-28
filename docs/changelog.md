@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+- Added a **GM-precise boundary-tracking follow-up** to the Voxel-Based
+  Detection Benchmark (`docs/vba_benchmark.md`), for CrPCr/Precuneus
+  only. The original CrPCr injection used the raw AAL Precuneus parcel,
+  which is only ~62% gray matter in native T1w space and sweeps into
+  adjacent white matter; this follow-up switches the injection's region
+  *source* to `mri_synthseg --parc`'s own DKT cortical labels
+  (`ctx-lh-precuneus`/`ctx-rh-precuneus`), which are inherently
+  gray-matter-only and convoluted, giving a harder, more anatomically
+  realistic detection target. Ground truth for the comparison is a
+  SynthSeg segmentation of the MNI152 template itself (not a
+  population union across subjects, which was found to smooth back out
+  into an AAL-like blob under inter-subject registration variance).
+  Adds a new boundary-distance metric (mean surface distance +
+  Hausdorff distance, `experiments/compare_ground_truth_boundary.py`)
+  alongside the existing Dice/ROC-AUC/PR-AUC, to directly measure
+  boundary-tracking accuracy rather than just bulk overlap. ANTs tracks
+  the true GM boundary most closely (5.47mm mean surface distance),
+  FSL FLIRT-only close behind (6.46mm); FSL FLIRT+FNIRT's Dice
+  collapses (0.017) despite having the highest ROC-AUC of the three,
+  with boundary distance roughly 3x worse (17.94mm) — indicating its
+  warp retains discriminative signal but doesn't spatially anchor it to
+  the correct convoluted cortical shape.
 - Added **cluster-size-aware spike filtering**: `get_spike_mask()` now
   only median-repairs/biharmonic-inpaints a connected cluster of
   spike-thresholded voxels when its size is at or below
