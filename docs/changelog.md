@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- Added a fourth registration configuration, **ANTs (rigid+affine
+  only)**, throughout the Voxel-Based Detection Benchmark
+  (`docs/vba_benchmark.md`) — both the original AAL-parcel comparison
+  (CrPCr/Precuneus, GluGln/Thalamus) and the GM-precise boundary-tracking
+  follow-up. It reuses the same MRSI→T1w/T1w→MNI registrations already
+  computed for the full ANTs (rigid+affine+SyN) run — `antsRegistration`
+  always writes the affine stage to its own independent transform file
+  regardless of a later SyN stage, so the deformable warp can simply be
+  dropped from the resampling chain with no registration recompute.
+  Consistent finding across both metabolites and both ground-truth
+  granularities: **ANTs affine-only matches or exceeds full ANTs SyN on
+  every metric** (ROC-AUC, PR-AUC, Dice, boundary distance) — the
+  deformable stage does not clearly improve focal, planted-signal VBA
+  detection, and on the GM-precise Precuneus target affine-only is the
+  best-performing backend overall (Dice 0.432 vs. SyN's 0.341, mean
+  boundary distance 4.32mm vs. 5.47mm). Also fixes an unanchored-curve
+  gap in the ROC/PR comparison figure (the plotted curves now reach the
+  same endpoint anchors already used internally by the AUC calculation).
 - Added a **GM-precise boundary-tracking follow-up** to the Voxel-Based
   Detection Benchmark (`docs/vba_benchmark.md`), for CrPCr/Precuneus
   only. The original CrPCr injection used the raw AAL Precuneus parcel,

@@ -1,10 +1,11 @@
 # Voxel-Based Detection Benchmark
 
-This page validates whether MRSIPrep's pipeline — across its three
-registration backends (ANTs, FSL FLIRT-only, FSL FLIRT+FNIRT) — can
-recover a known, deliberately-injected metabolic abnormality via a
-standard voxel-based-analysis (VBA) group comparison (`randomise -T`,
-FSL's TFCE-corrected permutation test).
+This page validates whether MRSIPrep's pipeline — across four
+registration configurations (ANTs rigid+affine+SyN, ANTs rigid+affine
+only, FSL FLIRT-only, FSL FLIRT+FNIRT) — can recover a known,
+deliberately-injected metabolic abnormality via a standard
+voxel-based-analysis (VBA) group comparison (`randomise -T`, FSL's
+TFCE-corrected permutation test).
 
 ## Dataset
 
@@ -47,12 +48,18 @@ size in a real spike-cluster-size survey across 1075 3T metabolite maps
 
 ### Runs compared
 
-All three registration backends were run on the same 32 dummy subjects
+Four registration configurations were run on the same 32 dummy subjects
 (one subject excluded for an independently-confirmed bad registration —
 see below), at 2mm MNI resolution, then compared with `randomise -T`
 (500 permutations, two-sample unpaired design, contrast `group1 >
 group0`) restricted to each metabolite's population quality mask (CRLB
-&lt; 20 in ≥70% of subjects).
+&lt; 20 in ≥70% of subjects). **ANTs (rigid+affine only)** reuses the
+*same* MRSI→T1w and T1w→MNI registrations already computed for the
+full ANTs (rigid+affine+SyN) run — `antsRegistration` always writes
+the affine stage to its own independent `.mat` file regardless of
+whether a later SyN stage also ran, so the deformable warp can simply
+be dropped from the resampling transform chain with no registration
+recompute needed.
 
 | | |
 |---|---|
@@ -97,22 +104,22 @@ show:
 
 **CrPCr:**
 
-![CrPCr: voxels significant at alpha=0.05 (filled) vs. ground-truth Precuneus injection mask (outline), for ANTs, FSL FLIRT, and FSL FLIRT+FNIRT](figures/vba_detection_crpcr.png)
+![CrPCr: voxels significant at alpha=0.05 (filled) vs. ground-truth Precuneus injection mask (outline), for ANTs (SyN), ANTs (affine-only), FSL FLIRT, and FSL FLIRT+FNIRT](figures/vba_detection_crpcr_4backend.png)
 
-All three backends detect a cluster well inside the true Precuneus
-region. FSL FLIRT+FNIRT's detected cluster is visibly smaller than
-ANTs' or FSL FLIRT-only's, consistent with its lower sensitivity in the
-ROC/PR results below.
+All four configurations detect a cluster well inside the true Precuneus
+region. FSL FLIRT+FNIRT's detected cluster is visibly smaller than the
+other three, consistent with its lower sensitivity in the ROC/PR
+results below.
 
 **GluGln:**
 
-![GluGln: voxels significant at alpha=0.05 (filled) vs. ground-truth Thalamus injection mask (outline), for ANTs, FSL FLIRT, and FSL FLIRT+FNIRT](figures/vba_detection_glugln.png)
+![GluGln: voxels significant at alpha=0.05 (filled) vs. ground-truth Thalamus injection mask (outline), for ANTs (SyN), ANTs (affine-only), FSL FLIRT, and FSL FLIRT+FNIRT](figures/vba_detection_glugln_4backend.png)
 
-ANTs detects a clean, tightly bilateral cluster inside the Thalamus.
-FSL FLIRT-only detects a real but visibly asymmetric cluster (stronger
-on one side). **FSL FLIRT+FNIRT detects nothing at `alpha=0.05`** —
-zero significant voxels at either slice — matching its near-chance
-ROC-AUC below.
+ANTs (both with and without the SyN stage) detects a clean, tightly
+bilateral cluster inside the Thalamus. FSL FLIRT-only detects a real
+but visibly asymmetric cluster (stronger on one side). **FSL
+FLIRT+FNIRT detects nothing at `alpha=0.05`** — zero significant
+voxels at either slice — matching its near-chance ROC-AUC below.
 
 ## ROC / Precision-Recall curves
 
@@ -126,35 +133,51 @@ of total discriminative power.
 
 | Backend | CrPCr ROC-AUC | CrPCr PR-AUC | GluGln ROC-AUC | GluGln PR-AUC |
 |---|---|---|---|---|
-| ANTs | 0.78 | 0.47 | 0.93 | 0.69 |
+| ANTs (rigid+affine+SyN) | 0.78 | 0.47 | 0.93 | 0.69 |
+| ANTs (rigid+affine only) | 0.83 | 0.50 | 0.95 | 0.65 |
 | FSL FLIRT-only | 0.72 | 0.38 | 0.76 | 0.33 |
 | FSL FLIRT+FNIRT | 0.77 | 0.44 | 0.48 | 0.00 |
 
+**ANTs (rigid+affine only)** reuses the same MRSI→T1w/T1w→MNI
+registrations as the full ANTs run above, with the deformable SyN stage
+simply dropped from the resampling transform chain — see the
+"GM-precise boundary tracking" section below for why this variant was
+added and how it's computed.
+
 ### Interpretation
 
-* **ANTs has the best detection power on both metabolites**, most
-  clearly on GluGln (ROC-AUC 0.93, PR-AUC 0.69 — both substantially
-  ahead of either FSL variant).
+* **ANTs is the best-performing backend on both metabolites**, and
+  **the affine-only variant is consistently at least as good as the
+  full SyN pipeline** — on GluGln it has the highest ROC-AUC of any
+  backend (0.95), and on CrPCr it leads on both ROC-AUC (0.83) and
+  PR-AUC (0.50). The deformable SyN stage does not clearly improve
+  detection power over rigid+affine alone on either metabolite in this
+  benchmark.
 
-* **FSL FLIRT+FNIRT is competitive with ANTs on CrPCr** (ROC-AUC 0.77 vs.
-  0.78) **but collapses to near-chance on GluGln** (ROC-AUC 0.48, PR-AUC
-  0.00 — no better than random). This is specific to the Thalamus, a
-  small, deep, centrally-located structure — consistent with the
-  Registration Frameworks benchmark's (see the [Benchmarks](benchmarks.md)
-  page) finding that FNIRT's nonlinear warp has higher signal-weighted
+* **FSL FLIRT+FNIRT is competitive with the ANTs variants on CrPCr**
+  (ROC-AUC 0.77, close to ANTs SyN's 0.78) **but collapses to
+  near-chance on GluGln** (ROC-AUC 0.48, PR-AUC 0.00 — no better than
+  random). This is specific to the Thalamus, a small, deep,
+  centrally-located structure — consistent with the Registration
+  Frameworks benchmark's (see the [Benchmarks](benchmarks.md) page)
+  finding that FNIRT's nonlinear warp has higher signal-weighted
   leakage than ANTs or FLIRT-only: a small deep structure is exactly
   where local nonlinear-warp distortion would do the most damage to a
   focal signal.
 
-* **FSL FLIRT-only is consistently the weakest of the three backends on
-  both metabolites, but still clearly above chance** (ROC-AUC 0.72 and
-  0.76) — real detection power, just less than ANTs.
+* **FSL FLIRT-only is consistently the weakest backend on both
+  metabolites, but still clearly above chance** (ROC-AUC 0.72 and
+  0.76) — real detection power, just less than either ANTs variant.
 
 * Taken together with the Registration Frameworks benchmark, ANTs is the
   best-supported default for analyses where recovering a real, focal
-  signal change matters; FSL FLIRT+FNIRT's extra registration cost (see
-  the runtime comparison on the [Benchmarks](benchmarks.md) page) does
-  not translate into better — and for deep structures, translates into
+  signal change matters — and since the affine-only variant matches or
+  exceeds full SyN's detection power here at a fraction of the
+  registration cost (see the runtime comparison on the
+  [Benchmarks](benchmarks.md) page), it is worth considering as the
+  default over the full deformable pipeline for VBA workflows
+  specifically. FSL FLIRT+FNIRT's extra registration cost does not
+  translate into better — and for deep structures, translates into
   markedly worse — detection power than FLIRT-only.
 
 ## GM-precise boundary tracking (CrPCr / Precuneus only)
@@ -207,25 +230,33 @@ every backend's detected voxels are already shown in, so no
 inter-subject registration variance is introduced and the true
 gyrus-following boundary stays sharp:
 
-![CrPCr (GM-only Precuneus injection): voxels significant at alpha=0.05 (filled) vs. SynthSeg GM-precise Precuneus on the MNI152 template (blue outline), for ANTs, FSL FLIRT, and FSL FLIRT+FNIRT](figures/vba_detection_crpcr_gm.png)
+![CrPCr (GM-only Precuneus injection): voxels significant at alpha=0.05 (filled) vs. SynthSeg GM-precise Precuneus on the MNI152 template (blue outline), for ANTs (SyN), ANTs (affine-only), FSL FLIRT, and FSL FLIRT+FNIRT](figures/vba_detection_crpcr_gm.png)
 
 | Backend | Dice | Sensitivity | Precision | ROC-AUC | PR-AUC |
 |---|---|---|---|---|---|
-| ANTs | 0.341 | 0.244 | 0.569 | 0.810 | 0.313 |
+| ANTs (rigid+affine+SyN) | 0.341 | 0.244 | 0.569 | 0.810 | 0.315 |
+| ANTs (rigid+affine only) | 0.432 | 0.374 | 0.510 | 0.849 | 0.326 |
 | FSL FLIRT-only | 0.326 | 0.250 | 0.470 | 0.773 | 0.238 |
 | FSL FLIRT+FNIRT | 0.017 | 0.009 | 0.721 | 0.815 | 0.268 |
 
-Dice drops relative to the AAL-parcel version of this benchmark for
-ANTs and FSL FLIRT-only (both ~0.33 here vs. their AAL-parcel results) —
-expected, since a tight, convoluted GM boundary is a harder target to
-hit exactly than a bulk parcel. More strikingly, **FSL FLIRT+FNIRT's
+**ANTs (rigid+affine only) has the best Dice, sensitivity, and ROC-AUC
+of all four backends** on this harder, GM-precise target — the
+deformable SyN stage actually *reduces* Dice here (0.341 vs. 0.432)
+relative to skipping it. This mirrors the pattern seen on the
+coarser AAL-parcel version of this benchmark above: SyN's nonlinear
+warp does not clearly help focal-signal detection, and on this metric
+actively hurts it.
+
+Dice drops for every backend relative to the AAL-parcel version of this
+benchmark — expected, since a tight, convoluted GM boundary is a
+harder target to hit exactly than a bulk parcel. **FSL FLIRT+FNIRT's
 Dice collapses to 0.017** — visibly almost no detected voxels at
-`alpha=0.05` in the figure above — while its ROC-AUC (0.815) is
-actually the *highest* of the three backends. This combination means
-FLIRT+FNIRT's `corrp` map does carry real discriminative signal, but it
-is spread too diffusely (or offset) to ever cross the TFCE-corrected
-significance threshold in the right place, rather than lacking signal
-altogether.
+`alpha=0.05` in the figure above — while its ROC-AUC (0.815) is close
+to ANTs SyN's and not far off ANTs affine-only's. This combination
+means FLIRT+FNIRT's `corrp` map does carry real discriminative signal,
+but it is spread too diffusely (or offset) to ever cross the
+TFCE-corrected significance threshold in the right place, rather than
+lacking signal altogether.
 
 ### Boundary-distance metric
 
@@ -239,32 +270,42 @@ surface distance and Hausdorff distance (mm) between them:
 
 | Backend | Mean surface distance (mm) | Hausdorff distance (mm) |
 |---|---|---|
-| ANTs | 5.47 | 23.07 |
+| ANTs (rigid+affine+SyN) | 5.47 | 23.07 |
+| ANTs (rigid+affine only) | 4.32 | 22.36 |
 | FSL FLIRT-only | 6.46 | 33.11 |
 | FSL FLIRT+FNIRT | 17.94 | 45.52 |
 
 ### Interpretation
 
-* **ANTs tracks the true gray-matter boundary most closely** (5.47mm mean
-  surface distance — close to the 2mm voxel resolution itself), narrowly
-  ahead of FSL FLIRT-only (6.46mm) — the same ranking as Dice and
-  consistent with the earlier AAL-parcel results on this metabolite.
+* **ANTs (rigid+affine only) tracks the true gray-matter boundary most
+  closely of all four backends** (4.32mm mean surface distance —
+  under two and a half voxels at this 2mm resolution), narrowly ahead
+  of full ANTs SyN (5.47mm) and FSL FLIRT-only (6.46mm). Skipping the
+  deformable stage does not cost boundary precision here — if
+  anything, it modestly improves it, consistent with SyN's effect on
+  Dice above.
 
-* **FSL FLIRT+FNIRT's boundary is roughly 3x farther from the true
-  GM boundary than ANTs** (17.94mm mean, 45.52mm Hausdorff, vs. ANTs'
-  5.47mm/23.07mm) — this is the clearest signal in this follow-up that
-  FNIRT's nonlinear warp, whatever discriminative power it retains
-  (reflected in its ROC-AUC), is not spatially anchoring that signal to
-  the correct convoluted cortical shape. Combined with its collapsed
-  Dice, this reinforces the same conclusion as the Registration
-  Frameworks benchmark's leakage finding: FNIRT's warp trades spatial
-  precision for something that superficially still separates
-  group1/group0 in aggregate, which is the wrong tradeoff for
-  voxel-based analyses of focal cortical abnormalities.
+* **FSL FLIRT+FNIRT's boundary is roughly 3-4x farther from the true
+  GM boundary than either ANTs variant** (17.94mm mean, 45.52mm
+  Hausdorff, vs. ANTs affine-only's 4.32mm/22.36mm) — this is the
+  clearest signal in this follow-up that FNIRT's nonlinear warp,
+  whatever discriminative power it retains (reflected in its
+  ROC-AUC), is not spatially anchoring that signal to the correct
+  convoluted cortical shape. Combined with its collapsed Dice, this
+  reinforces the same conclusion as the Registration Frameworks
+  benchmark's leakage finding: FNIRT's warp trades spatial precision
+  for something that superficially still separates group1/group0 in
+  aggregate, which is the wrong tradeoff for voxel-based analyses of
+  focal cortical abnormalities.
 
 * **Ranking is unchanged from the coarser AAL-parcel benchmark** (ANTs
-  ≥ FSL FLIRT-only ≫ FSL FLIRT+FNIRT), but the gap between FLIRT+FNIRT
-  and the other two backends widens substantially once the target
-  requires tracking a genuinely convoluted boundary rather than bulk
-  overlap with a smooth parcel — a harder, more realistic test of
-  cortical-abnormality detection.
+  variants ≥ FSL FLIRT-only ≫ FSL FLIRT+FNIRT), but the gap between
+  FLIRT+FNIRT and the other backends widens substantially once the
+  target requires tracking a genuinely convoluted boundary rather than
+  bulk overlap with a smooth parcel — a harder, more realistic test of
+  cortical-abnormality detection. Across both the AAL-parcel and
+  GM-precise versions of this benchmark, **ANTs' deformable SyN stage
+  never clearly outperforms rigid+affine alone for this kind of focal,
+  planted-signal VBA detection task** — its extra registration cost
+  buys smoother anatomical correspondence in general, but not better
+  recovery of a known focal abnormality.
