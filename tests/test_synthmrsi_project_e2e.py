@@ -85,6 +85,7 @@ class SynthMRSIProjectE2ETests(unittest.TestCase):
         # timeout finally kills it. A hard timeout bounds worst-case runtime
         # instead of relying on GitHub's own 6-hour job cap.
         lines: list[str] = []
+        # nosemgrep: dangerous-subprocess-use-audit -- cmd is a static list literal defined above, no shell=True
         process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
         try:
             for line in process.stdout:
@@ -135,6 +136,7 @@ class SynthMRSIProjectE2ETests(unittest.TestCase):
             "--nthreads", "32", "--nproc", "2", "--verbose", "1",
         ]
         lines: list[str] = []
+        # nosemgrep: dangerous-subprocess-use-audit -- cmd is a static list literal defined above, no shell=True
         process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
         try:
             for line in process.stdout:

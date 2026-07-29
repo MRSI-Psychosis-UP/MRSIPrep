@@ -118,6 +118,7 @@ def main() -> int:
         if resp not in ("y", "Y", ""):
             return 0
         print("Downloading. This may take a while...")
+        # nosemgrep: dangerous-subprocess-use-audit -- list literal, no shell=True
         pull = subprocess.run(["docker", "pull", opts.image])
         if pull.returncode:
             return pull.returncode
@@ -172,6 +173,7 @@ def main() -> int:
 
     if opts.help:
         command.append("-h")
+        # nosemgrep: dangerous-subprocess-use-audit -- command is a list[str] built from argparse opts, no shell=True
         target_help = subprocess.check_output(command).decode()
         print(parser.format_help())
         print("\n--- mrsiprep (inside the container) ---\n")
@@ -183,6 +185,7 @@ def main() -> int:
         command.extend(unknown_args)
 
     print("RUNNING: " + " ".join(command))
+    # nosemgrep: dangerous-subprocess-use-audit -- command is a list[str] built from argparse opts, no shell=True
     ret = subprocess.run(command)
     if ret.returncode:
         print(f"MRSIPrep: please report errors to {__bugreports__}")
