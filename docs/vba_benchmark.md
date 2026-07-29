@@ -22,6 +22,13 @@ later SyN stage also ran, so this comparison reuses the exact same
 already-computed registrations with no recompute — see "Runs compared"
 below.
 
+(The [Registration Frameworks benchmark](benchmarks.md) separately
+compares a genuine **ANTs Rigid+Affine** configuration — a real second
+registration run with an actual Affine stage at MRSI→T1w, not a reuse
+of this page's Rigid-only transform. That page's ANTs (Rigid+Affine)
+and this page's ANTs (no SyN) are different registration configurations
+that happen to share a T1w→MNI stage; don't conflate the two.)
+
 ## Dataset
 
 **SynthMRSI-VBA-Project** is a synthetic validation dataset: 32 dummy
