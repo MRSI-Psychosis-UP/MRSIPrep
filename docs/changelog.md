@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+- Corrected the Registration Frameworks benchmark's fourth registration
+  configuration (`docs/benchmarks.md`): the previous release's "ANTs (no
+  SyN)" reused mrsiprep's default MRSI→T1w transform with SyN dropped,
+  which is **Rigid-only** at that stage (mrsiprep's default
+  `antsRegistrationSyN[sr]` never computes a separate Affine stage there
+  to fall back to) — not a genuine Rigid+Affine configuration. This
+  release replaces it with **ANTs (Rigid+Affine)**: a real second
+  `antsRegistration transform="a"` run at the MRSI→T1w stage (new
+  registration compute, 2 subjects × 2 targets), composed with the
+  already-correct Rigid+Affine T1w→MNI transform (reused, no recompute
+  needed there). Finding, now based on a genuine Rigid+Affine
+  configuration: ANTs (Rigid+Affine) is the **second-leakiest** of all
+  four configurations — 4.30% signal mass leakage at 3T and 4.73% at 7T,
+  roughly 11-12× worse than the default ANTs (Rigid+SyN) pipeline, worse
+  than FSL FLIRT-only at both field strengths, and at 7T even worse than
+  FSL FLIRT+FNIRT. Adding a real affine correction at this stage
+  increased leakage relative to rigid-only, a genuinely unexpected
+  result flagged explicitly as untested territory for mrsiprep's own
+  default configuration (which never uses affine at this stage without
+  immediately following it with SyN), not a recommendation for using it.
+  `docs/vba_benchmark.md`'s own, differently-scoped "ANTs (no SyN)"
+  comparison (Rigid-only at MRSI→T1w, reusing existing transforms, no
+  new registration compute) is unaffected by this change and now
+  cross-references this page to avoid the two configurations being
+  conflated.
 - Added **ANTs (no SyN)** as a fourth registration configuration to the
   Registration Frameworks benchmark (`docs/benchmarks.md`), reusing the
   already-computed ANTs (SyN) run's linear-stage transforms with the

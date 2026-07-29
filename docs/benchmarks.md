@@ -130,19 +130,19 @@ MRSI→T1w, rigid+affine+SyN for T1w→MNI — see the transform-stage table
 below, since the two ANTs stages are not symmetric) and **FSL** (FLIRT
 affine, with an FNIRT deformable stage on by default —
 `--no-fsl-deformable` for FLIRT-only). This section compares four
-MRSI→T1w registration configurations — **ANTs (SyN)**, **ANTs (no
-SyN)**, **FSL FLIRT-only**, and **FSL FLIRT+FNIRT** — each against both
-supported T1w registration targets, **brain** (skull-stripped) and
-**brain+CSF** (skull-stripped T1w with the CSF compartment re-added,
-since CSF also produces real MRSI signal that a brain-only target would
-otherwise clip at the boundary).
+MRSI→T1w registration configurations — **ANTs (Rigid+SyN)**, **ANTs
+(Rigid+Affine)**, **FSL FLIRT-only**, and **FSL FLIRT+FNIRT** — each
+against both supported T1w registration targets, **brain**
+(skull-stripped) and **brain+CSF** (skull-stripped T1w with the CSF
+compartment re-added, since CSF also produces real MRSI signal that a
+brain-only target would otherwise clip at the boundary).
 
 **Transform used at each registration stage, by backend:**
 
 | Backend | MRSI → T1w | T1w → MNI |
 |---|---|---|
-| ANTs (SyN) | Rigid + SyN (deformable) — **no separate Affine stage**, `antsRegistrationSyN[sr]` | Rigid + Affine + SyN (deformable), `antsRegistrationSyN[s]` |
-| ANTs (no SyN) | Rigid only (the SyN warp dropped from the `[sr]` run above) | Rigid + Affine (the SyN warp dropped from the `[s]` run above) |
+| ANTs (Rigid+SyN) — mrsiprep's default | Rigid + SyN (deformable) — **no separate Affine stage**, `antsRegistrationSyN[sr]` | Rigid + Affine + SyN (deformable), `antsRegistrationSyN[s]` |
+| ANTs (Rigid+Affine) | Rigid + Affine — a genuine second registration run (`antsRegistration`, `transform="a"`), since mrsiprep's default MRSI→T1w stage never computes an Affine stage to reuse | Rigid + Affine (the SyN warp dropped from the default `[s]` run above — this stage already has a real Affine, so no extra registration needed here) |
 | FSL FLIRT-only | Affine only (FLIRT, 12 DOF, `corratio` cost) | Affine only (FLIRT, 12 DOF) |
 | FSL FLIRT+FNIRT | Affine (FLIRT) + deformable warp (FNIRT, `--fsl-deformable`) | Affine only (FLIRT, 12 DOF) — FNIRT is not used for this stage |
 
@@ -151,22 +151,24 @@ Note that `--fsl-deformable` only adds a deformable (FNIRT) stage to the
 under the FSL backend, in both the FLIRT-only and FLIRT+FNIRT variants
 compared here.
 
-**The two ANTs stages are asymmetric, and it matters for what "no SyN"
-means.** ANTs' MRSI→T1w stage (`antsRegistrationSyN[sr]`) runs a Rigid
-stage followed directly by SyN — `antsRegistrationSyN.sh`'s own `sr`
-code has no separate Affine stage at all (MRSI and T1w start from
-roughly the same subject geometry, so mrsiprep's default skips the
-extra affine correction there). ANTs' T1w→MNI stage
-(`antsRegistrationSyN[s]`) runs the full three-stage Rigid → Affine →
-SyN pipeline, since subject anatomy genuinely differs from the MNI
-template in scale and shape, not just position. **ANTs (no SyN)** in
-this comparison therefore means Rigid-only at the MRSI→T1w stage
-composed with Rigid+Affine at the T1w→MNI stage — not "rigid+affine at
-both stages." `antsRegistration` always writes each linear stage's
-transform to its own independent file regardless of whether a later
-SyN stage also ran, so **ANTs (no SyN)** reuses the exact same
-already-computed registrations as **ANTs (SyN)**, with the deformable
-warp dropped from the resampling chain — no registration recompute.
+**The two ANTs stages are asymmetric, which is why "ANTs (Rigid+Affine)"
+needed a real second registration run, not just a transform dropped from
+the default pipeline.** ANTs' default MRSI→T1w stage
+(`antsRegistrationSyN[sr]`) runs a Rigid stage followed directly by SyN —
+`antsRegistrationSyN.sh`'s own `sr` code has no separate Affine stage at
+all (MRSI and T1w start from roughly the same subject geometry, so
+mrsiprep's default skips the extra affine correction there). Dropping
+SyN from that default leaves Rigid-only, not Rigid+Affine. **ANTs
+(Rigid+Affine)** in this comparison therefore required actually running
+`antsRegistration` with `transform="a"` at the MRSI→T1w stage — genuine
+new registration compute, not a reuse of an already-computed transform.
+ANTs' T1w→MNI stage (`antsRegistrationSyN[s]`) already runs the full
+three-stage Rigid → Affine → SyN pipeline by default, since subject
+anatomy genuinely differs from the MNI template in scale and shape, not
+just position — for that stage, `antsRegistration` always writes each
+linear stage's transform to its own independent file, so the
+already-computed Rigid+Affine transform is reused directly with the SyN
+warp simply dropped, no recompute needed there.
 
 ### Method
 
@@ -175,13 +177,15 @@ the same 3 Tesla and 7 Tesla subjects used above, varying
 `--registration-backend`/`--fsl-deformable` and
 `--registration-t1-target` (6 combinations × 2 subjects = 12 runs). See
 `experiments/registration_backend_benchmark.py` (not published; internal
-validation script). **ANTs (no SyN)** is added on top of this without a
-fresh `mni-norm` run: since `antsRegistration` always writes each linear
-stage's transform to its own independent file, the already-computed
-**ANTs (SyN)** run's Rigid (MRSI→T1w) and Rigid+Affine (T1w→MNI)
-transforms are reused directly, with only the deformable SyN warp
-dropped from the resampling chain at each stage — no registration
-recompute needed for the leakage/overlay results below.
+validation script). **ANTs (Rigid+Affine)** is added on top of this: the
+MRSI→T1w stage is a genuine new `antsRegistration transform="a"` run (2
+subjects × 2 targets = 4 registrations, timed directly), while the
+T1w→MNI stage reuses the already-computed Rigid+Affine transform from
+the default **ANTs (Rigid+SyN)** run (SyN warp dropped, no recompute) —
+so this configuration is partly new compute, partly reused, unlike the
+VBA benchmark's equivalent comparison where both stages could be reused
+directly (see the note there on why the two benchmarks differ in this
+respect).
 
 Leakage is reported as **signal-weighted mass outside the brain mask**:
 at each quality-passing voxel (resampled CRLB ≤ 20, mrsiprep's own default
@@ -215,12 +219,12 @@ each reference mask.
 **3 Tesla subject**, all four backends × both targets, axial slice, same
 intensity scale throughout:
 
-![CrPCr resampled to MNI space, overlaid on the full-head MNI152 template, 3 Tesla subject, 2 columns (brain / brain+CSF) x 4 rows (ANTs SyN / ANTs no SyN / FLIRT / FLIRT+FNIRT)](figures/registration_backend_mni_overlay_3t.png)
+![CrPCr resampled to MNI space, overlaid on the full-head MNI152 template, 3 Tesla subject, 2 columns (brain / brain+CSF) x 4 rows (ANTs Rigid+SyN / ANTs Rigid+Affine / FLIRT / FLIRT+FNIRT)](figures/registration_backend_mni_overlay_3t.png)
 
 **7 Tesla subject**, same layout and intensity-scale convention (its own
 scale, since 7T signal levels differ from 3T):
 
-![CrPCr resampled to MNI space, overlaid on the full-head MNI152 template, 7 Tesla subject, 2 columns (brain / brain+CSF) x 4 rows (ANTs SyN / ANTs no SyN / FLIRT / FLIRT+FNIRT)](figures/registration_backend_mni_overlay_7t.png)
+![CrPCr resampled to MNI space, overlaid on the full-head MNI152 template, 7 Tesla subject, 2 columns (brain / brain+CSF) x 4 rows (ANTs Rigid+SyN / ANTs Rigid+Affine / FLIRT / FLIRT+FNIRT)](figures/registration_backend_mni_overlay_7t.png)
 
 The full-head (non-skull-stripped) MNI152 template makes the skull
 boundary visible as a bright ring; voxels with values below 0.1 are
@@ -228,9 +232,9 @@ rendered transparent so the underlying template stays visible through
 low-signal regions. Signal extending past the skull ring, or with a
 jagged/scalloped rather than smooth outer edge, indicates voxels that have
 leaked beyond the true brain boundary during registration — visible here
-for both FSL variants and for ANTs (no SyN) at both field strengths, all
-three showing a visibly coarser, more scalloped outer edge than the full
-ANTs (SyN) result.
+for both FSL variants and, most noticeably, for ANTs (Rigid+Affine) at
+both field strengths, which shows the coarsest, most scalloped outer edge
+of any of the four configurations.
 
 **Signal-weighted MNI-space leakage, by backend** (brain target;
 brain+CSF is within ±0.3 points of these and shows the same pattern):
@@ -238,42 +242,62 @@ brain+CSF is within ±0.3 points of these and shows the same pattern):
 ![Bar chart: percentage of resampled CrPCr signal mass outside the MNI152 brain mask, by registration backend, faceted by 3 Tesla vs 7 Tesla](figures/registration_backend_mni_outside_comparison.png)
 
 **Total `mni-norm` wall-clock runtime, by backend** (same two subjects,
-averaged across the `brain`/`brain+CSF` targets) — **ANTs (no SyN)** is
-not a full `mni-norm` run (see Method above), so it isn't a like-for-like
-total-pipeline number; instead its bar reports the **registration-only**
-wall-clock time (both stages combined: Rigid MRSI→T1w + Rigid+Affine
-T1w→MNI, timed directly via `mrsiprep.interfaces.ants.register()`,
-`nthreads=16` matching the other runs' default), which should be read as
-a lower bound on how much a full `mni-norm` run would take without the
-deformable stage, not a directly comparable total:
+averaged across the `brain`/`brain+CSF` targets) — **ANTs (Rigid+Affine)**
+is not a full `mni-norm` run (see Method above), so it isn't a
+like-for-like total-pipeline number; instead its bar reports the
+**registration-only** wall-clock time (both stages combined, timed
+directly via `mrsiprep.interfaces.ants.register()`, `nthreads=16`
+matching the other runs' default), which should be read as a lower bound
+on how much a full `mni-norm` run would take, not a directly comparable
+total:
 
-![Bar chart: total mni-norm runtime in minutes, by registration backend (ANTs SyN, ANTs no SyN, FSL FLIRT, FSL FLIRT+FNIRT), for 3 Tesla vs 7 Tesla](figures/registration_backend_runtime.png)
+![Bar chart: total mni-norm runtime in minutes, by registration backend (ANTs Rigid+SyN, ANTs Rigid+Affine, FSL FLIRT, FSL FLIRT+FNIRT), for 3 Tesla vs 7 Tesla](figures/registration_backend_runtime.png)
 
 ### Interpretation
 
-* **ANTs (SyN) has the least signal-weighted leakage at both field
-  strengths** (0.34% at 3T, 0.44% at 7T) — roughly 6-10× less than FSL
-  FLIRT-only (2.1%, 0.97%) and 12-16× less than FSL FLIRT+FNIRT (5.4%,
-  2.7%). Unlike the raw voxel-count metric, this ranking agrees with the
-  overlay figures' visual impression of ANTs (SyN) producing the
-  sharpest, most anatomically detailed result. In absolute terms all
-  backends leak well under 6% of total signal mass, so none is
-  catastrophically wrong — but the relative gap between backends is real
-  and consistent across both subjects.
+* **ANTs (Rigid+SyN), mrsiprep's default, has the least signal-weighted
+  leakage at both field strengths** (0.34% at 3T, 0.44% at 7T) — roughly
+  6-10× less than FSL FLIRT-only (2.1%, 0.97%) and 12-16× less than FSL
+  FLIRT+FNIRT (5.4%, 2.7%). Unlike the raw voxel-count metric, this
+  ranking agrees with the overlay figures' visual impression of ANTs
+  (Rigid+SyN) producing the sharpest, most anatomically detailed result.
+  In absolute terms all backends leak well under 6% of total signal
+  mass, so none is catastrophically wrong — but the relative gap between
+  backends is real and consistent across both subjects.
 
-* **The deformable SyN stage is doing real, measurable work for leakage
-  — unlike its effect on VBA detection power (see the [Voxel-Based
-  Detection Benchmark](vba_benchmark.md), where dropping SyN never
-  clearly hurt, and sometimes helped, focal-signal recovery).** ANTs (no
-  SyN) leaks roughly 10× more signal mass than the full ANTs (SyN)
-  pipeline at 3T (3.3% vs. 0.34%) and roughly 5× more at 7T (2.2% vs.
-  0.44%) — at 3T it is even worse than FSL FLIRT-only (3.3% vs. 2.1%).
-  This is the clearest evidence in either benchmark that SyN's
-  contribution is real but task-dependent: it meaningfully tightens the
-  anatomical boundary (this benchmark), without reliably improving
-  recovery of a small planted focal signal (the VBA benchmark) — the two
-  are measuring different things, and a registration choice that's right
-  for one task is not automatically right for the other.
+* **ANTs (Rigid+Affine) is, surprisingly, the second-leakiest of all
+  four configurations — worse than either FSL variant at 7T.** It leaks
+  4.30% of signal mass at 3T and 4.73% at 7T: roughly 12× more than the
+  default ANTs (Rigid+SyN) pipeline at 3T and roughly 11× more at 7T,
+  worse than FSL FLIRT-only at both field strengths (2.1%, 0.97%), and
+  at 7T even worse than FSL FLIRT+FNIRT (4.73% vs. 2.73%). This is a
+  genuinely unexpected result: adding a real affine correction on top of
+  rigid alignment at the MRSI→T1w stage did not reduce leakage relative
+  to rigid-only, it *increased* it. A plausible explanation is that the
+  affine stage's extra degrees of freedom (scale, shear) are being fit
+  to noise or local signal structure in the relatively low-resolution,
+  low-contrast MRSI reference image without a deformable stage
+  afterward to correct any resulting distortion — since ANTs' own
+  default pipeline never uses affine at this stage without immediately
+  following it with SyN, this backend combination is untested territory
+  for mrsiprep's own default configuration, and this result is a data
+  point against introducing it as an option without further
+  investigation, not a recommendation for it.
+
+* **This mirrors the direction (if not the exact numbers) of the VBA
+  Detection Benchmark's finding that ANTs' rigid+affine configuration
+  there performed at least as well as, and sometimes better than, the
+  full SyN pipeline for focal-signal detection** (see the [Voxel-Based
+  Detection Benchmark](vba_benchmark.md)) — but the two benchmarks are
+  not directly comparable: the VBA benchmark's "no SyN" comparison reused
+  mrsiprep's actual default transforms with SyN dropped (Rigid-only at
+  MRSI→T1w, since that is what mrsiprep's default pipeline already
+  computes there), while this benchmark's ANTs (Rigid+Affine) required a
+  genuinely different, non-default MRSI→T1w registration (a real Affine
+  stage that mrsiprep's own default pipeline never runs at that stage).
+  The two results are not in tension with each other; they are testing
+  different registration configurations under different tasks, and
+  should not be read as contradicting one another.
 
 * **FSL FLIRT+FNIRT leaks more signal mass than FLIRT-only, at both field
   strengths** (5.4% vs. 2.1% at 3T; 2.7% vs. 0.97% at 7T) — i.e. adding
@@ -283,24 +307,29 @@ deformable stage, not a directly comparable total:
   superseded mask-based metric. That earlier result was the mask-dilation
   artifact described above; once leakage is weighted by actual signal
   magnitude rather than counting dilated boundary voxels, FNIRT is
-  consistently the leakiest of the four configurations.
+  leakier than FLIRT-only, though less leaky than ANTs (Rigid+Affine) at
+  either field strength.
 
-* **FNIRT's extra runtime cost is not paying for reduced leakage.** At 3T,
-  FNIRT (11.6 min) costs roughly 3.8× FLIRT-only (3.1 min) and is
-  comparable to ANTs (SyN) (9.3 min); at 7T the gap widens sharply — FNIRT
+* **Registration-only runtime for ANTs (Rigid+Affine) is well under a
+  minute at either field strength** (0.28 min at 3T, 0.73 min at 7T —
+  see the note above on why this isn't a like-for-like full-pipeline
+  comparison), far faster than any of the full `mni-norm` runs. But
+  given its leakage result above, this speed is not a useful tradeoff on
+  its own — a fast registration that leaks more signal than either FSL
+  variant is not obviously preferable to FSL FLIRT-only (3.1-11.2 min,
+  2.1%/0.97% leakage) purely on a speed/accuracy basis. **FNIRT's extra
+  runtime cost is not paying for reduced leakage either:** at 3T, FNIRT
+  (11.6 min) costs roughly 3.8× FLIRT-only (3.1 min) and is comparable
+  to ANTs (Rigid+SyN) (9.3 min); at 7T the gap widens sharply — FNIRT
   (53.0 min) is roughly 4.7× FLIRT-only (11.2 min) and nearly 2× ANTs
-  (SyN) itself (27.0 min), making it the slowest of all four options
-  despite also having the highest signal-weighted leakage. ANTs (no SyN)
-  is, unsurprisingly, by far the fastest option (registration-only: well
-  under a minute at either field strength — see the note above on why
-  this isn't a like-for-like full-pipeline number), but that speed comes
-  with the leakage cost described above, not for free. Combined with the
-  leakage result above, there is no longer a clear case for
-  `--fsl-deformable` over FLIRT-only purely on these two metrics; ANTs
-  (SyN) remains the best combination of accuracy and runtime at both
-  field strengths for tasks where leakage/boundary accuracy matters, and
-  `--no-fsl-deformable` is a reasonable choice for FSL users who want to
-  avoid FNIRT's runtime cost without a leakage penalty.
+  (Rigid+SyN) itself (27.0 min), making it the slowest of the three
+  full-pipeline options despite also having higher leakage than either
+  ANTs (Rigid+SyN) or FSL FLIRT-only. There is no longer a clear case
+  for `--fsl-deformable` over FLIRT-only purely on these two metrics;
+  ANTs (Rigid+SyN) remains the best combination of accuracy and runtime
+  among the full-pipeline options, and `--no-fsl-deformable` is a
+  reasonable choice for FSL users who want to avoid FNIRT's runtime cost
+  without a leakage penalty.
 
 * **Brain vs. brain+CSF as the T1w registration target has a small effect
   that flips direction between field strengths.** At 3T, brain+CSF is
