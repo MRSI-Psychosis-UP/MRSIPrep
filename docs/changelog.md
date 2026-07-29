@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+- Added **ANTs (no SyN)** as a fourth registration configuration to the
+  Registration Frameworks benchmark (`docs/benchmarks.md`), reusing the
+  already-computed ANTs (SyN) run's linear-stage transforms with the
+  deformable warp dropped — no registration recompute. Also corrected a
+  pre-existing error in that page's transform-stage table and prose:
+  mrsiprep's default MRSI→T1w ANTs transform (`antsRegistrationSyN[sr]`)
+  is **Rigid + SyN with no separate Affine stage**, not "rigid+affine+SyN"
+  as previously described; the T1w→MNI stage (`[s]`) is the one that
+  genuinely runs the full Rigid+Affine+SyN pipeline. The same correction
+  was applied to `docs/vba_benchmark.md`, where the fourth backend added
+  in an earlier release was likewise mislabeled "ANTs (rigid+affine
+  only)" — both pages now consistently use **ANTs (SyN)** / **ANTs (no
+  SyN)**, with an explicit note on what "no SyN" means at each stage.
+  Finding: unlike the VBA benchmark (where dropping SyN never clearly
+  hurt, and sometimes helped, focal-signal detection), **the deformable
+  SyN stage does real, measurable work for MNI-space leakage** — ANTs (no
+  SyN) leaks roughly 10× more signal mass than full ANTs (SyN) at 3T
+  (3.3% vs. 0.34%) and roughly 5× more at 7T (2.2% vs. 0.44%), even
+  falling behind FSL FLIRT-only at 3T. ANTs (no SyN)'s registration-only
+  runtime (not a full `mni-norm` run) is well under a minute at either
+  field strength, reported with an explicit caveat that it isn't a
+  like-for-like comparison to the other backends' full-pipeline
+  runtimes.
 - Extended the medial-vs-peripheral cortex follow-up
   (`docs/vba_benchmark.md`) with a third, independent CrPCr injection
   site: a bilateral deep white-matter sphere pair (~13mm radius,
