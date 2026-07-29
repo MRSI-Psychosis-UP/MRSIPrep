@@ -118,7 +118,9 @@ def main() -> int:
         if resp not in ("y", "Y", ""):
             return 0
         print("Downloading. This may take a while...")
-        # nosemgrep: dangerous-subprocess-use-audit -- list literal, no shell=True
+        # nosemgrep: dangerous-subprocess-use-audit,avoid-execution-of-untrusted-input-in-subprocess-calls --
+        # opts.image is a CLI argument passed as a discrete list element, never through a shell;
+        # a malicious value here can only affect the invoking user's own docker pull, not escape it.
         pull = subprocess.run(["docker", "pull", opts.image])
         if pull.returncode:
             return pull.returncode
