@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+- Extended the medial-vs-peripheral cortex follow-up
+  (`docs/vba_benchmark.md`) with a third, independent CrPCr injection
+  site: a bilateral deep white-matter sphere pair (~13mm radius,
+  centrum semiovale, intersected with SynthSeg's own WM label so the
+  injection never spills into gray matter or CSF — no finer WM
+  sub-parcellation is available from this pipeline, so a size-matched
+  sphere is the closest fair-volume analogue to the two cortical
+  targets). All three regions (medial GM, peripheral GM, deep WM) are
+  injected simultaneously in the same CrPCr channel and reported per
+  region. Finding: **deep WM has the highest ROC-AUC of all three
+  regions for every backend** (0.84-0.97, vs. Precuneus's 0.77-0.86 and
+  Postcentral's 0.52-0.60), but its Dice (0.05-0.06) is far below
+  Precuneus's (0.32-0.42) — strong group-level statistical separation
+  without tight spatial precision, a materially different failure mode
+  than Postcentral's near-total absence of signal. Also documents a
+  pre-existing, unrelated ~700-voxel false-positive cluster (present
+  before this follow-up existed, near posterior cingulate/periventricular
+  CSF) that was inflating Hausdorff distance for every region; boundary
+  distances are now restricted to detected voxels within 20mm of each
+  region's own ground truth to avoid a single distant unrelated cluster
+  dominating the metric (Dice/ROC-AUC/PR-AUC are unaffected and remain
+  unrestricted).
 - Added a **medial vs. peripheral cortex** follow-up to the Voxel-Based
   Detection Benchmark (`docs/vba_benchmark.md`), for CrPCr only. Injects
   a second, independent GM-only cluster — bilateral **postcentral gyrus**

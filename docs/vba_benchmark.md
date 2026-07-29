@@ -310,104 +310,162 @@ surface distance and Hausdorff distance (mm) between them:
   buys smoother anatomical correspondence in general, but not better
   recovery of a known focal abnormality.
 
-## Medial vs. peripheral cortex (CrPCr only)
+## Medial GM vs. peripheral GM vs. deep WM (CrPCr only)
 
-Precuneus is a **medial** structure, tucked against the brain's midline
-and relatively far from the skull. This follow-up adds a second,
-independent injection site — bilateral **postcentral gyrus**
-(`ctx-lh-postcentral`/`ctx-rh-postcentral`, primary somatosensory
-cortex) — a comparably sized, GM-only cortical region that instead sits
-at the **periphery** of the brain, directly under the parietal
-convexity immediately behind the central sulcus, in a different lobe
-(parietal, but a distinct and non-adjacent gyrus) from Precuneus:
+Precuneus is a **medial** cortical structure, tucked against the
+brain's midline and relatively far from the skull. This follow-up adds
+two further independent injection sites in the same CrPCr channel:
+bilateral **postcentral gyrus** (`ctx-lh-postcentral`/`ctx-rh-postcentral`,
+primary somatosensory cortex) — a comparably sized, GM-only cortical
+region at the **periphery** of the brain, directly under the parietal
+convexity immediately behind the central sulcus — and a **deep white
+matter** target, a bilateral pair of ~13mm-radius spheres near the
+centrum semiovale (deep frontal WM, intersected with SynthSeg's own
+WM label so the injection never spills into gray matter or CSF; no
+SynthSeg sub-parcellation of WM exists, so a size-matched sphere pair
+is the closest fair-volume WM analogue to the two cortical targets):
 
-![CrPCr injection regions: medial Precuneus (blue) vs. peripheral Postcentral Gyrus (orange), SynthSeg parcellation of the MNI152 template](figures/vba_injection_region_crpcr_gm_2cluster_postcentral.png)
+![CrPCr injection regions: medial Precuneus (blue), peripheral Postcentral Gyrus (orange), and deep frontal WM sphere (green), SynthSeg parcellation of the MNI152 template](figures/vba_injection_region_crpcr_3cluster.png)
 
-Both regions were injected simultaneously into the same CrPCr channel
-(a single `--abnormal-regions CrPCr:synthseg:ctx-lh-precuneus,ctx-rh-precuneus,ctx-lh-postcentral,ctx-rh-postcentral`
-union — the injection, spike-filtering, and resampling machinery is
-region-shape-agnostic and required no changes for a spatially disjoint
-target), with the same uniform per-subject bump amplitude
-(effect × whole-brain p95, confirmed via
-`synthetic_orig_transform_provenance.tsv`) applied identically at both
-sites. Detection and boundary-distance metrics are reported **per
-region** below, since combining a medial and a peripheral cluster into
-one Dice/boundary number would blur exactly the comparison this
-follow-up is meant to make.
+All three regions were injected simultaneously into the same CrPCr
+channel (the injection, spike-filtering, and resampling machinery is
+region-shape-agnostic — the WM sphere was folded into the same
+label-based mechanism as the two named cortical regions via a
+temporary synthetic label painted into a per-subject copy of the
+SynthSeg parcellation, rather than a separate code path), with the
+same uniform per-subject bump amplitude (effect × whole-brain p95,
+confirmed via `synthetic_orig_transform_provenance.tsv`) applied
+identically at all three sites. Detection and boundary-distance
+metrics are reported **per region** below, since combining three
+spatially disjoint clusters into one Dice/boundary number would blur
+exactly the comparison this follow-up is meant to make.
+
+### A pre-existing artifact, and how it's handled below
+
+Every backend's CrPCr `corrp` map contains one additional
+significant cluster (~700 voxels at `alpha=0.05`) near the posterior
+cingulate/periventricular CSF, well outside all three injected
+regions. This is **not** an effect of the WM sphere or any change made
+in this follow-up — the identical cluster, in the identical location,
+is already present in the Precuneus+Postcentral-only run before the WM
+sphere was ever added, so it predates and is unrelated to the work on
+this page. Its cause hasn't been tracked down (candidates include a
+registration-quality edge effect near the ventricles, or leakage from
+the CRLB-based quality mask's own boundary), but leaving it in
+un-flagged would matter here specifically: since Hausdorff distance is
+a worst-case metric, a single distant unrelated cluster is enough to
+dominate it and make every region's boundary-distance numbers look far
+worse than the *local* detection quality actually is. The boundary
+distances below are therefore restricted to detected voxels within
+20mm of each region's own ground truth — Dice, sensitivity, precision,
+ROC-AUC, and PR-AUC are unrestricted (bulk-overlap and threshold-sweep
+metrics aren't distorted by a single distant cluster the same way, so
+no adjustment was needed for those). The raw, uncropped detection maps
+are shown as-is in the figures below, including this stray cluster
+where it falls inside a plotted slice.
 
 ### Detection results by cluster and backend
 
-**Precuneus (medial):**
+**Precuneus (medial GM):**
 
 ![CrPCr, medial Precuneus: voxels significant at alpha=0.05 (filled) vs. ground truth (blue outline), for ANTs (SyN), ANTs (affine-only), FSL FLIRT, and FSL FLIRT+FNIRT](figures/vba_detection_crpcr_gm_precuneus.png)
 
-**Postcentral gyrus (peripheral):**
+**Postcentral gyrus (peripheral GM):**
 
 ![CrPCr, peripheral Postcentral Gyrus: voxels significant at alpha=0.05 (filled) vs. ground truth (blue outline), for ANTs (SyN), ANTs (affine-only), FSL FLIRT, and FSL FLIRT+FNIRT](figures/vba_detection_crpcr_gm_postcentral.png)
 
 **No backend detects any voxel at `alpha=0.05` anywhere in the
 peripheral Postcentral Gyrus region** — zero filled voxels at every
-panel above, for all four registration configurations. This is a
-uniformly negative result, not a single-backend failure. (The filled
-yellow clusters visible in the figure above all sit on the medial
-Precuneus outline in the same slice — the peripheral outline has no
-overlap with any detected voxel at all.)
+panel above, for all four registration configurations.
+
+**Deep frontal WM sphere:**
+
+![CrPCr, deep frontal WM sphere: voxels significant at alpha=0.05 (filled) vs. ground truth (blue outline), for ANTs (SyN), ANTs (affine-only), FSL FLIRT, and FSL FLIRT+FNIRT](figures/vba_detection_crpcr_gm_wmsphere.png)
+
+The large yellow cluster visible near the bottom of every panel above
+is the pre-existing stray artifact described above, not a WM-sphere
+detection — the actual WM-sphere detections are the small clusters
+sitting inside or against the blue circles. ANTs (both configurations)
+detects real voxels inside at least one sphere; FSL FLIRT and FSL
+FLIRT+FNIRT detect nothing inside either sphere at `alpha=0.05`.
 
 | Region | Backend | Dice | Sensitivity | Precision | ROC-AUC | PR-AUC | Mean surface distance (mm) | Hausdorff (mm) |
 |---|---|---|---|---|---|---|---|---|
-| Precuneus (medial) | ANTs (rigid+affine+SyN) | 0.351 | 0.254 | 0.566 | 0.825 | 0.316 | 5.38 | 22.80 |
-| Precuneus (medial) | ANTs (rigid+affine only) | 0.431 | 0.372 | 0.511 | 0.860 | 0.329 | 4.33 | 22.36 |
-| Precuneus (medial) | FSL FLIRT-only | 0.324 | 0.247 | 0.471 | 0.773 | 0.238 | 6.55 | 33.11 |
-| Precuneus (medial) | FSL FLIRT+FNIRT | 0.016 | 0.008 | 0.744 | 0.814 | 0.266 | 18.47 | 45.17 |
-| Postcentral gyrus (peripheral) | ANTs (rigid+affine+SyN) | 0.000 | 0.000 | 0.000 | 0.595 | 0.010 | 41.48 | 74.70 |
-| Postcentral gyrus (peripheral) | ANTs (rigid+affine only) | 0.000 | 0.000 | 0.000 | 0.586 | 0.007 | 39.49 | 71.86 |
-| Postcentral gyrus (peripheral) | FSL FLIRT-only | 0.000 | 0.000 | 0.000 | 0.518 | 0.004 | 45.49 | 72.25 |
-| Postcentral gyrus (peripheral) | FSL FLIRT+FNIRT | 0.000 | 0.000 | 0.000 | 0.521 | 0.004 | 53.14 | 84.99 |
+| Precuneus (medial GM) | ANTs (rigid+affine+SyN) | 0.341 | 0.251 | 0.530 | 0.824 | 0.281 | 5.39 | 23.07 |
+| Precuneus (medial GM) | ANTs (rigid+affine only) | 0.420 | 0.371 | 0.483 | 0.859 | 0.307 | 4.34 | 22.36 |
+| Precuneus (medial GM) | FSL FLIRT-only | 0.322 | 0.244 | 0.471 | 0.771 | 0.235 | 6.62 | 33.11 |
+| Precuneus (medial GM) | FSL FLIRT+FNIRT | 0.012 | 0.006 | 0.733 | 0.813 | 0.256 | 18.79 | 46.09 |
+| Postcentral gyrus (peripheral GM) | ANTs (rigid+affine+SyN) | 0.000 | 0.000 | 0.000 | 0.597 | 0.009 | 43.10 | 75.92 |
+| Postcentral gyrus (peripheral GM) | ANTs (rigid+affine only) | 0.000 | 0.000 | 0.000 | 0.584 | 0.007 | 40.69 | 71.86 |
+| Postcentral gyrus (peripheral GM) | FSL FLIRT-only | 0.000 | 0.000 | 0.000 | 0.516 | 0.004 | 59.64 | 96.62 |
+| Postcentral gyrus (peripheral GM) | FSL FLIRT+FNIRT | 0.000 | 0.000 | 0.000 | 0.520 | 0.004 | n/a | n/a |
+| Deep frontal WM sphere | ANTs (rigid+affine+SyN) | 0.053 | 0.047 | 0.062 | 0.973 | 0.163 | 23.27 | 54.48 |
+| Deep frontal WM sphere | ANTs (rigid+affine only) | 0.058 | 0.065 | 0.053 | 0.973 | 0.140 | 7.50 | 13.86 |
+| Deep frontal WM sphere | FSL FLIRT-only | 0.000 | 0.000 | 0.000 | 0.842 | 0.039 | n/a | n/a |
+| Deep frontal WM sphere | FSL FLIRT+FNIRT | 0.000 | 0.000 | 0.000 | 0.899 | 0.042 | n/a | n/a |
 
-The Precuneus numbers here match the single-cluster GM-precise section
-above (small differences are permutation-test noise from a fresh
-`randomise` run, not a methodology change) — confirming the two
-regions' injections are independent and this new peripheral cluster
-adds a genuinely separate test rather than disturbing the medial one.
+(`n/a` boundary-distance entries mean that backend detected zero
+voxels within 20mm of that region's own ground truth at all — Dice=0
+already reports this, the boundary distance is simply undefined rather
+than artificially large or small.)
+
+The Precuneus and Postcentral numbers here are consistent with the
+earlier two-cluster run (small differences are permutation-test noise
+from a fresh `randomise` run and the boundary-distance neighborhood
+restriction described above, not a methodology change) — confirming
+all three regions' injections are independent.
 
 ### ROC / Precision-Recall by cluster
 
-![ROC and precision-recall curves, medial Precuneus vs. peripheral Postcentral Gyrus, all four backends](figures/vba_roc_pr_comparison_2cluster_postcentral.png)
+![ROC and precision-recall curves, medial GM vs. peripheral GM vs. deep WM, all four backends](figures/vba_roc_pr_comparison_3cluster.png)
 
-The two clusters tell an even sharper story here than a bulk-overlap
-metric alone would suggest. **ROC-AUC for the Postcentral Gyrus
-(0.52-0.60) is barely above chance (0.50) for every backend** — unlike
-a purely diffuse-but-real-signal case, this is close to the
-no-discriminative-power floor. **PR-AUC collapses to 0.004-0.010** (vs.
-Precuneus's 0.24-0.33), and both ROC curves visibly hug the diagonal in
-the figure above rather than bowing toward the top-left corner. Taken
-together, this is a materially weaker result than the case would be for
-a region where real but diffuse signal still separates the two groups
-somewhat — here, group-level statistical evidence for the injected
-abnormality is nearly absent at the periphery, despite the same
-injection amplitude being used at both sites.
+The three regions tell three different stories. **Precuneus** shows
+moderate ROC-AUC (0.77-0.86) with real PR-AUC (0.24-0.33) — genuine,
+reasonably well-localized detection. **Postcentral** stays at or barely
+above chance on both metrics (ROC-AUC 0.52-0.60, PR-AUC 0.004-0.010) —
+essentially no usable signal reaches significance there. **The deep WM
+sphere is the most surprising result of this follow-up: it has the
+*highest* ROC-AUC of all three regions for every backend** (0.84-0.97),
+and — for ANTs specifically — real PR-AUC (0.14-0.16, comparable to
+Precuneus). But its Dice is far lower than Precuneus's (0.05-0.06 vs.
+0.32-0.42) despite that strong ROC-AUC. This combination — strong
+group-level statistical separation, weak spatial precision — is a
+different failure mode than Postcentral's "no signal reaches
+significance anywhere": the WM sphere's `corrp` map does carry a
+strong, well-separated signal, but that signal is not tightly
+localized to the true injected voxels, so relatively few of the
+significant voxels land inside the true sphere at `alpha=0.05` even
+though the region as a whole is statistically distinguishable.
 
 ### Why: registration variance, not injection strength
 
 Comparing group-level statistics directly on the merged 4D signal used
 as `randomise`'s input (ANTs SyN backend, n=31, from
-`experiments/results/vba_ants_no30_postcentral_500perm/merged/`):
+`experiments/results/vba_ants_no30_3cluster_500perm/merged/`):
 
 | Region | group=1 mean | group=0 mean | Difference | Inter-subject SD of per-subject regional mean |
 |---|---|---|---|---|
-| Precuneus (medial) | 1393.5 | 1315.4 | 78.0 | 62.5 |
-| Postcentral gyrus (peripheral) | 1004.9 | 939.4 | 65.5 | 138.3 |
+| Precuneus (medial GM) | 1393.2 | 1315.4 | 77.7 | 62.4 |
+| Postcentral gyrus (peripheral GM) | 1005.1 | 939.4 | 65.7 | 138.3 |
+| Deep frontal WM sphere | 1493.7 | 1358.5 | 135.2 | 102.5 |
 
-The mean group difference is comparable at both sites (65.5 vs. 78.0)
-— **but the peripheral site's inter-subject variability is more than
-2x higher** (SD 138.3 vs. 62.5). A `randomise` group contrast is a
-signal-to-noise comparison, not a signal-magnitude comparison: a
-similar mean difference riding on much larger inter-subject scatter
-produces a far weaker group-level statistic. This is the direct,
-measurable signature of registration/inter-subject-alignment accuracy
-being worse for a superficial gyrus immediately under the skull than
-for a deeper, more stereotyped medial structure — exactly the effect
-this follow-up set out to test for.
+The WM sphere actually shows the **largest raw group difference of the
+three regions** (135.2) — consistent with its high ROC-AUC, since a
+`randomise` group contrast is fundamentally a signal-to-noise
+comparison and a large mean difference helps regardless of tissue
+class. Its inter-subject SD (102.5) sits between Precuneus's (62.4)
+and Postcentral's (138.3): more variable than the medial GM target,
+but noticeably less variable than the peripheral GM target. This
+partially explains the WM sphere's Dice/ROC-AUC divergence: enough
+signal-to-noise to reliably reject the null hypothesis somewhere in or
+near the region (driving ROC-AUC up), but not enough spatial
+consistency across subjects for the *specific* significant voxels to
+land tightly inside the true sphere every time (keeping Dice low). Deep
+WM's own registration behavior — smoother, less-textured white matter
+gives image-registration cost functions less local structure to lock
+onto than a folded gyrus — is a plausible contributor, though this
+follow-up doesn't directly measure WM-specific registration accuracy to
+confirm that mechanism.
 
 ### Interpretation
 
@@ -419,19 +477,26 @@ this follow-up set out to test for.
   spatially consistent across subjects after registration (to any of
   the four configurations) than the more stereotyped medial Precuneus.
 
-* **Backend ranking by ROC-AUC is roughly preserved between the two
-  clusters** (ANTs rigid+affine+SyN ≈ ANTs rigid+affine only > FSL
-  FLIRT+FNIRT ≈ FSL FLIRT-only on Postcentral; ANTs affine-only > ANTs
-  SyN > FSL FLIRT+FNIRT > FSL FLIRT-only on Precuneus) — the relative
-  registration-quality story from the rest of this benchmark still
-  holds, but the *absolute* achievable detection power drops sharply
-  for all four backends alike once the target moves to the cortical
-  periphery, to the point of being indistinguishable from chance here.
+* **Deep white matter is a genuinely different case, not just a third
+  point on the same medial-to-peripheral axis.** It has real,
+  sometimes the strongest, statistical detectability (ROC-AUC), but
+  poor spatial precision (Dice) — a VBA study targeting WM abnormalities
+  should not assume that "significant somewhere in the structure" means
+  "significant at the true lesion location."
+
+* **Backend ranking is broadly consistent across all three regions**
+  (ANTs rigid+affine only ≥ ANTs rigid+affine+SyN > FSL FLIRT+FNIRT ≥
+  FSL FLIRT-only, by ROC-AUC) — the relative registration-quality story
+  from the rest of this benchmark still holds, but the *absolute*
+  achievable detection power and spatial precision both depend heavily
+  on where in the brain, and in which tissue class, the target sits.
 
 * This is a caution for real VBA studies of superficial cortical
-  regions (much of the association and sensorimotor cortex relevant to
-  psychiatric and neurological research sits at or near the
-  periphery): a well-registered, high-powered study can still fail to
-  reach significance for a real focal effect purely because of higher
-  inter-subject anatomical variability at the cortical rim, independent
-  of which registration backend is used.
+  regions and deep white matter alike (much of the association and
+  sensorimotor cortex relevant to psychiatric and neurological research
+  sits at or near the periphery, and WM tractography-adjacent findings
+  are common in the same literature): a well-registered, high-powered
+  study can still fail to reach significance for a real focal effect
+  at the cortical rim, or can reach significance without pinpointing
+  the true lesion location in deep WM, purely because of anatomy —
+  independent of which registration backend is used.
