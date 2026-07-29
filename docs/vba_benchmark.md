@@ -309,3 +309,129 @@ surface distance and Hausdorff distance (mm) between them:
   planted-signal VBA detection task** — its extra registration cost
   buys smoother anatomical correspondence in general, but not better
   recovery of a known focal abnormality.
+
+## Medial vs. peripheral cortex (CrPCr only)
+
+Precuneus is a **medial** structure, tucked against the brain's midline
+and relatively far from the skull. This follow-up adds a second,
+independent injection site — bilateral **postcentral gyrus**
+(`ctx-lh-postcentral`/`ctx-rh-postcentral`, primary somatosensory
+cortex) — a comparably sized, GM-only cortical region that instead sits
+at the **periphery** of the brain, directly under the parietal
+convexity immediately behind the central sulcus, in a different lobe
+(parietal, but a distinct and non-adjacent gyrus) from Precuneus:
+
+![CrPCr injection regions: medial Precuneus (blue) vs. peripheral Postcentral Gyrus (orange), SynthSeg parcellation of the MNI152 template](figures/vba_injection_region_crpcr_gm_2cluster_postcentral.png)
+
+Both regions were injected simultaneously into the same CrPCr channel
+(a single `--abnormal-regions CrPCr:synthseg:ctx-lh-precuneus,ctx-rh-precuneus,ctx-lh-postcentral,ctx-rh-postcentral`
+union — the injection, spike-filtering, and resampling machinery is
+region-shape-agnostic and required no changes for a spatially disjoint
+target), with the same uniform per-subject bump amplitude
+(effect × whole-brain p95, confirmed via
+`synthetic_orig_transform_provenance.tsv`) applied identically at both
+sites. Detection and boundary-distance metrics are reported **per
+region** below, since combining a medial and a peripheral cluster into
+one Dice/boundary number would blur exactly the comparison this
+follow-up is meant to make.
+
+### Detection results by cluster and backend
+
+**Precuneus (medial):**
+
+![CrPCr, medial Precuneus: voxels significant at alpha=0.05 (filled) vs. ground truth (blue outline), for ANTs (SyN), ANTs (affine-only), FSL FLIRT, and FSL FLIRT+FNIRT](figures/vba_detection_crpcr_gm_precuneus.png)
+
+**Postcentral gyrus (peripheral):**
+
+![CrPCr, peripheral Postcentral Gyrus: voxels significant at alpha=0.05 (filled) vs. ground truth (blue outline), for ANTs (SyN), ANTs (affine-only), FSL FLIRT, and FSL FLIRT+FNIRT](figures/vba_detection_crpcr_gm_postcentral.png)
+
+**No backend detects any voxel at `alpha=0.05` anywhere in the
+peripheral Postcentral Gyrus region** — zero filled voxels at every
+panel above, for all four registration configurations. This is a
+uniformly negative result, not a single-backend failure. (The filled
+yellow clusters visible in the figure above all sit on the medial
+Precuneus outline in the same slice — the peripheral outline has no
+overlap with any detected voxel at all.)
+
+| Region | Backend | Dice | Sensitivity | Precision | ROC-AUC | PR-AUC | Mean surface distance (mm) | Hausdorff (mm) |
+|---|---|---|---|---|---|---|---|---|
+| Precuneus (medial) | ANTs (rigid+affine+SyN) | 0.351 | 0.254 | 0.566 | 0.825 | 0.316 | 5.38 | 22.80 |
+| Precuneus (medial) | ANTs (rigid+affine only) | 0.431 | 0.372 | 0.511 | 0.860 | 0.329 | 4.33 | 22.36 |
+| Precuneus (medial) | FSL FLIRT-only | 0.324 | 0.247 | 0.471 | 0.773 | 0.238 | 6.55 | 33.11 |
+| Precuneus (medial) | FSL FLIRT+FNIRT | 0.016 | 0.008 | 0.744 | 0.814 | 0.266 | 18.47 | 45.17 |
+| Postcentral gyrus (peripheral) | ANTs (rigid+affine+SyN) | 0.000 | 0.000 | 0.000 | 0.595 | 0.010 | 41.48 | 74.70 |
+| Postcentral gyrus (peripheral) | ANTs (rigid+affine only) | 0.000 | 0.000 | 0.000 | 0.586 | 0.007 | 39.49 | 71.86 |
+| Postcentral gyrus (peripheral) | FSL FLIRT-only | 0.000 | 0.000 | 0.000 | 0.518 | 0.004 | 45.49 | 72.25 |
+| Postcentral gyrus (peripheral) | FSL FLIRT+FNIRT | 0.000 | 0.000 | 0.000 | 0.521 | 0.004 | 53.14 | 84.99 |
+
+The Precuneus numbers here match the single-cluster GM-precise section
+above (small differences are permutation-test noise from a fresh
+`randomise` run, not a methodology change) — confirming the two
+regions' injections are independent and this new peripheral cluster
+adds a genuinely separate test rather than disturbing the medial one.
+
+### ROC / Precision-Recall by cluster
+
+![ROC and precision-recall curves, medial Precuneus vs. peripheral Postcentral Gyrus, all four backends](figures/vba_roc_pr_comparison_2cluster_postcentral.png)
+
+The two clusters tell an even sharper story here than a bulk-overlap
+metric alone would suggest. **ROC-AUC for the Postcentral Gyrus
+(0.52-0.60) is barely above chance (0.50) for every backend** — unlike
+a purely diffuse-but-real-signal case, this is close to the
+no-discriminative-power floor. **PR-AUC collapses to 0.004-0.010** (vs.
+Precuneus's 0.24-0.33), and both ROC curves visibly hug the diagonal in
+the figure above rather than bowing toward the top-left corner. Taken
+together, this is a materially weaker result than the case would be for
+a region where real but diffuse signal still separates the two groups
+somewhat — here, group-level statistical evidence for the injected
+abnormality is nearly absent at the periphery, despite the same
+injection amplitude being used at both sites.
+
+### Why: registration variance, not injection strength
+
+Comparing group-level statistics directly on the merged 4D signal used
+as `randomise`'s input (ANTs SyN backend, n=31, from
+`experiments/results/vba_ants_no30_postcentral_500perm/merged/`):
+
+| Region | group=1 mean | group=0 mean | Difference | Inter-subject SD of per-subject regional mean |
+|---|---|---|---|---|
+| Precuneus (medial) | 1393.5 | 1315.4 | 78.0 | 62.5 |
+| Postcentral gyrus (peripheral) | 1004.9 | 939.4 | 65.5 | 138.3 |
+
+The mean group difference is comparable at both sites (65.5 vs. 78.0)
+— **but the peripheral site's inter-subject variability is more than
+2x higher** (SD 138.3 vs. 62.5). A `randomise` group contrast is a
+signal-to-noise comparison, not a signal-magnitude comparison: a
+similar mean difference riding on much larger inter-subject scatter
+produces a far weaker group-level statistic. This is the direct,
+measurable signature of registration/inter-subject-alignment accuracy
+being worse for a superficial gyrus immediately under the skull than
+for a deeper, more stereotyped medial structure — exactly the effect
+this follow-up set out to test for.
+
+### Interpretation
+
+* **A real focal abnormality at the cortical periphery is
+  systematically harder to recover in group-level VBA than the same
+  abnormality placed medially — for every registration backend
+  tested, with no exception.** This isn't a backend-specific weakness;
+  it reflects that lateral, superficial cortical folding is less
+  spatially consistent across subjects after registration (to any of
+  the four configurations) than the more stereotyped medial Precuneus.
+
+* **Backend ranking by ROC-AUC is roughly preserved between the two
+  clusters** (ANTs rigid+affine+SyN ≈ ANTs rigid+affine only > FSL
+  FLIRT+FNIRT ≈ FSL FLIRT-only on Postcentral; ANTs affine-only > ANTs
+  SyN > FSL FLIRT+FNIRT > FSL FLIRT-only on Precuneus) — the relative
+  registration-quality story from the rest of this benchmark still
+  holds, but the *absolute* achievable detection power drops sharply
+  for all four backends alike once the target moves to the cortical
+  periphery, to the point of being indistinguishable from chance here.
+
+* This is a caution for real VBA studies of superficial cortical
+  regions (much of the association and sensorimotor cortex relevant to
+  psychiatric and neurological research sits at or near the
+  periphery): a well-registered, high-powered study can still fail to
+  reach significance for a real focal effect purely because of higher
+  inter-subject anatomical variability at the cortical rim, independent
+  of which registration backend is used.

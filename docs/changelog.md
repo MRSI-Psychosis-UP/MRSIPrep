@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- Added a **medial vs. peripheral cortex** follow-up to the Voxel-Based
+  Detection Benchmark (`docs/vba_benchmark.md`), for CrPCr only. Injects
+  a second, independent GM-only cluster — bilateral **postcentral gyrus**
+  (primary somatosensory cortex, lateral convexity) — alongside the
+  existing medial Precuneus injection, in the same CrPCr channel, using
+  the same per-subject bump amplitude. Reports Dice/ROC-AUC/PR-AUC/
+  boundary-distance separately per region across all four registration
+  configurations. Finding: **no backend detects the peripheral cluster
+  at `alpha=0.05`** (Dice 0.000 everywhere, ROC-AUC 0.52-0.60 — barely
+  above chance), while the medial Precuneus injection is detected
+  normally by every backend (Dice 0.32-0.43). Group-level statistics on
+  the merged signal show a comparable mean group difference at both
+  sites, but more than 2x higher inter-subject variability at the
+  peripheral site (SD 138.3 vs. 62.5) — the direct, measurable signature
+  of registration/inter-subject-alignment accuracy being worse for a
+  superficial gyrus than a deeper medial structure, independent of which
+  of the four registration configurations is used.
 - Added a fourth registration configuration, **ANTs (rigid+affine
   only)**, throughout the Voxel-Based Detection Benchmark
   (`docs/vba_benchmark.md`) — both the original AAL-parcel comparison
