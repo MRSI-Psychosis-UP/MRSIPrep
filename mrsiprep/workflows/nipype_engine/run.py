@@ -118,6 +118,7 @@ def _start_live_status_table(config, tags: "list[str]", status_queue):
     terminal -- a redrawing table on a piped/non-interactive stream (e.g.
     Docker logs) would just spam raw escape codes.
     """
+    import queue
     import sys
     import threading
 
@@ -135,7 +136,7 @@ def _start_live_status_table(config, tags: "list[str]", status_queue):
             while not stop_event.is_set():
                 try:
                     status_queue.get(timeout=0.2)
-                except Exception:
+                except queue.Empty:
                     continue
 
         thread = threading.Thread(target=_drain_only, daemon=True)

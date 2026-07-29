@@ -1,4 +1,4 @@
-import subprocess
+import subprocess  # nosec B404 -- only used to construct a mock CompletedProcess in tests below
 import tempfile
 import unittest
 from pathlib import Path

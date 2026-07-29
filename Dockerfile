@@ -25,4 +25,9 @@ RUN /usr/bin/python3 -m pip install "nipype>=1.8" \
 # MNI-space QC report background, so it doesn't get re-downloaded every run.
 RUN /usr/bin/python3 -c "from nilearn import datasets; datasets.fetch_icbm152_2009()"
 
+# nosemgrep: dockerfile.security.missing-user-entrypoint.missing-user-entrypoint
+# Intentionally root: entrypoint.sh runs the pipeline as root, then chowns the
+# bind-mounted output directory back to HOST_UID/HOST_GID before exiting, so
+# host-side output files aren't left root-owned. Dropping to a non-root USER
+# here would break that chown-back step against arbitrary bind-mount owners.
 ENTRYPOINT ["mrsiprep-entrypoint"]

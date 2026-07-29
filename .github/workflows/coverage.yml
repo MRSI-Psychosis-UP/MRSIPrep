@@ -10,6 +10,10 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
+      # nosemgrep: yaml.github-actions.security.third-party-action-not-pinned-to-commit-sha.third-party-action-not-pinned-to-commit-sha
+      # Pinned to version tags (not commit SHAs) for readability/maintainability;
+      # all three actions below are first-party GitHub/Codecov actions with tags
+      # maintained by trusted publishers, not arbitrary third-party forks.
       - name: Checkout
         uses: actions/checkout@v4
 

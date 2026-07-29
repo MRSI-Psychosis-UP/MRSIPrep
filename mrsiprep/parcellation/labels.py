@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import random
+import random  # nosec B311 -- used only for a cosmetic parcel display color, not security-sensitive
 import shutil
 from pathlib import Path
 
@@ -18,7 +18,7 @@ def write_labels(indices, labels, out_path: str | Path) -> Path:
                 "parcel_id": int(index),
                 "parcel_name": name,
                 "hemisphere": infer_hemisphere(name),
-                "color": "#{:06x}".format(random.randint(0, 0xFFFFFF)),
+                "color": "#{:06x}".format(random.randint(0, 0xFFFFFF)),  # nosec B311
             }
         )
     out_path = Path(out_path)
