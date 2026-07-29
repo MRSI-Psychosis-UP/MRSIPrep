@@ -540,7 +540,8 @@ def _step_pvc(config, subject, session, mrsi, tissue, debug):
     corrected_maps = mrsi.preproc_maps
     tissue_4d = None
     if config.processing_mode in {"parc-con", "mni-norm"} and not config.no_pvc:
-        assert tissue is not None
+        if tissue is None:
+            raise ValueError("PVC requires tissue segmentation, but none was provided")
         with debug.step("Partial volume correction"):
             tissue_4d = create_tissue_4d(config, subject, session, tissue.mrsi, mrsi.reference)
             corrected_maps = run_pvc(config, subject, session, mrsi.preproc_maps, tissue_4d, mrsi.brainmask)
