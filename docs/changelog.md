@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+- Relabeled `docs/vba_benchmark.md`'s two ANTs configurations from
+  "ANTs (SyN)" / "ANTs (no SyN)" to **ANTs (R+SyN)** / **ANTs (R+Aff)**
+  throughout the page's prose, tables, and figures, for clarity and to
+  avoid confusion with the differently-scoped genuine Rigid+Affine
+  configuration on the Registration Frameworks benchmark page. Re-ran
+  the CrPCr detection figures (`vba_detection_crpcr_4backend.png`,
+  `vba_detection_crpcr_gm.png`) and the CrPCr/GluGln ROC/PR comparison
+  (`vba_roc_pr_comparison.png`) from source, since matplotlib bakes
+  labels into the rendered PNGs — a markdown-only text fix does not
+  update already-generated figures. Two of the six affected figures'
+  underlying `randomise` CrPCr results had been deleted by an earlier
+  cleanup pass in this same benchmark's development; re-derived both
+  (re-exported the CrPCr injection, re-filtered, re-resampled through
+  all four backends' already-computed registration transforms, and
+  re-ran `randomise`) rather than leaving them stale. Updated the
+  CrPCr/GluGln ROC-AUC/PR-AUC table with the freshly re-derived numbers
+  (small changes from permutation-test noise); the GM-precise
+  Dice/ROC-AUC/boundary-distance table's re-derived numbers matched the
+  previous release's exactly, so that table is unchanged. Also
+  corrected a stale prose claim that FSL FLIRT+FNIRT's detected CrPCr
+  cluster was merely "visibly smaller" than the other three backends —
+  the re-rendered figure shows it detects zero significant voxels at
+  that slice.
+
+## 1.7.6
+
 - Corrected the Registration Frameworks benchmark's fourth registration
   configuration (`docs/benchmarks.md`): the previous release's "ANTs (no
   SyN)" reused mrsiprep's default MRSI→T1w transform with SyN dropped,
