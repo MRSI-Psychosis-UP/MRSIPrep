@@ -28,6 +28,7 @@ class PVCTests(unittest.TestCase):
                 output = Path(command[command.index("-o") + 1])
                 self.assertTrue(output.parent.is_dir())
                 nib.save(image, output)
+                # nosemgrep: dangerous-subprocess-use-audit -- test double, does not execute anything
                 return subprocess.CompletedProcess(command, 0, "", "")
 
             with patch("mrsiprep.mrsi.pvc.shutil.which", return_value="/usr/bin/petpvc"), patch(
