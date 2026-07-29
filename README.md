@@ -3,6 +3,7 @@
 
 
 ![version](https://img.shields.io/badge/version-v1.7.6-blue)
+[![Codacy Badge](https://api.codacy.com/project/badge/Grade/c8b9401e55fe4d6cbd538f37ab5a78ff)](https://app.codacy.com/gh/MRSI-Psychosis-UP/MRSIPrep?utm_source=github.com&utm_medium=referral&utm_content=MRSI-Psychosis-UP/MRSIPrep&utm_campaign=Badge_Grade)
 [![e2e mni-norm](https://img.shields.io/github/actions/workflow/status/MRSI-Psychosis-UP/MRSIPrep/e2e-mni-norm.yml?label=e2e%20mni-norm&color=success)](https://github.com/MRSI-Psychosis-UP/MRSIPrep/actions/workflows/e2e-mni-norm.yml)
 [![e2e parc-con](https://img.shields.io/github/actions/workflow/status/MRSI-Psychosis-UP/MRSIPrep/e2e-parc-con.yml?label=e2e%20parc-con&color=success)](https://github.com/MRSI-Psychosis-UP/MRSIPrep/actions/workflows/e2e-parc-con.yml)
 [![docs](https://app.readthedocs.org/projects/mrsiprep/badge/?version=stable)](https://mrsiprep.readthedocs.io/en/stable/)
