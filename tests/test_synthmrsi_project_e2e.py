@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import os
 import shutil
-import subprocess
+import subprocess  # nosec B404 -- calls below use list args (docker pull/run), never shell=True
 import tempfile
 import unittest
 from pathlib import Path
@@ -49,6 +49,8 @@ class SynthMRSIProjectE2ETests(unittest.TestCase):
         self.fs_license = Path(fs_license).resolve()
 
         if os.environ.get(_SKIP_PULL_ENV) != "1":
+            # nosemgrep: dangerous-subprocess-use-audit,avoid-execution-of-untrusted-input-in-subprocess-calls
+            # nosec B603 B607 -- list literal, "docker" resolved via PATH by design, no shell=True
             subprocess.run(["docker", "pull", _IMAGE], check=True)
 
         self.out_dir = Path(tempfile.mkdtemp(prefix="mrsiprep_e2e_out_"))
@@ -85,7 +87,8 @@ class SynthMRSIProjectE2ETests(unittest.TestCase):
         # timeout finally kills it. A hard timeout bounds worst-case runtime
         # instead of relying on GitHub's own 6-hour job cap.
         lines: list[str] = []
-        # nosemgrep: dangerous-subprocess-use-audit -- cmd is a static list literal defined above, no shell=True
+        # nosemgrep: dangerous-subprocess-use-audit,avoid-execution-of-untrusted-input-in-subprocess-calls
+        # nosec B603 -- cmd is a static list literal defined above, no shell=True
         process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
         try:
             for line in process.stdout:
@@ -136,7 +139,8 @@ class SynthMRSIProjectE2ETests(unittest.TestCase):
             "--nthreads", "32", "--nproc", "2", "--verbose", "1",
         ]
         lines: list[str] = []
-        # nosemgrep: dangerous-subprocess-use-audit -- cmd is a static list literal defined above, no shell=True
+        # nosemgrep: dangerous-subprocess-use-audit,avoid-execution-of-untrusted-input-in-subprocess-calls
+        # nosec B603 -- cmd is a static list literal defined above, no shell=True
         process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
         try:
             for line in process.stdout:

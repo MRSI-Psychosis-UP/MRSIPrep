@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import subprocess
+import subprocess  # nosec B404 -- run_checked() below takes list args, never shell=True
 
 
 def run_checked(
@@ -24,7 +24,8 @@ def run_checked(
     the caller needs to inspect `.returncode`/`.stdout` itself (e.g. to
     build a more specific error message) instead of having one raised here.
     """
-    # nosemgrep: dangerous-subprocess-use-audit -- cmd is a list[str] from internal callers, no shell=True
+    # nosemgrep: dangerous-subprocess-use-audit,avoid-execution-of-untrusted-input-in-subprocess-calls
+    # nosec B603 -- cmd is a list[str] from internal callers, no shell=True
     result = subprocess.run(
         cmd,
         stdout=None if verbose else subprocess.PIPE,

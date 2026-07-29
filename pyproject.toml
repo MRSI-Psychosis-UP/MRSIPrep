@@ -47,6 +47,12 @@ markers = [
   "e2e_synthmrsi_project: real end-to-end run against the public SynthMRSI-Project fixture (needs Docker + a downloaded dataset; skipped by default)",
 ]
 
+[tool.bandit]
+# B108 ("insecure usage of temp file/directory") fires throughout tests/ on
+# placeholder "/tmp/..." strings fed to the CLI arg parser under test; none of
+# them are ever written to disk, so the check has no signal in this directory.
+exclude_dirs = ["tests"]
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["mrsiprep", "mrsiprep.*"]

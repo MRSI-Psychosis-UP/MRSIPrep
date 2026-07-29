@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import argparse
 import os
-import subprocess
+import subprocess  # nosec B404 -- all calls below use list args with no shell=True
 import sys
 from pathlib import Path
 
@@ -38,6 +38,8 @@ Would you like to download? [Y/n] """
 def check_docker() -> int:
     """-1 docker not found, 0 found but daemon unreachable, 1 OK."""
     try:
+        # nosec B607 -- "docker" resolved via PATH by design, so the wrapper works
+        # regardless of install method (apt, snap, Docker Desktop, etc.)
         ret = subprocess.run(["docker", "version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     except OSError as exc:
         from errno import ENOENT
@@ -51,6 +53,7 @@ def check_docker() -> int:
 
 
 def check_image(image: str) -> bool:
+    # nosec B607 -- "docker" resolved via PATH by design; image is a list element, no shell
     ret = subprocess.run(["docker", "images", "-q", image], stdout=subprocess.PIPE)
     return bool(ret.stdout)
 
@@ -118,9 +121,10 @@ def main() -> int:
         if resp not in ("y", "Y", ""):
             return 0
         print("Downloading. This may take a while...")
-        # nosemgrep: dangerous-subprocess-use-audit,avoid-execution-of-untrusted-input-in-subprocess-calls --
-        # opts.image is a CLI argument passed as a discrete list element, never through a shell;
-        # a malicious value here can only affect the invoking user's own docker pull, not escape it.
+        # nosemgrep: dangerous-subprocess-use-audit,avoid-execution-of-untrusted-input-in-subprocess-calls,python.exec.rule-subprocess-call-array
+        # nosec B603 B607 -- opts.image is a CLI argument passed as a discrete list element, never
+        # through a shell; "docker" is resolved via PATH by design. A malicious value here can only
+        # affect the invoking user's own docker pull, not escape it.
         pull = subprocess.run(["docker", "pull", opts.image])
         if pull.returncode:
             return pull.returncode
@@ -165,6 +169,8 @@ def main() -> int:
         unknown_args.extend(["--work-dir", "/scratch"])
 
     if opts.participants:
+        # nosec B108 -- /tmp/participants... is a path inside the container's mount
+        # namespace (the bind-mount target), not a host-visible predictable temp file
         command.extend(["-v", f"{opts.participants}:/tmp/participants{Path(opts.participants).suffix}:ro"])
         unknown_args.extend(["--participants", f"/tmp/participants{Path(opts.participants).suffix}"])
 
@@ -175,7 +181,8 @@ def main() -> int:
 
     if opts.help:
         command.append("-h")
-        # nosemgrep: dangerous-subprocess-use-audit -- command is a list[str] built from argparse opts, no shell=True
+        # nosemgrep: dangerous-subprocess-use-audit,avoid-execution-of-untrusted-input-in-subprocess-calls
+        # nosec B603 -- command is a list[str] built from argparse opts, no shell=True
         target_help = subprocess.check_output(command).decode()
         print(parser.format_help())
         print("\n--- mrsiprep (inside the container) ---\n")
@@ -187,7 +194,8 @@ def main() -> int:
         command.extend(unknown_args)
 
     print("RUNNING: " + " ".join(command))
-    # nosemgrep: dangerous-subprocess-use-audit -- command is a list[str] built from argparse opts, no shell=True
+    # nosemgrep: dangerous-subprocess-use-audit,avoid-execution-of-untrusted-input-in-subprocess-calls,python.exec.rule-subprocess-call-array
+    # nosec B603 -- command is a list[str] built from argparse opts, no shell=True
     ret = subprocess.run(command)
     if ret.returncode:
         print(f"MRSIPrep: please report errors to {__bugreports__}")
