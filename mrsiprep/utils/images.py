@@ -63,21 +63,6 @@ def save_nifti(data: np.ndarray, reference: nib.Nifti1Image | str | Path, out_pa
     return out_path
 
 
-def valid_nifti(path: str | Path | None, allow_zeros: bool = False) -> bool:
-    if path is None:
-        return False
-    path = Path(path)
-    if not path.exists():
-        return False
-    try:
-        data = np.asanyarray(nib.load(str(path)).dataobj)
-    except Exception:
-        return False
-    if data.size == 0:
-        return False
-    if np.issubdtype(data.dtype, np.floating) and not np.isfinite(data).all():
-        return False
-    return allow_zeros or bool(np.nanmax(data) != 0)
 
 
 def assert_same_grid(paths: list[Path], label: str = "images") -> None:

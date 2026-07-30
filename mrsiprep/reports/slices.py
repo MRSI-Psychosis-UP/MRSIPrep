@@ -6,8 +6,6 @@ from pathlib import Path
 
 import numpy as np
 
-PLANE_AXES = {"sagittal": 0, "coronal": 1, "axial": 2}
-
 STYLE = (
     "body{font-family:Arial,sans-serif;margin:2rem;line-height:1.4}"
     "table{border-collapse:collapse}td,th{border:1px solid #ddd;padding:4px 8px}"

@@ -21,19 +21,22 @@ def _check_file_integrity(subject: str, session: str | None, label: str, path: P
         raise ValidationError(f"Corrupt or unreadable {label} for {recording}: {path} ({error})")
 
 
-def validate_recording(config: MRSIPrepConfig, subject: str, session: str | None) -> tuple[Path, MRSIInputs]:
-    layout = BIDSLayout(config.bids_dir, filters=config.bids_filters)
+def _validate_t1_reference(config, layout, subject: str, session: str | None) -> Path:
     t1 = layout.t1(subject, session, config.t1_pattern)
     if not t1 or not t1.exists():
         raise ValidationError(f"Missing T1w reference for sub-{subject} ses-{session}: pattern {config.t1_pattern}")
     if not config.skip_file_integrity_check:
         _check_file_integrity(subject, session, "T1w reference", t1)
+    return t1
 
-    inputs = load_mrsi_inputs(layout, subject, session, config.metabolites)
+
+def _validate_metabolite_maps_present(config, subject: str, session: str | None, inputs: MRSIInputs) -> None:
     missing = [met for met in config.metabolites if met not in inputs.metabolite_maps]
     if missing:
         raise ValidationError(f"Missing metabolite maps for sub-{subject} ses-{session}: {', '.join(missing)}")
 
+
+def _validate_quality_maps_present(config, subject: str, session: str | None, inputs: MRSIInputs) -> None:
     missing_quality = []
     if "crlb" in config.quality_metrics and len(inputs.crlb_maps) < len(config.metabolites):
         missing_quality.append("crlb")
@@ -44,33 +47,54 @@ def validate_recording(config: MRSIPrepConfig, subject: str, session: str | None
     if missing_quality:
         raise ValidationError(f"Missing quality maps for sub-{subject} ses-{session}: {', '.join(missing_quality)}")
 
-    if not config.skip_file_integrity_check:
-        for met, path in inputs.metabolite_maps.items():
-            _check_file_integrity(subject, session, f"metabolite signal map ({met})", path)
-        for met, path in inputs.crlb_maps.items():
-            _check_file_integrity(subject, session, f"CRLB map ({met})", path)
-        if inputs.snr_map is not None:
-            _check_file_integrity(subject, session, "SNR map", inputs.snr_map)
-        if inputs.linewidth_map is not None:
-            _check_file_integrity(subject, session, "FWHM map", inputs.linewidth_map)
 
-    if config.processing_mode == "parc-con" and config.tissue_backend == "existing":
-        missing_pv = []
-        for index in (1, 2, 3):
-            pv = layout.cat12_probseg(subject, session, index)
-            if not pv or not pv.exists():
-                missing_pv.append(str(index))
-        if missing_pv:
-            raise ValidationError(
-                f"Missing CAT12-style p{', p'.join(missing_pv)} tissue map(s) required for --tissue-backend existing: sub-{subject} ses-{session}"
-            )
+def _validate_mrsi_map_integrity(config, subject: str, session: str | None, inputs: MRSIInputs) -> None:
+    if config.skip_file_integrity_check:
+        return
+    for met, path in inputs.metabolite_maps.items():
+        _check_file_integrity(subject, session, f"metabolite signal map ({met})", path)
+    for met, path in inputs.crlb_maps.items():
+        _check_file_integrity(subject, session, f"CRLB map ({met})", path)
+    if inputs.snr_map is not None:
+        _check_file_integrity(subject, session, "SNR map", inputs.snr_map)
+    if inputs.linewidth_map is not None:
+        _check_file_integrity(subject, session, "FWHM map", inputs.linewidth_map)
 
-    if config.registration_t1_target == "brain-csf" and config.tissue_backend != "synthseg-fast":
-        p3 = layout.cat12_probseg(subject, session, 3)
-        if not p3 or not p3.exists():
-            raise ValidationError(
-                f"Missing CAT12 p3 CSF map required for --registration-t1-target brain-csf: sub-{subject} ses-{session}"
-            )
+
+def _validate_existing_tissue_backend(config, layout, subject: str, session: str | None) -> None:
+    if config.processing_mode != "parc-con" or config.tissue_backend != "existing":
+        return
+    missing_pv = []
+    for index in (1, 2, 3):
+        pv = layout.cat12_probseg(subject, session, index)
+        if not pv or not pv.exists():
+            missing_pv.append(str(index))
+    if missing_pv:
+        raise ValidationError(
+            f"Missing CAT12-style p{', p'.join(missing_pv)} tissue map(s) required for --tissue-backend existing: sub-{subject} ses-{session}"
+        )
+
+
+def _validate_brain_csf_registration_target(config, layout, subject: str, session: str | None) -> None:
+    if config.registration_t1_target != "brain-csf" or config.tissue_backend == "synthseg-fast":
+        return
+    p3 = layout.cat12_probseg(subject, session, 3)
+    if not p3 or not p3.exists():
+        raise ValidationError(
+            f"Missing CAT12 p3 CSF map required for --registration-t1-target brain-csf: sub-{subject} ses-{session}"
+        )
+
+
+def validate_recording(config: MRSIPrepConfig, subject: str, session: str | None) -> tuple[Path, MRSIInputs]:
+    layout = BIDSLayout(config.bids_dir, filters=config.bids_filters)
+    t1 = _validate_t1_reference(config, layout, subject, session)
+
+    inputs = load_mrsi_inputs(layout, subject, session, config.metabolites)
+    _validate_metabolite_maps_present(config, subject, session, inputs)
+    _validate_quality_maps_present(config, subject, session, inputs)
+    _validate_mrsi_map_integrity(config, subject, session, inputs)
+    _validate_existing_tissue_backend(config, layout, subject, session)
+    _validate_brain_csf_registration_target(config, layout, subject, session)
 
     assert_same_grid(list(inputs.metabolite_maps.values()), "metabolite maps")
     return t1, inputs

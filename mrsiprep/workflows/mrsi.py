@@ -28,8 +28,8 @@ class MRSIResult:
         biharmonic repair (see :func:`mrsiprep.mrsi.filtering.filter_metabolite_maps`).
     :ivar corrected_maps: Currently identical to ``preproc_maps`` -- kept
         as a separate field for downstream consumers that expect a
-        post-tissue-correction map, even though tissue correction happens
-        later in :mod:`mrsiprep.tissue.correction`, not in this workflow.
+        post-PVC map, even though partial volume correction happens
+        later (see :func:`mrsiprep.mrsi.pvc.run_pvc`), not in this workflow.
     :ivar crlb_maps: Per-metabolite Cramér-Rao lower bound maps, copied
         through unchanged from the raw inputs.
     :ivar snr_map: Whole-brain signal-to-noise-ratio map, if the input

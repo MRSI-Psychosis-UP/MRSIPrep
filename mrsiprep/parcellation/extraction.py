@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
 
 from mrsiprep.io.naming import parcellation_derivative
 from mrsiprep.parcellation.base import ParcellationResult
@@ -73,11 +72,6 @@ def extract_regional_metabolites(
             )
     write_tsv(rows, out)
     return out
-
-
-def regional_matrix(regional_table: str | Path, value_col: str = "weighted_mean") -> pd.DataFrame:
-    df = pd.read_csv(regional_table, sep="\t")
-    return df.pivot_table(index="parcel_id", columns="metabolite", values=value_col, aggfunc="mean")
 
 
 def _load_optional(path):
