@@ -18,5 +18,3 @@ QUALITY_DEFAULTS = {
     "linewidth_max": 0.1,
     "crlb_max": 20.0,
 }
-
-CHIMERA_SCALES = {"scale1": 1, "scale2": 2, "scale3": 3, "scale4": 4, "scale5": 5}

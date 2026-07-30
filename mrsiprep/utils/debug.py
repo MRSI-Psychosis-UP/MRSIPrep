@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import os
-import threading
-import time
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
@@ -117,11 +115,6 @@ class Debug:
             text = f"[{self.tag}] {text}" if text else f"[{self.tag}]"
         return prefix, text
 
-    @property
-    def show_tool_output(self) -> bool:
-        """Whether external tools (ANTs/recon-all/mri_synthseg) should print their raw output."""
-        return self.verbose >= 3
-
     def _emit_status(self, kind: str, plain_message: str) -> bool:
         """Push a status transition to the shared queue instead of printing.
 
@@ -185,16 +178,6 @@ class Debug:
         _logbook_write("INFO", message)
         if self.verbose >= 2:
             self.console.print(f"{prefix}{timestamp()} [info][   INFO  ][/info] {escape(message)}")
-
-    def proc(self, *messages):
-        prefix, message = self._prepare_message(*messages)
-        _logbook_write("PROC", message)
-        if self.verbose < 1:
-            return
-        if self._emit_status("proc", message):
-            return
-        self.console.print()
-        self.console.print(f"{prefix}{timestamp()} [proc][  PROC  ][/proc] {escape(message)}")
 
     def debug(self, *messages):
         """Fine-grained detail below info(), only shown at verbose >= 3."""
@@ -295,15 +278,3 @@ class Debug:
         if self.verbose >= 1:
             self.console.rule(title, style="debug")
 
-    def __progress_bar_task(self, duration: int):
-        from rich.progress import Progress
-
-        with Progress() as progress:
-            task = progress.add_task("[green]Registration...", total=duration)
-            for _ in range(duration):
-                time.sleep(1)
-                progress.update(task, advance=1)
-
-    def run_progress_bar_in_background(self, duration: int):
-        thread = threading.Thread(target=self.__progress_bar_task, args=(duration,), daemon=True)
-        thread.start()

@@ -201,15 +201,6 @@ class BIDSLayout:
                 return matches[0]
         return None
 
-    def all_mrsi_maps(self, subject: str, session: str | None, desc: str = "signal", space: str = "orig") -> list[Path]:
-        for root in self._mrsi_input_roots(subject, session, space):
-            if not root.exists():
-                continue
-            matches = sorted(root.glob(f"{self._prefix(subject, session)}_space-{space}_met-*_desc-{desc}*_mrsi.nii*"))
-            if matches:
-                return matches
-        return []
-
     def transform(self, subject: str, session: str | None, stage: str, direction: str = "forward") -> list[Path]:
         sub = f"sub-{normalize_subject(subject)}"
         ses = self._ses_dir(session)

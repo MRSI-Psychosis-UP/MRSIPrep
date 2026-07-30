@@ -22,10 +22,6 @@ def require_cli(command: str) -> str:
     return path
 
 
-def require(command: str) -> str:
-    return require_cli(command)
-
-
 def run_cli(cmd: list[str], verbose: bool = False) -> None:
     run_checked(cmd, verbose=verbose, error_cls=FSLError, error_prefix=cmd[0])
 
@@ -273,6 +269,62 @@ def default_fnirt_warpres(mrsi_voxel_mm: tuple[float, float, float], floor_mm: i
     return tuple(max(floor_mm, round(2 * float(voxel))) for voxel in mrsi_voxel_mm)
 
 
+def _is_fnirt_warp(path: Path) -> bool:
+    return path.name.endswith(".fnirt_warp.nii.gz") or path.name.endswith(".fnirt_warp_inv.nii.gz")
+
+
+def _is_flirt_affine(path: Path) -> bool:
+    return path.name.endswith(".flirt.mat") or path.name.endswith(".flirt_inv.mat")
+
+
+def _apply_warp_transform(fixed_path, moving_path, existing, warps, out_path, interpolation, verbose) -> Path:
+    """Apply a single FNIRT warp, plus at most one genuinely-separate post-warp affine stage.
+
+    Any affine(s) also in ``transforms`` alongside the warp are a *separate*
+    registration stage on top of it (e.g. t1w->mni FLIRT, composed with an
+    mrsi->t1w FNIRT warp when resampling straight to MNI space) -- NOT the
+    warp's own seed affine, which fnirt already bakes into the warp field
+    (see :func:`apply_transforms`'s docstring) and which shares the warp's
+    own filename prefix (register_fnirt writes both under the same
+    out_prefix). Exclude that same-stage affine by prefix match; only a
+    genuinely different stage's affine remains. These must still be
+    applied, via applywarp --postmat (post-warp affine, applied in the
+    space the warp resamples into), not silently dropped: dropping them was
+    found to leave the "MNI-space" output actually sitting in T1w space,
+    undetected until compared against an MNI brain mask (~65% "outside
+    brain" instead of the ~15-30% every other variant showed).
+    """
+    if len(warps) > 1:
+        raise FSLError(f"FSL backend expects a single FNIRT warp per direction, got {len(warps)}: {warps}")
+    warp_stage_prefix = warps[0].name.split(".fnirt_warp")[0]
+    stage_affines = [path for path in existing if _is_flirt_affine(path) and not path.name.startswith(warp_stage_prefix)]
+    if len(stage_affines) > 1:
+        raise FSLError(f"FSL backend expects at most one post-warp affine stage, got {len(stage_affines)}: {stage_affines}")
+    postmat = stage_affines[0] if stage_affines else None
+    _apply_warp(fixed_path, moving_path, warps[0], out_path, interpolation=interpolation, postmat=postmat, verbose=verbose)
+    return out_path
+
+
+def _apply_composed_affines(fixed_path, moving_path, affines, out_path, interpolation, verbose) -> Path:
+    """Compose 2+ FLIRT affines via ``convert_xfm -concat`` before applying.
+
+    Multiple affines (e.g. mrsi->t1w composed with t1w->mni, when
+    resampling straight to MNI space) are composed into one rather than
+    rejected -- this mirrors ANTs' own multi-transform composition
+    (antsApplyTransforms chains its transform list natively), which FLIRT
+    does not do on its own. Callers list transforms last-applied-first
+    (matching the existing ANTs convention, e.g. t1_to_mni + mrsi_to_t1
+    means mrsi_to_t1 is applied first), so `-concat` receives them in the
+    same right-to-left order convert_xfm expects.
+    """
+    with tempfile.TemporaryDirectory(prefix="mrsiprep_fslconcat_") as tmpdir:
+        combined = Path(tmpdir) / "combined.mat"
+        require_cli("convert_xfm")
+        run_cli(["convert_xfm", "-omat", str(combined), "-concat", *[str(path) for path in affines]], verbose=verbose)
+        _apply_affine(fixed_path, moving_path, combined, out_path, interpolation=interpolation, verbose=verbose)
+    return out_path
+
+
 def apply_transforms(
     fixed,
     moving,
@@ -301,54 +353,13 @@ def apply_transforms(
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    warps = [path for path in existing if path.name.endswith(".fnirt_warp.nii.gz") or path.name.endswith(".fnirt_warp_inv.nii.gz")]
+    warps = [path for path in existing if _is_fnirt_warp(path)]
     if warps:
-        if len(warps) > 1:
-            raise FSLError(f"FSL backend expects a single FNIRT warp per direction, got {len(warps)}: {warps}")
-        # Any affine(s) also in `transforms` alongside the warp are a
-        # *separate* registration stage on top of it (e.g. t1w->mni FLIRT,
-        # composed with an mrsi->t1w FNIRT warp when resampling straight to
-        # MNI space) -- NOT the warp's own seed affine, which fnirt already
-        # bakes into the warp field (see the docstring above) and which
-        # shares the warp's own filename prefix (register_fnirt writes both
-        # under the same out_prefix). Exclude that same-stage affine by
-        # prefix match; only a genuinely different stage's affine remains.
-        # These must still be applied, via applywarp --postmat (post-warp
-        # affine, applied in the space the warp resamples into), not
-        # silently dropped: dropping them was found to leave the
-        # "MNI-space" output actually sitting in T1w space, undetected
-        # until compared against an MNI brain mask (~65% "outside brain"
-        # instead of the ~15-30% every other variant showed).
-        warp_stage_prefix = warps[0].name.split(".fnirt_warp")[0]
-        stage_affines = [
-            path
-            for path in existing
-            if (path.name.endswith(".flirt.mat") or path.name.endswith(".flirt_inv.mat"))
-            and not path.name.startswith(warp_stage_prefix)
-        ]
-        if len(stage_affines) > 1:
-            raise FSLError(f"FSL backend expects at most one post-warp affine stage, got {len(stage_affines)}: {stage_affines}")
-        postmat = stage_affines[0] if stage_affines else None
-        _apply_warp(fixed_path, moving_path, warps[0], out_path, interpolation=interpolation, postmat=postmat, verbose=verbose)
-        return out_path
+        return _apply_warp_transform(fixed_path, moving_path, existing, warps, out_path, interpolation, verbose)
 
-    affines = [path for path in existing if path.name.endswith(".flirt.mat") or path.name.endswith(".flirt_inv.mat")]
+    affines = [path for path in existing if _is_flirt_affine(path)]
     if len(affines) > 1:
-        # Multiple affines (e.g. mrsi->t1w composed with t1w->mni, when
-        # resampling straight to MNI space): compose them into one via
-        # convert_xfm -concat before applying, rather than rejecting -- this
-        # mirrors ANTs' own multi-transform composition (antsApplyTransforms
-        # chains its transform list natively), which FLIRT does not do on
-        # its own. Callers list transforms last-applied-first (matching the
-        # existing ANTs convention, e.g. t1_to_mni + mrsi_to_t1 means
-        # mrsi_to_t1 is applied first), so `-concat` receives them in the
-        # same right-to-left order convert_xfm expects.
-        with tempfile.TemporaryDirectory(prefix="mrsiprep_fslconcat_") as tmpdir:
-            combined = Path(tmpdir) / "combined.mat"
-            require_cli("convert_xfm")
-            run_cli(["convert_xfm", "-omat", str(combined), "-concat", *[str(path) for path in affines]], verbose=verbose)
-            _apply_affine(fixed_path, moving_path, combined, out_path, interpolation=interpolation, verbose=verbose)
-        return out_path
+        return _apply_composed_affines(fixed_path, moving_path, affines, out_path, interpolation, verbose)
 
     if len(existing) > 1:
         raise FSLError(f"FSL backend expects a single affine or FNIRT warp transform, got {len(existing)}: {existing}")

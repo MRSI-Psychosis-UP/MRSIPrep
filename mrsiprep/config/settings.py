@@ -85,31 +85,34 @@ class MRSIPrepConfig:
     stop_on_first_crash: bool = False
     preset_citation: dict | None = None
 
-    def __post_init__(self) -> None:
+    def _validate_required_fields(self) -> None:
         if not self.metabolites:
             raise ValueError("--metabolites is required (comma-separated list, e.g. 'CrPCr,GluGln,GPCPCh,NAANAAG,Ins').")
         if not self.ref_met:
             raise ValueError("--ref-met is required (reference metabolite used to build the MRSI registration target).")
+
+    def _resolve_paths(self) -> None:
+        from mrsiprep.io.bids import load_bids_filters
+
         self.bids_dir = Path(self.bids_dir).resolve()
         self.output_dir = Path(self.output_dir).resolve()
         if self.bids_filter_file is not None:
             self.bids_filter_file = Path(self.bids_filter_file).resolve()
-        from mrsiprep.io.bids import load_bids_filters
-
         self.bids_filters = load_bids_filters(self.bids_filter_file)
         self.output_spaces = _normalize_output_spaces(self.output_spaces)
-        if self.work_dir is None:
-            self.work_dir = self.output_dir / "work"
-        else:
-            self.work_dir = Path(self.work_dir).resolve()
+        self.work_dir = Path(self.work_dir).resolve() if self.work_dir is not None else self.output_dir / "work"
         if self.fs_subjects_dir is not None:
             self.fs_subjects_dir = Path(self.fs_subjects_dir).resolve()
+
+    def _validate_enum_choices(self) -> None:
         if self.processing_mode not in {"mni-norm", "parc-con", "midas"}:
             raise ValueError(f"Unsupported processing mode: {self.processing_mode}")
         if self.synthseg_mode not in {"fast", "standard", "robust"}:
             raise ValueError(f"Unsupported SynthSeg mode: {self.synthseg_mode}")
         if self.tissue_backend not in {"synthseg-fast", "existing", "none"}:
             raise ValueError(f"Unsupported tissue backend: {self.tissue_backend}")
+
+    def _validate_registration_backend(self) -> None:
         if self.registration_backend in {"flirt/fnirt", "flirt_fnirt", "flirt-fnirt"}:
             self.registration_backend = "fsl"
         if self.registration_backend not in {"ants", "fsl"}:
@@ -122,6 +125,8 @@ class MRSIPrepConfig:
             raise ValueError("--fsl-mrsi-to-t1-init must be 'flirt' or 'usesqform'.")
         if self.fsl_t1_to_mni_dof not in {6, 7, 9, 12}:
             raise ValueError("--fsl-t1-to-mni-dof must be one of 6, 7, 9, or 12.")
+
+    def _resolve_mode_dependent_defaults(self) -> None:
         if self.tissue_backend == "none":
             self.no_pvc = True
         if self.registration_t1_target is None:
@@ -130,6 +135,8 @@ class MRSIPrepConfig:
             # midas defaults to SynthSeg parcellation: subject-native, needs no
             # recon-all, and its GM/WM atlas suffices for the Eq. 4 regression.
             self.parcellation_mode = "synthseg" if self.processing_mode in {"mni-norm", "midas"} else "chimera"
+
+    def _validate_mode_parcellation_combination(self) -> None:
         if self.processing_mode == "mni-norm" and self.parcellation_mode != "synthseg":
             raise ValueError("mni-norm only supports SynthSeg parcellation. Use --mode parc-con for Chimera or MNI atlases.")
         # brain-csf is allowed under mni-norm: SynthSeg parcellation always
@@ -141,13 +148,25 @@ class MRSIPrepConfig:
             raise ValueError(f"Unsupported registration target: {self.registration_t1_target}")
         if self.processing_mode == "parc-con" and self.parcellation_mode == "synthseg":
             raise ValueError("parc-con requires Chimera or MNI atlas parcellation.")
-        if self.processing_mode == "midas":
-            # MIDAS mode's tissue correction is the per-parcel Eq. 4 regression,
-            # not PETPVC RBV; the paper has no voxelwise PVC step. Fuzzy c-means
-            # always supplies its own GM/WM/CSF maps, so the SynthSeg+FAST/CAT12
-            # tissue backends do not apply here.
-            self.no_pvc = True
-            self.tissue_backend = "synthseg-fast"
+
+    def _apply_midas_overrides(self) -> None:
+        if self.processing_mode != "midas":
+            return
+        # MIDAS mode's tissue correction is the per-parcel Eq. 4 regression,
+        # not PETPVC RBV; the paper has no voxelwise PVC step. Fuzzy c-means
+        # always supplies its own GM/WM/CSF maps, so the SynthSeg+FAST/CAT12
+        # tissue backends do not apply here.
+        self.no_pvc = True
+        self.tissue_backend = "synthseg-fast"
+
+    def __post_init__(self) -> None:
+        self._validate_required_fields()
+        self._resolve_paths()
+        self._validate_enum_choices()
+        self._validate_registration_backend()
+        self._resolve_mode_dependent_defaults()
+        self._validate_mode_parcellation_combination()
+        self._apply_midas_overrides()
         self.nproc = max(1, int(self.nproc))
         self.nthreads = max(1, int(self.nthreads))
 
@@ -175,10 +194,6 @@ class MRSIPrepConfig:
     @property
     def derivative_dir(self) -> Path:
         return self.output_dir if self.output_dir.name == "mrsiprep" else self.output_dir / "mrsiprep"
-
-    @property
-    def source_derivatives_dir(self) -> Path:
-        return self.bids_dir / "derivatives"
 
     @property
     def logs_dir(self) -> Path:

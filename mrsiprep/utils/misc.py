@@ -5,10 +5,6 @@ from __future__ import annotations
 import csv
 import re
 from pathlib import Path
-from typing import Iterable
-
-
-NIFTI_SUFFIXES = (".nii", ".nii.gz")
 
 
 def format_elapsed_hm(seconds: float) -> str:
@@ -20,20 +16,6 @@ def format_elapsed_hm(seconds: float) -> str:
     minutes, _ = divmod(total, 60)
     hours, minutes = divmod(minutes, 60)
     return f"{hours}h{minutes:02d}m"
-
-
-def strip_nifti_suffix(path: str | Path) -> str:
-    name = str(path)
-    if name.endswith(".nii.gz"):
-        return name[:-7]
-    if name.endswith(".nii"):
-        return name[:-4]
-    return str(Path(name).with_suffix(""))
-
-
-def is_nifti(path: str | Path) -> bool:
-    name = str(path).lower()
-    return name.endswith(NIFTI_SUFFIXES)
 
 
 def normalize_subject(label: str) -> str:
@@ -52,15 +34,6 @@ def normalize_session(label: str | None) -> str | None:
     if label.upper().startswith("T"):
         return f"V{label[1:]}"
     return label
-
-
-def subject_tag(label: str) -> str:
-    return f"sub-{normalize_subject(label)}"
-
-
-def session_tag(label: str | None) -> str | None:
-    ses = normalize_session(label)
-    return f"ses-{ses}" if ses else None
 
 
 def parse_bids_entities(filename: str | Path) -> dict[str, str | None]:
@@ -90,18 +63,3 @@ def read_participant_pairs(path: str | Path) -> list[tuple[str, str | None]]:
                 continue
             pairs.append((normalize_subject(sub), normalize_session(ses)))
     return list(dict.fromkeys(pairs))
-
-
-def dedupe(paths: Iterable[Path | str | None]) -> list[Path]:
-    out: list[Path] = []
-    seen: set[str] = set()
-    for item in paths:
-        if item is None:
-            continue
-        path = Path(item)
-        key = str(path)
-        if key in seen:
-            continue
-        seen.add(key)
-        out.append(path)
-    return out
