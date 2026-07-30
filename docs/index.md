@@ -18,8 +18,9 @@ quantified whole-brain MRSI maps, run as a BIDS App via Docker.
 *MRSIPrep* is a preprocessing and derivative-generation pipeline for already
 quantified whole-brain MRSI maps, run as a BIDS App via Docker. Its default
 `mni-norm` mode normalizes MRSI maps to a specified template for
-[voxel-based analysis](https://github.com/MRSI-Psychosis-UP/VLAD).
-`parc-con` mode adds SynthSeg+FAST tissue maps, PETPVC, and Chimera/MNI-atlas
+[voxel-based analysis](https://github.com/MRSI-Psychosis-UP/VLAD), generating
+SynthSeg+FAST tissue maps and applying PETPVC partial-volume correction by
+default (`--no-pvc` to disable). `parc-con` mode adds Chimera/MNI-atlas
 regional profile extraction for metabolic connectivity computation. MRSIPrep
 creates a quality-control report for each run.
 It is derived from the implementation in `MRSI-Metabolic-Connectome` and preserves the CHUV
@@ -71,12 +72,14 @@ also the fixture for MRSIPrep's own automated end-to-end pipeline test.
 MRSIPrep runs in one of two modes, selected with `--mode`:
 
 - **`mni-norm`** (MNI normalization, default) — registers MRSI maps to a SynthSeg-extracted T1w image,
-  resamples to the requested output spaces, and parcellates with SynthSeg
-  cortical/subcortical labels. No tissue PVC, no Chimera, no `recon-all`.
-  This is the fast default path for anatomical coverage and CRLB reporting.
-- **`parc-con`** (parcellation and connectivity) — adds SynthSeg+FAST tissue probability maps, partial-volume
-  correction, and a choice of Chimera multi-atlas or bundled MNI-atlas
-  parcellation, plus optional perturbation-based connectivity matrices.
+  generates SynthSeg+FAST tissue probability maps, applies PETPVC
+  partial-volume correction (`--no-pvc` to disable), resamples to the
+  requested output spaces, and parcellates with SynthSeg cortical/subcortical
+  labels. No Chimera, no `recon-all`. This is the fast default path for
+  anatomical coverage and CRLB reporting.
+- **`parc-con`** (parcellation and connectivity) — adds a choice of Chimera
+  multi-atlas or bundled MNI-atlas parcellation, plus optional
+  perturbation-based connectivity matrices.
 
 Both modes share the same MRSI filtering, quality-masking, and T1w/MNI
 normalization machinery; `parc-con` mode is a superset of `mni-norm` outputs.
