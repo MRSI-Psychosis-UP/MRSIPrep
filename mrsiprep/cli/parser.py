@@ -26,8 +26,20 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     selection = parser.add_argument_group("Options for filtering BIDS queries")
-    selection.add_argument("--participant-label", nargs="+", default=[])
-    selection.add_argument("--session-label", nargs="+", default=[])
+    selection.add_argument(
+        "--participant-label",
+        nargs="+",
+        default=[],
+        help="One or more subject labels to process, without the 'sub-' prefix (e.g. 'S001 S002'). "
+        "Default: process every subject found under --bids-dir.",
+    )
+    selection.add_argument(
+        "--session-label",
+        nargs="+",
+        default=[],
+        help="One or more session labels to process, without the 'ses-' prefix (e.g. 'V1 V2'). "
+        "Default: process every session found for each selected subject.",
+    )
     selection.add_argument("--participants", type=Path, default=None, help="TSV/CSV subject-session list.")
     selection.add_argument(
         "--bids-filter-file",
@@ -45,10 +57,34 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
         help="Comma-separated metabolite names to process, e.g. 'CrPCr,GluGln,GPCPCh,NAANAAG,Ins'.",
     )
-    quality.add_argument("--quality-metrics", nargs="+", default=["snr", "linewidth", "crlb"])
-    quality.add_argument("--snr-min", type=float, default=QUALITY_DEFAULTS["snr_min"])
-    quality.add_argument("--linewidth-max", type=float, default=QUALITY_DEFAULTS["linewidth_max"])
-    quality.add_argument("--crlb-max", type=float, default=QUALITY_DEFAULTS["crlb_max"])
+    quality.add_argument(
+        "--quality-metrics",
+        nargs="+",
+        default=["snr", "linewidth", "crlb"],
+        choices=["snr", "linewidth", "crlb"],
+        help="Which per-voxel quality maps are required inputs (any of 'snr', 'linewidth', 'crlb'); a "
+        "recording missing one of the listed maps fails preflight validation. Default: all three. Maps "
+        "that are present are always applied as voxel-inclusion thresholds regardless of this flag (see "
+        "--snr-min/--linewidth-max/--crlb-max); this flag only controls whether their absence is an error.",
+    )
+    quality.add_argument(
+        "--snr-min",
+        type=float,
+        default=QUALITY_DEFAULTS["snr_min"],
+        help="Minimum per-voxel SNR to include a voxel, when 'snr' is in --quality-metrics.",
+    )
+    quality.add_argument(
+        "--linewidth-max",
+        type=float,
+        default=QUALITY_DEFAULTS["linewidth_max"],
+        help="Maximum per-voxel linewidth (FWHM) to include a voxel, when 'linewidth' is in --quality-metrics.",
+    )
+    quality.add_argument(
+        "--crlb-max",
+        type=float,
+        default=QUALITY_DEFAULTS["crlb_max"],
+        help="Maximum per-voxel Cramér-Rao lower bound (%%) to include a voxel, when 'crlb' is in --quality-metrics.",
+    )
 
     processing = parser.add_argument_group("Options for performing only a subset of the workflow")
     processing.add_argument(
@@ -88,7 +124,15 @@ def build_parser() -> argparse.ArgumentParser:
         default="s",
         help="ANTs transform preset/code for T1w-to-MNI registration. Default matches the previous implementation: 's'.",
     )
-    registration.add_argument("--fsl-mrsi-to-t1-dof", type=int, choices=[6, 7, 9, 12], default=6)
+    registration.add_argument(
+        "--fsl-mrsi-to-t1-dof",
+        type=int,
+        choices=[6, 7, 9, 12],
+        default=6,
+        help="FLIRT degrees of freedom for MRSI-to-T1w registration: 6=rigid, 7=rigid+global scale, "
+        "9=rigid+per-axis scale, 12=full affine. Default 6 (rigid), appropriate for the low-resolution "
+        "MRSI reference map.",
+    )
     registration.add_argument(
         "--fsl-mrsi-to-t1-init",
         choices=["flirt", "usesqform"],
@@ -98,7 +142,15 @@ def build_parser() -> argparse.ArgumentParser:
         "(no-search) optimization from it -- FLIRT's own unrestricted global search was found to reliably diverge "
         "on MRSI-reference-vs-T1w registration and is not offered.",
     )
-    registration.add_argument("--fsl-t1-to-mni-dof", type=int, choices=[6, 7, 9, 12], default=12)
+    registration.add_argument(
+        "--fsl-t1-to-mni-dof",
+        type=int,
+        choices=[6, 7, 9, 12],
+        default=12,
+        help="FLIRT degrees of freedom for T1w-to-MNI registration: 6=rigid, 7=rigid+global scale, "
+        "9=rigid+per-axis scale, 12=full affine. Default 12 (full affine), appropriate for inter-subject "
+        "spatial normalization.",
+    )
     registration.add_argument(
         "--fsl-cost",
         default="corratio",
@@ -141,8 +193,24 @@ def build_parser() -> argparse.ArgumentParser:
         default="300,200,150,150",
         help="FNIRT --lambda regularization-weight schedule for the fsl-deformable MRSI-to-T1w stage.",
     )
-    registration.add_argument("--normalization", choices=["simple", "ants-syn", "existing"], default="simple")
-    registration.add_argument("--output-spaces", nargs="+", default=["MNI152NLin2009cAsym"])
+    registration.add_argument(
+        "--normalization",
+        choices=["simple", "ants-syn", "existing"],
+        default="simple",
+        help="Legacy T1w-to-MNI normalization strategy (superseded by --registration-backend for new code; "
+        "kept for backward compatibility). 'simple' registers via the backend selected by "
+        "--registration-backend. 'ants-syn' forces ANTs SyN regardless of --registration-backend. "
+        "'existing' reuses a previously computed T1w-to-MNI transform instead of recomputing it.",
+    )
+    registration.add_argument(
+        "--output-spaces",
+        nargs="+",
+        default=["MNI152NLin2009cAsym"],
+        help="One or more target spaces to resample final MRSI derivatives into. Accepts case-insensitive "
+        "aliases: 'mni'/'mni152'/'mni152nlin2009casym' (MNI152NLin2009cAsym, default), 't1'/'t1w' (T1w space, "
+        "equivalent to also passing --output-mrsi-t1w), 'mrsi'/'orig' (native MRSI grid). See "
+        "docs/usage_normalization.md.",
+    )
     registration.add_argument(
         "--output-mrsi-t1w",
         action="store_true",
@@ -155,30 +223,134 @@ def build_parser() -> argparse.ArgumentParser:
         default="t1wres",
         help="MNI template resolution: 'origres' (MRSI native), 't1wres' (T1w native), or '<N>mm' (e.g. '2mm').",
     )
-    registration.add_argument("--registration-t1-target", choices=["brain-csf", "brain", "raw"], default=None)
-    registration.add_argument("--csf-pv-threshold", type=float, default=0.95)
+    registration.add_argument(
+        "--registration-t1-target",
+        choices=["brain-csf", "brain", "raw"],
+        default=None,
+        help="Which T1w image registration targets. 'brain' registers directly to the skull-stripped T1w "
+        "(default for --mode mni-norm/midas). 'brain-csf' re-adds the CSF compartment to the skull-stripped "
+        "image before registering, so CSF-adjacent MRSI signal isn't clipped at the brain-only boundary "
+        "(default for --mode parc-con; requires a CAT12 p3 CSF map). 'raw' registers to the original, "
+        "non-skull-stripped T1w with no fixed mask.",
+    )
+    registration.add_argument(
+        "--csf-pv-threshold",
+        type=float,
+        default=0.95,
+        help="CSF partial-volume probability threshold used when building the 'brain-csf' registration "
+        "target: voxels with CAT12 p3 CSF probability at or above this value are added back to the "
+        "skull-stripped brain image.",
+    )
     registration.add_argument(
         "--ref-met",
         required=True,
         help="Reference metabolite map used to build the MRSI registration target, e.g. 'CrPCr'.",
     )
-    registration.add_argument("--t1", dest="t1_pattern", default="desc-brain_T1w")
+    registration.add_argument(
+        "--t1",
+        dest="t1_pattern",
+        default="desc-brain_T1w",
+        help="BIDS entity/suffix pattern used to locate the skull-stripped T1w derivative for each "
+        "recording (e.g. 'desc-brain_T1w', or 'acq-mprage_T1w' to select among multiple raw T1w "
+        "acquisitions -- see --bids-filter-file for finer-grained disambiguation).",
+    )
 
     parcellation = parser.add_argument_group("parcellation")
-    parcellation.add_argument("--parcellation-mode", choices=["synthseg", "chimera", "mni"], default=None)
-    parcellation.add_argument("--synthseg-mode", choices=["fast", "standard", "robust"], default="robust")
-    parcellation.add_argument("--chimera-scheme", default="LFMIHIFIFF")
-    parcellation.add_argument("--chimera-scale", type=_parse_scale, default=3)
-    parcellation.add_argument("--chimera-grow", type=int, default=2)
-    parcellation.add_argument("--atlas", default="chimera-LFMIHIFIS-3")
-    parcellation.add_argument("--custom-atlas", type=Path, default=None)
-    parcellation.add_argument("--custom-atlas-lut", type=Path, default=None)
-    parcellation.add_argument("--fs-subjects-dir", type=Path, default=None)
+    parcellation.add_argument(
+        "--parcellation-mode",
+        choices=["synthseg", "chimera", "mni"],
+        default=None,
+        help="Parcellation scheme. 'synthseg' uses SynthSeg's own cortical/subcortical labels (default for "
+        "--mode mni-norm/midas; the only mode compatible with mni-norm). 'chimera' runs the Chimera "
+        "multi-atlas fusion tool live, combining several region-specific atlases per --chimera-scheme "
+        "(default for --mode parc-con; requires FreeSurfer recon-all and FS_LICENSE). 'mni' warps a "
+        "pre-bundled or custom MNI-space atlas (see --atlas) into subject space instead of running Chimera.",
+    )
+    parcellation.add_argument(
+        "--synthseg-mode",
+        choices=["fast", "standard", "robust"],
+        default="robust",
+        help="mri_synthseg inference mode, trading speed for accuracy/robustness: 'fast' (quickest, "
+        "lower-memory), 'standard', or 'robust' (default; most accurate but the most memory-hungry -- can "
+        "exceed 16GB RAM on some inputs, consider 'fast' on memory-constrained runners).",
+    )
+    parcellation.add_argument(
+        "--chimera-scheme",
+        default="LFMIHIFIFF",
+        help="10-character Chimera parcellation code, one letter per supra-region in order: cortex, basal "
+        "ganglia, thalamus, amygdala, hippocampus, hypothalamus, cerebellum, brainstem, gyral WM, WM. "
+        "Default 'LFMIHIFIFF' = Lausanne cortex, FreeSurfer/Aseg subcortex/cerebellum/WM, MIALThalParc "
+        "thalamus, FSAmygHippoParc amygdala, HBT hippocampus, FSHypoThalParc hypothalamus, FSBrainStemParc "
+        "brainstem. See the Chimera documentation for the full per-position letter set.",
+    )
+    parcellation.add_argument(
+        "--chimera-scale",
+        type=_parse_scale,
+        default=3,
+        help="Lausanne2018 cortical parcellation granularity (1-5; higher = more, finer parcels), used only "
+        "when --chimera-scheme's cortex position is 'L'. Accepts a bare integer or 'scaleN'.",
+    )
+    parcellation.add_argument(
+        "--chimera-grow",
+        type=int,
+        default=2,
+        help="Distance (mm) to grow cortical/subcortical gray-matter parcel labels into adjacent white "
+        "matter when building the gyral-WM parcellation. Set to 0 to disable growing.",
+    )
+    parcellation.add_argument(
+        "--atlas",
+        default="chimera-LFMIHIFIS-3",
+        help="Atlas used when --parcellation-mode mni. One of: a bundled atlas name (see "
+        "mrsiprep.parcellation.atlas_registry.available_bundled_atlases(), e.g. 'chimera-LFMIHIFIS-3'); "
+        "'custom' (requires --custom-atlas and --custom-atlas-lut); 'schaefer<N>' for the Schaefer 2018 "
+        "N-parcel cortical atlas (e.g. 'schaefer400'); or 'mist197'/'mist-197' for the BASC multiscale "
+        "atlas at scale 197.",
+    )
+    parcellation.add_argument(
+        "--custom-atlas",
+        type=Path,
+        default=None,
+        help="Path to a custom MNI-space atlas NIfTI (integer parcel-ID label image). Requires "
+        "--atlas custom and --custom-atlas-lut.",
+    )
+    parcellation.add_argument(
+        "--custom-atlas-lut",
+        type=Path,
+        default=None,
+        help="Path to the lookup table (TSV) for --custom-atlas. Must have a 'parcel_id' column (or legacy "
+        "'index') matching the label image's integer values; optional 'parcel_name' ('name') and "
+        "'hemisphere' columns (hemisphere is inferred from the name if omitted).",
+    )
+    parcellation.add_argument(
+        "--fs-subjects-dir",
+        type=Path,
+        default=None,
+        help="FreeSurfer SUBJECTS_DIR to reuse pre-existing recon-all output from, instead of running "
+        "recon-all inside MRSIPrep. Only relevant with --parcellation-mode chimera.",
+    )
 
     connectivity = parser.add_argument_group("connectivity")
-    connectivity.add_argument("--write-connectivity", action="store_true")
-    connectivity.add_argument("--connectivity-method", choices=["pearson", "spearman", "cosine", "euclidean_distance"], default="spearman")
-    connectivity.add_argument("--connectivity-space", choices=["MRSI", "T1w", "MNI"], default="MRSI")
+    connectivity.add_argument(
+        "--write-connectivity",
+        action="store_true",
+        help="Build and write a regional metabolic connectivity matrix (parc-con mode only), using "
+        "CRLB-scaled noise perturbations to estimate edge similarity between parcels' metabolite profiles.",
+    )
+    connectivity.add_argument(
+        "--connectivity-method",
+        choices=["pearson", "spearman", "cosine", "euclidean_distance"],
+        default="spearman",
+        help="Similarity/distance measure between parcels' perturbed metabolite profiles used to build "
+        "connectivity edges: 'pearson' or 'spearman' correlation, 'cosine' similarity, or "
+        "'euclidean_distance'.",
+    )
+    connectivity.add_argument(
+        "--connectivity-space",
+        choices=["MRSI", "T1w", "MNI"],
+        default="MRSI",
+        help="Space the regional metabolite profiles are extracted in before building the connectivity "
+        "matrix: native MRSI grid (default), T1w space, or MNI space.",
+    )
     connectivity.add_argument("--connectivity-n-perturbations", type=int, default=50, help="Number of CRLB-scaled noise perturbations per metabolite used to build the connectivity similarity matrix.")
     connectivity.add_argument("--connectivity-sigma-scale", type=float, default=2.0, help="Scale factor applied to the CRLB-derived noise sigma when perturbing metabolite maps for connectivity.")
     connectivity.add_argument(
@@ -192,7 +364,14 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Exclude parcels whose label/ID is greater than or equal to this value from the connectivity matrix.",
     )
-    connectivity.add_argument("--regional-summary", choices=["mean", "median", "weighted_mean"], default="mean")
+    connectivity.add_argument(
+        "--regional-summary",
+        choices=["mean", "median", "weighted_mean"],
+        default="mean",
+        help="How each parcel's per-voxel metabolite values are summarized into a single regional value: "
+        "'mean', 'median', or 'weighted_mean' (SNR-weighted average; falls back to an unweighted mean if no "
+        "SNR map is available for that recording).",
+    )
 
     processing_control = parser.add_argument_group("Workflow configuration")
     processing_control.add_argument("--transform", default="", help="Legacy output transform override; prefer --output-spaces.")
@@ -204,7 +383,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Smoothing FWHM (mm) used when splicing repaired biharmonic-filter voxels back in. "
         "Default: derived from the native MRSI voxel size (mean voxel dimension x sqrt(2)).",
     )
-    processing_control.add_argument("--spikepc", type=float, default=99.0)
+    processing_control.add_argument(
+        "--spikepc",
+        type=float,
+        default=99.0,
+        help="Percentile threshold (0-100) above which a voxel is flagged as a spike for biharmonic "
+        "filtering/repair. Ignored when --no-filter is set.",
+    )
     processing_control.add_argument(
         "--spike-max-cluster-voxels",
         type=int,
@@ -217,7 +402,13 @@ def build_parser() -> argparse.ArgumentParser:
         "a very large number to disable cluster-size filtering (every above-threshold voxel is filtered "
         "regardless of cluster size, matching pre-existing behavior).",
     )
-    processing_control.add_argument("--no-pvc", action="store_true")
+    processing_control.add_argument(
+        "--no-pvc",
+        action="store_true",
+        help="Skip partial-volume correction (PETPVC) entirely, even in --mode parc-con. Equivalent to "
+        "--tissue-backend none, except tissue segmentation itself still runs (its maps are just not used "
+        "for PVC).",
+    )
     processing_control.add_argument(
         "--longitudinal",
         action="store_true",
@@ -234,16 +425,52 @@ def build_parser() -> argparse.ArgumentParser:
         help="Number of subject/session recordings to process in parallel. Each parallel process gets --nthreads threads; "
         "if nproc*nthreads exceeds the available CPU count, --nthreads is coerced down and a warning is shown at startup.",
     )
-    processing_control.add_argument("--work-dir", "-w", type=Path, default=None)
+    processing_control.add_argument(
+        "--work-dir",
+        "-w",
+        type=Path,
+        default=None,
+        help="Directory for the Nipype engine's node cache and scratch/intermediate files. Default: "
+        "<output_dir>/work. Safe to delete between runs to reclaim space; permanent derivatives under "
+        "<output_dir>/mrsiprep/ are unaffected, though deleting it invalidates the rerun-skip cache for "
+        "already-processed recordings.",
+    )
 
     overwrite = parser.add_argument_group("overwrite/recompute")
-    overwrite.add_argument("--overwrite", action="store_true")
-    overwrite.add_argument("--overwrite-filt", action="store_true")
+    overwrite.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Force recompute of every cached step for selected recordings, ignoring the Nipype node cache "
+        "entirely. Equivalent to passing all of the --overwrite-* flags below at once.",
+    )
+    overwrite.add_argument(
+        "--overwrite-filt",
+        action="store_true",
+        help="Force recompute of biharmonic spike filtering, even if cached filtered maps exist.",
+    )
     overwrite.add_argument("--overwrite-seg", action="store_true", help="Force recompute of tissue segmentation (SynthSeg brain extraction + dseg/probseg), even if cached outputs exist.")
-    overwrite.add_argument("--overwrite-pve", action="store_true")
-    overwrite.add_argument("--overwrite-t1-reg", action="store_true")
-    overwrite.add_argument("--overwrite-mni-reg", action="store_true")
-    overwrite.add_argument("--overwrite-transform", action="store_true")
+    overwrite.add_argument(
+        "--overwrite-pve",
+        action="store_true",
+        help="Force recompute of partial-volume correction (PETPVC), even if cached corrected maps exist.",
+    )
+    overwrite.add_argument(
+        "--overwrite-t1-reg",
+        action="store_true",
+        help="Force recompute of MRSI-to-T1w registration, even if a cached transform exists.",
+    )
+    overwrite.add_argument(
+        "--overwrite-mni-reg",
+        action="store_true",
+        help="Force recompute of T1w-to-MNI registration, even if a cached transform exists.",
+    )
+    overwrite.add_argument(
+        "--overwrite-transform",
+        action="store_true",
+        help="Force recompute of resampling MRSI maps through existing transforms into output spaces, even "
+        "if cached resampled maps exist. Does not itself force-recompute the transforms -- see "
+        "--overwrite-t1-reg/--overwrite-mni-reg.",
+    )
     overwrite.add_argument("--overwrite-chimera", action="store_true", help="Force re-run Chimera parcellation even if the output dseg file already exists.")
 
     runtime = parser.add_argument_group("Other options")
