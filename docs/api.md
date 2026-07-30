@@ -102,7 +102,6 @@ MRSIPrep shells out to or calls via Python bindings.
    mrsiprep.tissue.fuzzy_cmeans
    mrsiprep.tissue.fractions
    mrsiprep.tissue.psf
-   mrsiprep.tissue.correction
 ```
 
 ## Parcellation and connectivity
