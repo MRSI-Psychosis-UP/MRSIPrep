@@ -80,3 +80,9 @@ html_theme_options = {
     "collapse_navigation": False,
     "navigation_depth": 3,
 }
+
+# Read the Docs injects a rel="canonical" link on every built page pointing
+# at this base URL + the page's path, so search engines consolidate ranking
+# onto the "stable" version instead of indexing "latest" (or old tagged
+# versions) as separate competing pages.
+html_baseurl = "https://mrsiprep.readthedocs.io/en/stable/"
