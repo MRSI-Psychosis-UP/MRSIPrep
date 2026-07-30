@@ -64,10 +64,6 @@ def chimera_derivative(root: Path, subject: str, session: str | None, **entities
     return out_dir / ("_".join(name_parts) + ext)
 
 
-def connectome_derivative(root: Path, subject: str, session: str | None, suffix: str, **entities) -> Path:
-    return _derivative(root, subject, session, "connectomics", suffix, **entities)
-
-
 def coverage_report_dir(root: Path, subject: str, session: str | None) -> Path:
     return subject_session_dir(root, subject, session, "reports") / "coverage"
 
@@ -154,10 +150,3 @@ def _format_entity_value(entity: str, value) -> str:
     return str(value)
 
 
-def transform_path(root: Path, subject: str, session: str | None, from_space: str, to_space: str, desc: str | None = None, ext: str = ".h5") -> Path:
-    out_dir = subject_session_dir(root, subject, session, "anat" if from_space == "T1w" else "mrsi")
-    parts = [prefix(subject, session), f"from-{from_space}", f"to-{to_space}"]
-    if desc:
-        parts.append(f"desc-{desc}")
-    parts.append("xfm")
-    return out_dir / ("_".join(parts) + ext)
