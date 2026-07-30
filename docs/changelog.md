@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.7.7
 
 - Relabeled `docs/vba_benchmark.md`'s two ANTs configurations from
   "ANTs (SyN)" / "ANTs (no SyN)" to **ANTs (R+SyN)** / **ANTs (R+Aff)**
