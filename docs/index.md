@@ -15,12 +15,16 @@ quantified whole-brain MRSI maps, run as a BIDS App via Docker.
 
 ## About
 
-*MRSIPrep* is a preprocessing and derivative-generation pipeline for already
-quantified whole-brain MRSI maps, run as a BIDS App via Docker. It normalizes
-MRSI maps to anatomical and template space, corrects for partial-volume
-effects, and extracts regional metabolite profiles for downstream
-[voxel-based](https://github.com/MRSI-Psychosis-UP/VLAD) or connectivity
-analyses. MRSIPrep creates a quality-control report for each run.
+*MRSIPrep* is a magnetic resonance spectroscopic imaging (MRSI) data
+preprocessing pipeline that is designed to provide an easily accessible,
+robust interface requiring minimal user input, while providing easily
+interpretable and comprehensive quality-control reporting. It performs basic
+processing steps (registration to anatomical and template space, tissue
+segmentation, partial-volume correction, atlas projection, etc.) on already
+quantified whole-brain MRSI maps, providing outputs that can be easily
+submitted to a variety of group-level analyses, including
+[voxel-based analysis](https://github.com/MRSI-Psychosis-UP/VLAD), regional
+statistics, and metabolic connectivity.
 It is derived from the implementation in `MRSI-Metabolic-Connectome` and preserves the CHUV
 academic non-commercial research license.
 
