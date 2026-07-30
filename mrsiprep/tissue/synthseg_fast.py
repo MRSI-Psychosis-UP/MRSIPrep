@@ -21,31 +21,59 @@ CSF_VENTRICLE_LABELS = {*VENTRICLE_LABELS, OUTER_CSF_LABEL}
 
 
 def synthseg_fast_csf_probseg_path(config, subject: str, session: str | None) -> Path:
+    """Derivative path for the SynthSeg+FAST CSF probability-segmentation map."""
     return anat_derivative(config.derivative_dir, subject, session, space="T1w", label="CSF", suffix_override="probseg")
 
 
 def synthseg_fast_brain_path(config, subject: str, session: str | None) -> Path:
+    """Derivative path for the SynthSeg-masked (skull-stripped) T1w image."""
     return anat_derivative(config.derivative_dir, subject, session, space="T1w", desc="synthsegBrain")
 
 
 def synthseg_fast_brain_mask_path(config, subject: str, session: str | None) -> Path:
+    """Derivative path for the binary brain mask matching :func:`synthseg_fast_brain_path`."""
     return anat_derivative(config.derivative_dir, subject, session, space="T1w", desc="synthsegBrain", suffix_override="mask")
 
 
 def synthseg_work_dir(config, subject: str, session: str | None) -> Path:
+    """Scratch working directory (under ``config.work_dir``) for a recording's SynthSeg+FAST intermediates."""
     return config.work_dir / f"sub-{subject}" / (f"ses-{session}" if session else "ses-none") / "synthseg_fast"
 
 
 def synthseg_native_labels_path(config, subject: str, session: str | None) -> Path:
+    """Derivative path for SynthSeg's native-resolution anatomical label map (``dseg``).
+
+    The filename encodes ``config.synthseg_mode`` (``fast``/``standard``/
+    ``robust``), so switching modes doesn't reuse a stale cached segmentation
+    from a different mode.
+    """
     mode = getattr(config, "synthseg_mode", "fast")
     return anat_derivative(config.derivative_dir, subject, session, space="T1w", desc=f"synthsegParc{mode.capitalize()}", suffix_override="dseg")
 
 
 def synthseg_fast_input_path(config, subject: str, session: str | None) -> Path:
+    """Derivative path for the SynthSeg-masked T1w image FSL FAST is run on."""
     return anat_derivative(config.derivative_dir, subject, session, space="T1w", desc="synthsegFastInput")
 
 
 def run_or_load_synthseg_labels(config, subject: str, session: str | None, t1_path: Path) -> np.ndarray:
+    """Return SynthSeg's native-resolution anatomical labels for ``t1_path``.
+
+    Runs ``mri_synthseg`` and caches its output at
+    :func:`synthseg_native_labels_path`, or loads that cached array directly
+    if it already exists (and ``config.overwrite_seg``/``config.overwrite``
+    is not set). Used both by :func:`segment_t1_synthseg_fast` and by callers
+    that only need the raw label volume (e.g. brain-mask derivation) without
+    running FAST.
+
+    :param config: Run-wide :class:`mrsiprep.config.settings.MRSIPrepConfig`.
+    :param subject: BIDS subject label, without the ``sub-`` prefix.
+    :param session: BIDS session label without the ``ses-`` prefix, or
+        ``None`` for session-less datasets.
+    :param t1_path: Raw (non-skull-stripped) T1w image to segment.
+    :returns: Integer SynthSeg label array, resampled onto ``t1_path``'s
+        grid if ``mri_synthseg``'s own output grid differs.
+    """
     work_dir = synthseg_work_dir(config, subject, session)
     work_dir.mkdir(parents=True, exist_ok=True)
     return _run_or_load_synthseg(config, Path(t1_path), work_dir, subject, session)
@@ -55,7 +83,20 @@ def segment_t1_synthseg_fast(config, subject: str, session: str | None, t1_path:
     """Segment GM/WM/CSF with SynthSeg-constrained FAST.
 
     SynthSeg supplies the brain/CSF mask and anatomical labels. FAST runs only
-    inside that mask and supplies the partial-volume estimates.
+    inside that mask and supplies the partial-volume estimates, which are then
+    corrected for known SynthSeg/FAST disagreement at CSF/ventricle boundaries
+    (see ``_apply_synthseg_csf_tissue_correction``). This is the default
+    (``synthseg-fast``) :attr:`~mrsiprep.config.settings.MRSIPrepConfig.tissue_backend`.
+
+    :param config: Run-wide :class:`mrsiprep.config.settings.MRSIPrepConfig`.
+    :param subject: BIDS subject label, without the ``sub-`` prefix.
+    :param session: BIDS session label without the ``ses-`` prefix, or
+        ``None`` for session-less datasets.
+    :param t1_path: Raw (non-skull-stripped) T1w image to segment.
+    :returns: ``{"GM": path, "WM": path, "CSF": path}`` of T1w-space tissue
+        probability-segmentation maps. Recordings already segmented are
+        skipped (returned as-is) unless ``config.overwrite_seg``/
+        ``config.overwrite`` is set.
     """
 
     t1_path = Path(t1_path)
@@ -100,7 +141,22 @@ def segment_t1_synthseg_fast(config, subject: str, session: str | None, t1_path:
 
 
 def extract_t1_synthseg(config, subject: str, session: str | None, t1_path: Path) -> tuple[Path, Path]:
-    """Create a SynthSeg-masked T1w and binary mask without running FAST."""
+    """Create a SynthSeg-masked T1w and binary mask without running FAST.
+
+    Used by ``--mode midas``, which needs SynthSeg brain extraction as an
+    input to its own fuzzy c-means tissue segmentation
+    (:func:`mrsiprep.tissue.fuzzy_cmeans.fuzzy_cmeans_segment`) instead of FAST.
+
+    :param config: Run-wide :class:`mrsiprep.config.settings.MRSIPrepConfig`.
+    :param subject: BIDS subject label, without the ``sub-`` prefix.
+    :param session: BIDS session label without the ``ses-`` prefix, or
+        ``None`` for session-less datasets.
+    :param t1_path: Raw (non-skull-stripped) T1w image to segment.
+    :returns: ``(brain_path, mask_path)`` -- the skull-stripped T1w and its
+        binary brain mask. Recordings already extracted are skipped
+        (returned as-is) unless ``config.overwrite_seg``/``config.overwrite``
+        is set.
+    """
 
     t1_path = Path(t1_path)
     work_dir = synthseg_work_dir(config, subject, session)
