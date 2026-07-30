@@ -23,3 +23,6 @@ scripts/qc/plot_axial_slice.py
 
 # Local analysis scripts/results not yet ready to publish (e.g. VBA/randomise studies).
 /experiments/
+
+# Local-only benchmark writeup, not published/pushed, not in any toctree.
+/docs/benchmark_smoothing.md
