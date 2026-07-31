@@ -120,7 +120,14 @@ def build_subject_template(config, subject: str, session_t1_paths: dict[str, Pat
             shutil.copy2(warp, out_prefix.with_suffix(".syn.nii.gz"))
             shutil.copy2(affine, out_prefix.with_suffix(".affine.mat"))
 
-        resolution = resolve_mni_resolution(config.mni_resolution, template_path)
+        # The unbiased subject template spans multiple sessions -- possibly at
+        # different native MRSI resolutions -- so 'origres' has no single
+        # well-defined answer here; fall back to the template's own (T1w-grid)
+        # resolution rather than picking one session's MRSI resolution
+        # arbitrarily. Any other explicit --mni-resolution choice (an exact
+        # 'NNmm', or 't1wres' itself) is honored as given.
+        template_resolution_choice = "t1wres" if config.mni_resolution == "origres" else config.mni_resolution
+        resolution = resolve_mni_resolution(template_resolution_choice, template_path)
         mni_template = datasets.load_mni152_template(resolution)
         mni_template_path = tmp / "mni152_template.nii.gz"
         mni_template.to_filename(str(mni_template_path))

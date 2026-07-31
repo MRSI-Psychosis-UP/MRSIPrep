@@ -56,7 +56,7 @@ def run_t1_to_mni(config, subject: str, session: str | None, t1_path: Path, mrsi
     )
 
 
-def compose_longitudinal_t1_to_mni(config, subject: str, session: str, template_result, t1_path: Path) -> T1ToMNIResult:
+def compose_longitudinal_t1_to_mni(config, subject: str, session: str, template_result, t1_path: Path, mrsi_reference: Path | None = None) -> T1ToMNIResult:
     """Compose (session -> subject template) + (template -> MNI) forward transforms.
 
     ``template_result`` is a ``SubjectTemplateResult`` from
@@ -76,7 +76,14 @@ def compose_longitudinal_t1_to_mni(config, subject: str, session: str, template_
         )
     forward = session_forward + template_result.template_to_mni_forward
     inverse = template_result.template_to_mni_inverse
-    resolution = resolve_mni_resolution(config.mni_resolution, t1_path)
+    # Must match the resolution build_subject_template() actually registered
+    # the shared subject template to MNI at (see the identical fallback
+    # there): the template spans multiple sessions, possibly at different
+    # native MRSI resolutions, so 'origres' has no single well-defined answer
+    # for the shared template-to-MNI stage specifically, even though this
+    # session's own mrsi_reference is available.
+    resolution_choice = "t1wres" if config.mni_resolution == "origres" else config.mni_resolution
+    resolution = resolve_mni_resolution(resolution_choice, t1_path, mrsi_reference)
     template = datasets.load_mni152_template(resolution)
     prefix = ants_transform_prefix(config.derivative_dir, subject, session, "anat")
     return T1ToMNIResult(forward, inverse, prefix, template)

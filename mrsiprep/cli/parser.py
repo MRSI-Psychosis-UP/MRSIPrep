@@ -220,8 +220,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     registration.add_argument(
         "--mni-resolution",
-        default="t1wres",
-        help="MNI template resolution: 'origres' (MRSI native), 't1wres' (T1w native), or '<N>mm' (e.g. '2mm').",
+        default="origres",
+        help="MNI template resolution: 'origres' (MRSI native, default -- avoids implying spatial precision "
+        "the MRSI acquisition never had, and matches the resolution mrsiprep's own spatial-smoothness "
+        "benchmark evaluates), 't1wres' (T1w native), or '<N>mm' (e.g. '2mm').",
     )
     registration.add_argument(
         "--registration-t1-target",
