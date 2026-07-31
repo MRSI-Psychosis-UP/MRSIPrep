@@ -34,7 +34,7 @@ class PVCTests(unittest.TestCase):
             with patch("mrsiprep.mrsi.pvc.shutil.which", return_value="/usr/bin/petpvc"), patch(
                 "mrsiprep.mrsi.pvc.run_checked", side_effect=fake_petpvc
             ):
-                outputs = run_pvc(config, "S001", "V1", {"CrPCr": metabolite}, tissue, brainmask)
+                outputs = run_pvc(config, "S001", "V1", {"CrPCr": metabolite}, tissue, brainmask, metabolite)
 
             self.assertTrue(outputs["CrPCr"].exists())
 
@@ -55,7 +55,7 @@ class PVCTests(unittest.TestCase):
                 "mrsiprep.mrsi.pvc.run_checked", return_value=failure
             ):
                 with self.assertRaisesRegex(PVCError, "cannot write output"):
-                    run_pvc(config, "S001", "V1", {"CrPCr": metabolite}, tissue, brainmask)
+                    run_pvc(config, "S001", "V1", {"CrPCr": metabolite}, tissue, brainmask, metabolite)
 
 
 if __name__ == "__main__":
