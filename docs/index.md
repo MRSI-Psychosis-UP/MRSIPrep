@@ -195,6 +195,7 @@ usage_parcellation
 
 benchmarks
 vba_benchmark
+cross_sequence_benchmark
 ```
 
 ```{toctree}
