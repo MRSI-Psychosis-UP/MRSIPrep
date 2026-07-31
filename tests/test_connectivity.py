@@ -182,7 +182,7 @@ class ComputeMetaboliteConnectivityTests(unittest.TestCase):
 class ExportConnectivityTests(unittest.TestCase):
     def test_writes_expected_filename_and_npz_fields(self):
         from mrsiprep.config.settings import MRSIPrepConfig
-        from mrsiprep.connectivity.export import export_connectivity
+        from mrsiprep.connectivity.export import export_connectivity, export_metabolic_profiles
 
         with tempfile.TemporaryDirectory() as td:
             tmp_path = Path(td)
@@ -214,10 +214,13 @@ class ExportConnectivityTests(unittest.TestCase):
                 "2\tparcel-2\tR\tNAA\t1.0\t0.5\t0.3\t0.2\n"
             )
 
-            outputs = export_connectivity(
+            profiles, _profile_npz, table = export_metabolic_profiles(
                 config, "CHUVUP013", "V1", regional_table, "chimeraLFMIHIFIS",
                 metabolite_maps, crlb_maps, brainmask_path, atlas_path,
                 gm_fraction_path=gm_path, scale=3,
+            )
+            outputs = export_connectivity(
+                config, "CHUVUP013", "V1", profiles, table, "chimeraLFMIHIFIS", scale=3,
             )
 
             matrix_npz = outputs["matrix_npz"]
