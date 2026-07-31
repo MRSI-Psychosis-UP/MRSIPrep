@@ -1,15 +1,21 @@
-"""Connectivity workflow."""
+"""Metabolic profile and connectivity workflow."""
 
 from __future__ import annotations
 
-from mrsiprep.connectivity.export import export_connectivity
+from mrsiprep.connectivity.export import export_connectivity, export_metabolic_profiles
 
 
 def run_connectivity_workflow(config, subject, session, regional_table, parcels, metabolite_maps, crlb_maps, brainmask, gm_fraction_path=None):
-    """Build and export perturbation-based metabolic connectivity matrices.
+    """Estimate perturbation-augmented regional metabolic profiles, then
+    optionally correlate them into a metabolic connectivity matrix.
 
-    A no-op returning ``{}`` unless ``--write-connectivity`` is set.
-    Delegates to :func:`mrsiprep.connectivity.export.export_connectivity`.
+    Profile estimation (CRLB-scaled Monte Carlo uncertainty propagation,
+    Instrella & Juchem 2024) always runs -- it is the standard, unconditional
+    regional-derivative output of ``parc-con`` mode, independent of
+    ``--write-connectivity``. Connectivity-matrix construction is the
+    optional add-on: it reuses the already-computed profiles rather than
+    recomputing them, and only runs when ``config.write_connectivity`` is
+    set.
 
     :param config: Run-wide :class:`mrsiprep.config.settings.MRSIPrepConfig`.
     :param subject: BIDS subject label, without the ``sub-`` prefix.
@@ -20,18 +26,18 @@ def run_connectivity_workflow(config, subject, session, regional_table, parcels,
     :param parcels: Backend-specific parcellation result (supplies
         ``atlas_name``, ``atlas_mrsi``, and ``scale``).
     :param metabolite_maps: MRSI-space metabolite maps used to compute
-        perturbation-based edges.
+        perturbation-based profiles.
     :param crlb_maps: Matching per-metabolite CRLB maps.
     :param brainmask: MRSI-space brainmask restricting which voxels
-        contribute to connectivity edges.
+        contribute to the profiles.
     :param gm_fraction_path: Optional gray-matter fraction map, used to
-        weight edges by GM content when given.
-    :returns: Dict of exported connectivity matrix paths, or ``{}`` if
-        ``config.write_connectivity`` is false.
+        weight profiles by GM content when given.
+    :returns: Dict with a ``"profiles"`` entry (path to the exported
+        metabolic-profile ``.npz``, always present) plus ``"matrix_npz"``,
+        ``"nodes"``, and ``"edges"`` entries when ``--write-connectivity``
+        was also set.
     """
-    if not config.write_connectivity:
-        return {}
-    return export_connectivity(
+    profiles, profile_npz, table = export_metabolic_profiles(
         config,
         subject,
         session,
@@ -44,3 +50,7 @@ def run_connectivity_workflow(config, subject, session, regional_table, parcels,
         gm_fraction_path=gm_fraction_path,
         scale=parcels.scale,
     )
+    outputs = {"profiles": profile_npz}
+    if config.write_connectivity:
+        outputs.update(export_connectivity(config, subject, session, profiles, table, parcels.atlas_name, scale=parcels.scale))
+    return outputs

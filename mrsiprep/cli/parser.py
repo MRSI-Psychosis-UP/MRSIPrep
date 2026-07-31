@@ -333,7 +333,8 @@ def build_parser() -> argparse.ArgumentParser:
     connectivity.add_argument(
         "--write-connectivity",
         action="store_true",
-        help="Build and write a regional metabolic connectivity matrix (parc-con mode only), using "
+        help="Build and write a regional metabolic connectivity (similarity) matrix on top of the "
+        "regional metabolic profiles that parc-con mode already computes unconditionally, using "
         "CRLB-scaled noise perturbations to estimate edge similarity between parcels' metabolite profiles.",
     )
     connectivity.add_argument(

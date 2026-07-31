@@ -50,7 +50,16 @@ docker run --rm \
 A custom atlas can be supplied with `--custom-atlas` and its lookup table
 with `--custom-atlas-lut`.
 
-## Connectivity
+## Regional metabolic profiles and connectivity
+
+`parc-con` mode always builds a per-parcel regional metabolic profile for
+every retained parcel, regardless of `--write-connectivity`: each
+metabolite map is perturbed `--connectivity-n-perturbations` times with
+CRLB-scaled noise (`--connectivity-sigma-scale`) to propagate quantification
+uncertainty into the profile, then z-scored and averaged per parcel. This
+profile (written under `<out>/mrsiprep/sub-*/ses-*/connectivity/*_desc-metabolicprofiles_mrsi.npz`)
+is the standard regional derivative of `parc-con` mode and does not require
+`--write-connectivity`.
 
 ```bash
 docker run --rm \
@@ -68,10 +77,9 @@ docker run --rm \
   --connectivity-space MNI
 ```
 
-`--write-connectivity` builds a regional connectivity matrix from
-metabolite values. The matrix is perturbed `--connectivity-n-perturbations`
-times with CRLB-scaled noise (`--connectivity-sigma-scale`) to propagate
-quantification uncertainty into the connectivity estimate.
+`--write-connectivity` is the optional add-on: it correlates the
+already-computed regional profiles into a regional connectivity (MetSiM)
+matrix, without recomputing the perturbations.
 
 See [Basic Usage](usage_basic.md) for the full CLI
 reference, including `--parcellation-mode`, `--atlas`, `--custom-atlas`,

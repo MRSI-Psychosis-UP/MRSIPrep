@@ -7,25 +7,40 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from mrsiprep.connectivity.connectivity import compute_metabolite_connectivity
+from mrsiprep.connectivity.connectivity import compute_metabolic_profiles, correlate_metabolic_profiles
 from mrsiprep.connectivity.edges import build_edges
 from mrsiprep.connectivity.nodes import build_nodes
 from mrsiprep.io.naming import subject_session_dir
+
+
+def _processing_label(config, gm_weighted: bool) -> str:
+    processing = []
+    if config.filter_biharmonic:
+        processing.append("filt-biharmonic")
+    if not config.no_pvc:
+        processing.append("pvcorr_GM" if gm_weighted else "pvcorr")
+    return ("_" + "_".join(processing)) if processing else ""
+
+
+def _scale_entity(scale: str | None) -> str:
+    scale_value = str(scale)[len("scale"):] if scale and str(scale).lower().startswith("scale") else scale
+    return f"_scale{scale_value}" if scale_value else ""
+
+
+def _metabolic_profile_path(config, subject: str, session: str | None, atlas_name: str, scale: str | None, gm_weighted: bool, n_perturbations: int) -> Path:
+    out_dir = subject_session_dir(config.derivative_dir, subject, session, "connectivity")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    prefix = f"sub-{subject}" + (f"_ses-{session}" if session else "")
+    processing_label = _processing_label(config, gm_weighted)
+    return out_dir / f"{prefix}_atlas-{atlas_name}{_scale_entity(scale)}_npert-{n_perturbations}{processing_label}_desc-metabolicprofiles_mrsi.npz"
 
 
 def _connectivity_matrix_path(config, subject: str, session: str | None, atlas_name: str, scale: str | None, gm_weighted: bool, n_perturbations: int) -> Path:
     out_dir = subject_session_dir(config.derivative_dir, subject, session, "connectivity")
     out_dir.mkdir(parents=True, exist_ok=True)
     prefix = f"sub-{subject}" + (f"_ses-{session}" if session else "")
-    scale_value = str(scale)[len("scale"):] if scale and str(scale).lower().startswith("scale") else scale
-    scale_entity = f"_scale{scale_value}" if scale_value else ""
-    processing = []
-    if config.filter_biharmonic:
-        processing.append("filt-biharmonic")
-    if not config.no_pvc:
-        processing.append("pvcorr_GM" if gm_weighted else "pvcorr")
-    processing_label = ("_" + "_".join(processing)) if processing else ""
-    return out_dir / f"{prefix}_atlas-{atlas_name}{scale_entity}_npert-{n_perturbations}{processing_label}_desc-connectivity_mrsi.npz"
+    processing_label = _processing_label(config, gm_weighted)
+    return out_dir / f"{prefix}_atlas-{atlas_name}{_scale_entity(scale)}_npert-{n_perturbations}{processing_label}_desc-connectivity_mrsi.npz"
 
 
 def _filter_excluded_parcels(table: pd.DataFrame, exclude_patterns: str | None, max_parcel_id: int | None) -> pd.DataFrame:
@@ -42,7 +57,7 @@ def _filter_excluded_parcels(table: pd.DataFrame, exclude_patterns: str | None, 
     return table
 
 
-def export_connectivity(
+def export_metabolic_profiles(
     config,
     subject: str,
     session: str | None,
@@ -54,23 +69,62 @@ def export_connectivity(
     atlas_mrsi: Path,
     gm_fraction_path: Path | None = None,
     scale: str | None = None,
-) -> dict[str, Path]:
+):
+    """Perturbation-augmented regional metabolic profiles (uncertainty
+    propagation via ``--connectivity-n-perturbations`` CRLB-scaled draws per
+    metabolite). Runs unconditionally whenever parcellation is available
+    (``parc-con`` mode), independently of ``--write-connectivity`` -- the
+    profile is the shared representation any downstream analysis (including,
+    optionally, connectivity) builds on.
+
+    Returns ``(MetabolicProfileResult, profile_npz_path)``.
+    """
     table = _filter_excluded_parcels(pd.read_csv(regional_table, sep="\t"), config.connectivity_exclude_parcels, config.connectivity_max_parcel_id)
     parcel_ids = sorted(table["parcel_id"].unique().tolist())
-    result = compute_metabolite_connectivity(
+    profiles = compute_metabolic_profiles(
         metabolite_maps,
         crlb_maps,
         brainmask,
         atlas_mrsi,
         parcel_ids,
-        method=config.connectivity_method,
         n_perturbations=config.connectivity_n_perturbations,
         sigma_scale=config.connectivity_sigma_scale,
         nthreads=config.nthreads,
         gm_fraction_path=gm_fraction_path,
     )
+    name_by_id = table.drop_duplicates("parcel_id").set_index("parcel_id")["parcel_name"]
+    parcel_names = np.array([str(name_by_id.get(parcel_id, parcel_id)) for parcel_id in profiles.parcel_ids])
+    profile_npz = _metabolic_profile_path(config, subject, session, atlas_name, scale, profiles.gm_weighted, profiles.n_perturbations)
+    np.savez(
+        profile_npz,
+        features=profiles.features,
+        parcel_concentrations=profiles.parcel_concentrations,
+        labels_indices=profiles.parcel_ids,
+        parcel_names=parcel_names,
+        metabolites=np.array(profiles.metabolites),
+        npert=profiles.n_perturbations,
+        sigma_scale=profiles.sigma_scale,
+        gm_weighted=profiles.gm_weighted,
+    )
+    return profiles, profile_npz, table
+
+
+def export_connectivity(
+    config,
+    subject: str,
+    session: str | None,
+    profiles,
+    table: pd.DataFrame,
+    atlas_name: str,
+    scale: str | None = None,
+) -> dict[str, Path]:
+    """Metabolic similarity matrix built from an already-computed
+    :class:`~mrsiprep.connectivity.connectivity.MetabolicProfileResult`
+    (see :func:`export_metabolic_profiles`). Optional add-on, gated on
+    ``--write-connectivity``."""
+    result = correlate_metabolic_profiles(profiles, method=config.connectivity_method)
     sim = result.similarity
-    name_by_id = pd.read_csv(regional_table, sep="\t").drop_duplicates("parcel_id").set_index("parcel_id")["parcel_name"]
+    name_by_id = table.drop_duplicates("parcel_id").set_index("parcel_id")["parcel_name"]
     parcel_names = np.array([str(name_by_id.get(parcel_id, parcel_id)) for parcel_id in result.parcel_ids])
     matrix_npz = _connectivity_matrix_path(config, subject, session, atlas_name, scale, result.gm_weighted, result.n_perturbations)
     nodes_tsv = matrix_npz.with_name(matrix_npz.stem.replace("desc-connectivity", "desc-nodes") + ".tsv")

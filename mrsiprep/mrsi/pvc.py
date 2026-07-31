@@ -9,7 +9,7 @@ import nibabel as nib
 import numpy as np
 
 from mrsiprep.io.naming import mrsi_derivative
-from mrsiprep.utils.images import load_3d_data, save_nifti
+from mrsiprep.utils.images import load_3d_data, mean_resolution, save_nifti
 from mrsiprep.utils.subprocess_utils import run_checked
 
 
@@ -30,9 +30,24 @@ def create_tissue_4d(config, subject: str, session: str | None, tissue_mrsi: dic
     return save_nifti(data.astype(np.float32), ref_img, out, dtype=np.float32)
 
 
-def run_pvc(config, subject: str, session: str | None, metabolite_maps: dict[str, Path], tissue_4d: Path, brainmask: Path, psf_width: float = 5.0) -> dict[str, Path]:
+def run_pvc(
+    config,
+    subject: str,
+    session: str | None,
+    metabolite_maps: dict[str, Path],
+    tissue_4d: Path,
+    brainmask: Path,
+    mrsi_reference: Path,
+    psf_width: float | None = None,
+) -> dict[str, Path]:
+    """``psf_width`` (mm, isotropic) defaults to the MRSI acquisition's own
+    native resolution -- the mean voxel size of ``mrsi_reference`` -- since
+    that is the true width of the MRSI spatial response function PETPVC's
+    RBV algorithm is deconvolving. Pass an explicit value to override."""
     if shutil.which("petpvc") is None:
         raise PVCError("petpvc command not found on PATH. Use --no-pvc to skip partial-volume correction.")
+    if psf_width is None:
+        psf_width = mean_resolution(mrsi_reference)
     _, brain_data = load_3d_data(brainmask, dtype=np.float32, label="MRSI brain mask")
     brain = brain_data.astype(bool)
     out_maps: dict[str, Path] = {}

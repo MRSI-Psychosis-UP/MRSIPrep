@@ -151,6 +151,23 @@ def _correlate(features: np.ndarray, method: str) -> np.ndarray:
 
 
 @dataclass
+class MetabolicProfileResult:
+    """Perturbation-augmented regional metabolic profiles (features), the
+    shared input to any downstream analysis that treats a parcel's
+    metabolite panel as a single feature vector -- notably connectivity
+    (``compute_metabolite_connectivity``), but reusable independently of it.
+    """
+
+    features: np.ndarray  # shape (n_parcels, n_metabolites * n_perturbations)
+    parcel_concentrations: np.ndarray  # shape (n_metabolites, n_parcels), raw (un-zscored) parcel means
+    metabolites: list[str]
+    parcel_ids: np.ndarray
+    n_perturbations: int
+    sigma_scale: float
+    gm_weighted: bool
+
+
+@dataclass
 class ConnectivityResult:
     similarity: pd.DataFrame
     parcel_concentrations: np.ndarray  # shape (n_metabolites, n_parcels), raw (un-zscored) parcel means
@@ -162,22 +179,27 @@ class ConnectivityResult:
     gm_weighted: bool
 
 
-def compute_metabolite_connectivity(
+def compute_metabolic_profiles(
     metabolite_maps: dict[str, Path],
     crlb_maps: dict[str, Path],
     brainmask_path: Path,
     atlas_path: Path,
     parcel_ids: list[int],
-    method: str = "spearman",
     n_perturbations: int = 50,
     sigma_scale: float = 2.0,
     nthreads: int = 1,
     seed: int | None = None,
     gm_fraction_path: Path | None = None,
-) -> ConnectivityResult:
+) -> MetabolicProfileResult:
+    """CRLB-scaled Monte Carlo perturbation of every metabolite map, z-scored
+    and parcellated ``n_perturbations`` times (Instrella & Juchem 2024
+    uncertainty propagation), yielding the augmented per-parcel feature
+    matrix that both regional-profile consumers and
+    ``compute_metabolite_connectivity`` build on.
+    """
     metabolites = [met for met in metabolite_maps if met in crlb_maps]
     if not metabolites:
-        raise ValueError("No metabolites with both signal and CRLB maps available for connectivity computation.")
+        raise ValueError("No metabolites with both signal and CRLB maps available for metabolic profile computation.")
 
     signals = np.stack([load_3d_data(metabolite_maps[met], label=f"{met} map")[1] for met in metabolites])
     crlbs = np.stack([load_3d_data(crlb_maps[met], label=f"{met} CRLB map")[1] for met in metabolites])
@@ -212,17 +234,63 @@ def compute_metabolite_connectivity(
     # shape (n_perturbations, n_metabolites, n_parcels) -> (n_parcels, n_metabolites * n_perturbations)
     stacked = np.stack(samples)
     features = stacked.transpose(2, 1, 0).reshape(len(parcel_ids_arr), -1)
-
-    matrix = _correlate(features, method)
-    similarity = pd.DataFrame(matrix, index=parcel_ids_arr, columns=parcel_ids_arr)
     parcel_concentrations = parcellate_means(signals, atlas, parcel_ids_arr, parcel_index=parcel_index, voxel_weights=gm_fraction)
-    return ConnectivityResult(
-        similarity=similarity,
+    return MetabolicProfileResult(
+        features=features,
         parcel_concentrations=parcel_concentrations,
         metabolites=metabolites,
         parcel_ids=parcel_ids_arr,
-        method=method,
         n_perturbations=n_perturbations,
         sigma_scale=sigma_scale,
         gm_weighted=gm_fraction is not None,
     )
+
+
+def correlate_metabolic_profiles(profiles: MetabolicProfileResult, method: str = "spearman") -> ConnectivityResult:
+    """Metabolic similarity matrix from an already-computed
+    :class:`MetabolicProfileResult` -- the optional add-on step over
+    profile estimation."""
+    matrix = _correlate(profiles.features, method)
+    similarity = pd.DataFrame(matrix, index=profiles.parcel_ids, columns=profiles.parcel_ids)
+    return ConnectivityResult(
+        similarity=similarity,
+        parcel_concentrations=profiles.parcel_concentrations,
+        metabolites=profiles.metabolites,
+        parcel_ids=profiles.parcel_ids,
+        method=method,
+        n_perturbations=profiles.n_perturbations,
+        sigma_scale=profiles.sigma_scale,
+        gm_weighted=profiles.gm_weighted,
+    )
+
+
+def compute_metabolite_connectivity(
+    metabolite_maps: dict[str, Path],
+    crlb_maps: dict[str, Path],
+    brainmask_path: Path,
+    atlas_path: Path,
+    parcel_ids: list[int],
+    method: str = "spearman",
+    n_perturbations: int = 50,
+    sigma_scale: float = 2.0,
+    nthreads: int = 1,
+    seed: int | None = None,
+    gm_fraction_path: Path | None = None,
+) -> ConnectivityResult:
+    """Convenience wrapper: profile estimation immediately followed by
+    correlation. Prefer calling :func:`compute_metabolic_profiles` once and
+    reusing its result across multiple ``--connectivity-method`` values, or
+    when profiles are needed without a similarity matrix."""
+    profiles = compute_metabolic_profiles(
+        metabolite_maps,
+        crlb_maps,
+        brainmask_path,
+        atlas_path,
+        parcel_ids,
+        n_perturbations=n_perturbations,
+        sigma_scale=sigma_scale,
+        nthreads=nthreads,
+        seed=seed,
+        gm_fraction_path=gm_fraction_path,
+    )
+    return correlate_metabolic_profiles(profiles, method=method)

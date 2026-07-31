@@ -562,7 +562,7 @@ def _step_pvc(config, subject, session, mrsi, tissue, debug):
             raise ValueError("PVC requires tissue segmentation, but none was provided")
         with debug.step("Partial volume correction"):
             tissue_4d = create_tissue_4d(config, subject, session, tissue.mrsi, mrsi.reference)
-            corrected_maps = run_pvc(config, subject, session, mrsi.preproc_maps, tissue_4d, mrsi.brainmask)
+            corrected_maps = run_pvc(config, subject, session, mrsi.preproc_maps, tissue_4d, mrsi.brainmask, mrsi.reference)
             mrsi.corrected_maps = corrected_maps
     return corrected_maps, tissue_4d
 
@@ -674,7 +674,13 @@ def _step_regional_extraction(config, subject, session, corrected_maps, parcels,
 
 
 def _step_connectivity(config, subject, session, regional, parcels, corrected_maps, mrsi, tissue, debug):
-    with debug.step("Connectivity", live=False):
+    """Regional metabolic profile estimation (CRLB-scaled Monte Carlo
+    uncertainty propagation) always runs in parc-con mode; the metabolic
+    connectivity matrix is the optional add-on gated on
+    ``--write-connectivity`` (see ``run_connectivity_workflow``)."""
+    if config.processing_mode != "parc-con":
+        return {}, None
+    with debug.step("Regional metabolic profiles" + (" and connectivity" if config.write_connectivity else ""), live=False):
         connectivity = run_connectivity_workflow(
             config,
             subject,
