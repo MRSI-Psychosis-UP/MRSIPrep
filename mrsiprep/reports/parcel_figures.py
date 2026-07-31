@@ -56,7 +56,7 @@ def write_parcel_coverage_figure(config, subject: str, session: str | None, atla
     )
 
 
-def _resample_atlas_to_mni(config, subject: str, session: str | None, atlas_t1: Path, t1_to_mni) -> tuple[np.ndarray, "object"]:
+def _resample_atlas_to_mni(config, subject: str, session: str | None, atlas_t1: Path, t1_to_mni, mrsi_reference: Path | None = None) -> tuple[np.ndarray, "object"]:
     """Resample the (subject-space) T1w atlas into MNI space via the same
     T1w->MNI transform used for MRSI outputs, so glass-brain projection (which
     assumes MNI space) is actually aligned with its silhouette."""
@@ -66,7 +66,7 @@ def _resample_atlas_to_mni(config, subject: str, session: str | None, atlas_t1: 
     from mrsiprep.registration.transforms import apply_image_transform
     from mrsiprep.utils.images import resolve_mni_resolution
 
-    resolution = resolve_mni_resolution(config.mni_resolution, atlas_t1, None)
+    resolution = resolve_mni_resolution(config.mni_resolution, atlas_t1, mrsi_reference)
     template = datasets.load_mni152_template(resolution)
     # Subject/session-specific filename: this used to be one shared
     # `coverage_mni_atlas.nii.gz` path written by every recording, which
@@ -80,7 +80,7 @@ def _resample_atlas_to_mni(config, subject: str, session: str | None, atlas_t1: 
     return np.rint(img.get_fdata()).astype(np.int32).squeeze(), img.affine
 
 
-def write_parcel_crlb_figures(config, subject: str, session: str | None, atlas_t1: Path, parcel_qc_tsv: Path, t1_to_mni=None) -> list[Path]:
+def write_parcel_crlb_figures(config, subject: str, session: str | None, atlas_t1: Path, parcel_qc_tsv: Path, t1_to_mni=None, mrsi_reference: Path | None = None) -> list[Path]:
     """One nilearn glass-brain per metabolite: parcels green where mean CRLB <
     threshold (reliable), red where >= threshold (unreliable).
 
@@ -100,7 +100,7 @@ def write_parcel_crlb_figures(config, subject: str, session: str | None, atlas_t
     if not t1_to_mni:
         return []
 
-    atlas, affine = _resample_atlas_to_mni(config, subject, session, atlas_t1, t1_to_mni)
+    atlas, affine = _resample_atlas_to_mni(config, subject, session, atlas_t1, t1_to_mni, mrsi_reference=mrsi_reference)
     outputs: list[Path] = []
     for metabolite, met_df in df.groupby("metabolite"):
         if not str(metabolite):
@@ -133,7 +133,7 @@ def write_parcel_crlb_figures(config, subject: str, session: str | None, atlas_t
     return outputs
 
 
-def write_parcel_qc_figures(config, subject: str, session: str | None, atlas_t1: Path | None, parcel_qc_tsv: Path | None, t1_to_mni=None) -> list[Path]:
+def write_parcel_qc_figures(config, subject: str, session: str | None, atlas_t1: Path | None, parcel_qc_tsv: Path | None, t1_to_mni=None, mrsi_reference: Path | None = None) -> list[Path]:
     """Generate both parcelwise figures; returns the list of written paths."""
     if atlas_t1 is None or parcel_qc_tsv is None or not Path(parcel_qc_tsv).exists():
         return []
@@ -141,5 +141,5 @@ def write_parcel_qc_figures(config, subject: str, session: str | None, atlas_t1:
     coverage = write_parcel_coverage_figure(config, subject, session, atlas_t1, parcel_qc_tsv)
     if coverage is not None:
         figures.append(coverage)
-    figures.extend(write_parcel_crlb_figures(config, subject, session, atlas_t1, parcel_qc_tsv, t1_to_mni=t1_to_mni))
+    figures.extend(write_parcel_crlb_figures(config, subject, session, atlas_t1, parcel_qc_tsv, t1_to_mni=t1_to_mni, mrsi_reference=mrsi_reference))
     return figures

@@ -625,6 +625,7 @@ def _step_synthseg_parcellation_qc(config, subject, session, raw_t1, mrsi, regis
             preliminary_parcels.atlas_t1,
             parcel_qc,
             t1_to_mni=registration.t1_to_mni.forward if registration.t1_to_mni else None,
+            mrsi_reference=mrsi.reference,
         )
     return preliminary_parcels, parcel_qc
 

@@ -37,7 +37,7 @@ class MRSIPrepConfig:
     normalization: str = "simple"
     output_spaces: list[str] = field(default_factory=lambda: ["MNI152NLin2009cAsym"])
     output_mrsi_t1w: bool = False
-    mni_resolution: str = "t1wres"
+    mni_resolution: str = "origres"
     registration_t1_target: str | None = None
     csf_pv_threshold: float = 0.95
     parcellation_mode: str | None = None

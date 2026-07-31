@@ -14,6 +14,20 @@
   not migrated automatically; rerun with `--overwrite` (or the relevant
   step-specific `--overwrite-*` flag) to regenerate under the new layout.
 
+- **Breaking: `--mni-resolution` now defaults to `origres` (MRSI native
+  resolution) instead of `t1wres`.** Resampling MRSI signal onto a template
+  grid finer than its own native acquisition resolution doesn't add real
+  spatial information and implies a spatial precision the data never had;
+  `origres` also matches the resolution mrsiprep's own spatial-smoothness
+  benchmark evaluates registration/resampling at. Threaded the MRSI
+  reference through the parcelwise QC-figure atlas resampling and the
+  longitudinal per-session T1w-to-MNI composition so both resolve `origres`
+  correctly instead of raising; the shared subject-template-to-MNI stage in
+  `--longitudinal` mode (which spans multiple sessions and has no single
+  well-defined native resolution) continues to use `t1wres` regardless of
+  this default. Existing scripts/pipelines that rely on the previous
+  T1w-resolution default should pass `--mni-resolution t1wres` explicitly.
+
 ## 1.7.7
 
 - Relabeled `docs/vba_benchmark.md`'s two ANTs configurations from
