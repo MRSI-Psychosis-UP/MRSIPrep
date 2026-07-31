@@ -36,10 +36,9 @@ existing owner after the run (see "Container internals" below) — no `-u`
 flag is required. `-e TZ=...` keeps console/log timestamps in sync with the
 host clock (the container defaults to UTC otherwise).
 
-## Option B: the `mrsiprep-docker` wrapper (recommended)
+## Option B: the `mrsiprep-docker` wrapper
 
-A lightweight, dependency-free Python wrapper — mirroring fMRIPrep's
-`fmriprep-docker` — is installable from PyPI and builds the `docker run`
+A lightweight, dependency-free Python wrapper is installable from PyPI and builds the `docker run`
 command above for you:
 
 ```bash
