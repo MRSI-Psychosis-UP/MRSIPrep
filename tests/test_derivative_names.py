@@ -18,7 +18,16 @@ class DerivativeNameTests(unittest.TestCase):
     def test_derivative_names(self):
         root = Path("/out")
         self.assertTrue(str(mrsi_derivative(root, "sub-S001", "ses-V1", space="MRSI", met="CrPCr", desc="qcmask", suffix_override="mask")).endswith(
-            "sub-S001/ses-V1/qmasks/sub-S001_ses-V1_space-mrsi_met-CrPCr_desc-qcmask_mask.nii.gz"
+            "sub-S001/ses-V1/confounds/sub-S001_ses-V1_space-mrsi_met-CrPCr_desc-qcmask_mask.nii.gz"
+        ))
+        self.assertTrue(str(mrsi_derivative(root, "S001", "V1", space="T1w", met="CrPCr", desc="crlb", suffix_override="mrsi")).endswith(
+            "sub-S001/ses-V1/confounds/sub-S001_ses-V1_space-T1w_met-CrPCr_desc-crlb_mrsi.nii.gz"
+        ))
+        self.assertTrue(str(mrsi_derivative(root, "S001", "V1", space="MNI152NLin2009cAsym", desc="snr", suffix_override="mrsi")).endswith(
+            "sub-S001/ses-V1/confounds/sub-S001_ses-V1_space-MNI152NLin2009cAsym_desc-snr_mrsi.nii.gz"
+        ))
+        self.assertTrue(str(mrsi_derivative(root, "S001", "V1", space="MRSI", desc="fwhm", suffix_override="mrsi")).endswith(
+            "sub-S001/ses-V1/confounds/sub-S001_ses-V1_space-mrsi_desc-fwhm_mrsi.nii.gz"
         ))
         self.assertTrue(str(mrsi_derivative(root, "S001", "V1", space="MRSI", met="CrPCr", desc="preproc", suffix_override="mrsi")).endswith(
             "sub-S001/ses-V1/mrsi/orig/sub-S001_ses-V1_space-mrsi_met-CrPCr_desc-preproc_mrsi.nii.gz"
@@ -33,10 +42,10 @@ class DerivativeNameTests(unittest.TestCase):
             "sub-S001/ses-V1/mrsi/orig-pvc/sub-S001_ses-V1_space-mrsi_met-CrPCr_desc-pvc_mrsi.nii.gz"
         ))
         self.assertTrue(str(mrsi_derivative(root, "S001", "V1", space="MRSI", label="GM", suffix_override="probseg")).endswith(
-            "sub-S001/ses-V1/anat/tissue/sub-S001_ses-V1_space-mrsi_label-GM_probseg.nii.gz"
+            "sub-S001/ses-V1/confounds/sub-S001_ses-V1_space-mrsi_label-GM_probseg.nii.gz"
         ))
         self.assertTrue(str(anat_derivative(root, "S001", "V1", space="T1w", label="GM", suffix_override="probseg")).endswith(
-            "sub-S001/ses-V1/anat/tissue/sub-S001_ses-V1_space-T1w_label-GM_probseg.nii.gz"
+            "sub-S001/ses-V1/confounds/sub-S001_ses-V1_space-T1w_label-GM_probseg.nii.gz"
         ))
         self.assertTrue(str(anat_derivative(root, "S001", "V1", space="T1w", desc="brainCSF")).endswith(
             "sub-S001/ses-V1/anat/synthseg/sub-S001_ses-V1_space-T1w_desc-brainCSF_T1w.nii.gz"
