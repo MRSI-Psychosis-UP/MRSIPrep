@@ -31,7 +31,7 @@ def anat_derivative(root: Path, subject: str, session: str | None, **entities) -
 def _anat_folder(entities: dict) -> str:
     desc = entities.get("desc")
     if entities.get("label") in {"GM", "WM", "CSF"}:
-        return "anat/tissue"
+        return "confounds"
     if desc is not None and any(str(desc).startswith(p) for p in _SYNTHSEG_DESC_PREFIXES):
         return "anat/synthseg"
     return "anat"
@@ -93,16 +93,19 @@ def resampling_work_path(work_dir: Path, subject: str, session: str | None, **en
     return _derivative(work_dir, subject, session, "resampling", "mrsi", **entities)
 
 
+_CONFOUND_DESCS = {"brain", "mrsiqc", "qcmask", "spikemask", "crlb", "snr", "fwhm"}
+
+
 def _mrsi_folder(entities: dict) -> str:
     desc = entities.get("desc")
     suffix = entities.get("suffix_override")
     space = entities.get("space")
     if entities.get("label") in {"GM", "WM", "CSF"}:
-        return "anat/tissue"
+        return "confounds"
     if desc == "pvc":
         return "mrsi/orig-pvc"
-    if desc in {"brain", "mrsiqc", "qcmask", "spikemask"} or suffix == "mask":
-        return "qmasks"
+    if desc in _CONFOUND_DESCS or suffix == "mask":
+        return "confounds"
     if space == "MNI152NLin2009cAsym":
         return "mrsi/mni"
     if space == "T1w":

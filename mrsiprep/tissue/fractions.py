@@ -41,7 +41,7 @@ def copy_tissue_to_derivatives(config, subject: str, session: str | None, tissue
 
     Used with the ``existing`` tissue backend to bring CAT12 maps (found
     wherever :func:`load_existing_cat12` located them) under MRSIPrep's own
-    ``anat/tissue/`` output naming, alongside SynthSeg+FAST-produced maps.
+    ``confounds/`` output naming, alongside SynthSeg+FAST-produced maps.
 
     :param config: Run-wide :class:`mrsiprep.config.settings.MRSIPrepConfig`.
     :param subject: BIDS subject label, without the ``sub-`` prefix.

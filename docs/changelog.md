@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+- **Breaking: consolidated per-voxel confound outputs into a single
+  `confounds/` folder.** CRLB, SNR, FWHM/linewidth, spike masks, QC masks,
+  the brain mask, and GM/WM/CSF tissue-fraction probsegs previously landed
+  in `qmasks/`, `anat/tissue/`, or scattered alongside the actual signal
+  maps in `mrsi/orig|t1w|mni/` depending on which quantity and space; all
+  now live under `<out>/mrsiprep/sub-*/ses-*/confounds/`, one flat folder,
+  distinguished by the existing `space-*`/`met-*`/`desc-*` filename
+  entities (unchanged) rather than by folder. `mrsi/orig|t1w|mni/` now
+  contain signal maps only. Existing derivative trees from prior runs are
+  not migrated automatically; rerun with `--overwrite` (or the relevant
+  step-specific `--overwrite-*` flag) to regenerate under the new layout.
+
 ## 1.7.7
 
 - Relabeled `docs/vba_benchmark.md`'s two ANTs configurations from
