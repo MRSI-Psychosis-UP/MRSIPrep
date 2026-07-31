@@ -64,7 +64,7 @@ def run_registration_workflow(
     t1_to_mni = None
     if "MNI152NLin2009cAsym" in config.output_spaces or config.parcellation_mode == "mni" or "mni" in config.transform:
         if subject_template is not None and session is not None:
-            t1_to_mni = compose_longitudinal_t1_to_mni(config, subject, session, subject_template, registration_t1)
+            t1_to_mni = compose_longitudinal_t1_to_mni(config, subject, session, subject_template, registration_t1, mrsi_reference=mrsi_reference)
         else:
             t1_to_mni = run_t1_to_mni(config, subject, session, registration_t1, mrsi_reference=mrsi_reference)
     return RegistrationResult(mrsi_to_t1=mrsi_to_t1, t1_to_mni=t1_to_mni)

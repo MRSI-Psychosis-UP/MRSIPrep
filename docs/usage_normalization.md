@@ -15,7 +15,7 @@ docker run --rm \
   --ref-met CrPCr \
   --mode mni-norm \
   --output-spaces MNI152NLin2009cAsym \
-  --mni-resolution t1wres \
+  --mni-resolution origres \
   --nthreads 16
 ```
 
@@ -23,8 +23,15 @@ docker run --rm \
 space(s) the final MRSI maps are resampled into as permanent derivatives:
 `MRSI`, `MNI152NLin2009cAsym` (aliases `mrsi`, `mni` accepted). `--mni-resolution`
 selects the MNI template resolution used for both T1w→MNI registration and
-final resampling: `origres` (MRSI native resolution), `t1wres` (T1w
-resolution, default), or an explicit `<N>mm`.
+final resampling: `origres` (MRSI native resolution, **default** — avoids
+implying spatial precision the MRSI acquisition never had, and matches the
+resolution mrsiprep's own spatial-smoothness benchmark evaluates at),
+`t1wres` (T1w resolution), or an explicit `<N>mm`. In `--longitudinal`
+mode, the shared subject-template-to-MNI registration stage always uses
+`t1wres` regardless of this flag, since the template spans multiple
+sessions that may have different native MRSI resolutions and there is no
+single well-defined "native" choice there; per-session outputs are
+unaffected.
 
 T1w-space resampling of every metabolite (+ CRLB/SNR/FWHM/spikemask) is
 **opt-in** via `--output-mrsi-t1w`, since nothing downstream (regional
