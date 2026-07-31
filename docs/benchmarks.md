@@ -236,22 +236,19 @@ for both FSL variants and, most noticeably, for ANTs (Rigid+Affine) at
 both field strengths, which shows the coarsest, most scalloped outer edge
 of any of the four configurations.
 
-**Signal-weighted MNI-space leakage, by backend** (brain target;
-brain+CSF is within ±0.3 points of these and shows the same pattern):
-
-![Bar chart: percentage of resampled CrPCr signal mass outside the MNI152 brain mask, by registration backend, faceted by 3 Tesla vs 7 Tesla](figures/registration_backend_mni_outside_comparison.png)
-
-**Total `mni-norm` wall-clock runtime, by backend** (same two subjects,
-averaged across the `brain`/`brain+CSF` targets) — **ANTs (Rigid+Affine)**
+**Signal-weighted MNI-space leakage and total `mni-norm` wall-clock
+runtime, by backend** (brain target; brain+CSF leakage is within ±0.3
+points of these and shows the same pattern, not shown). Runtime is
+averaged across the `brain`/`brain+CSF` targets — **ANTs (Rigid+Affine)**
 is not a full `mni-norm` run (see Method above), so it isn't a
 like-for-like total-pipeline number; instead its bar reports the
 **registration-only** wall-clock time (both stages combined, timed
 directly via `mrsiprep.interfaces.ants.register()`, `nthreads=16`
-matching the other runs' default), which should be read as a lower bound
-on how much a full `mni-norm` run would take, not a directly comparable
-total:
+matching the other runs' default, hatched in the figure), which should be
+read as a lower bound on how much a full `mni-norm` run would take, not a
+directly comparable total:
 
-![Bar chart: total mni-norm runtime in minutes, by registration backend (ANTs Rigid+SyN, ANTs Rigid+Affine, FSL FLIRT, FSL FLIRT+FNIRT), for 3 Tesla vs 7 Tesla](figures/registration_backend_runtime.png)
+![Two-panel bar chart: (left) percentage of resampled CrPCr signal mass outside the MNI152 brain mask, by registration backend, faceted by 3 Tesla vs 7 Tesla; (right) total mni-norm runtime in minutes, by registration backend (ANTs Rigid+SyN, ANTs Rigid+Affine, FSL FLIRT, FSL FLIRT+FNIRT), for 3 Tesla vs 7 Tesla](figures/registration_backend_leakage_runtime.png)
 
 ### Interpretation
 
