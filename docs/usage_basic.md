@@ -285,15 +285,17 @@ and `--output-mrsi-t1w`, and
 ## Output layout
 
 ```text
-<out>/mrsiprep/sub-*/ses-*/mrsi/orig/          native/imported-grid MRSI signal maps
-<out>/mrsiprep/sub-*/ses-*/mrsi/orig-pvc/      PVC-corrected native-grid maps
-<out>/mrsiprep/sub-*/ses-*/mrsi/t1w/           T1w-aligned MRSI maps (opt-in, --output-mrsi-t1w)
-<out>/mrsiprep/sub-*/ses-*/mrsi/mni/           MNI-normalized MRSI maps
+<out>/mrsiprep/sub-*/ses-*/mrsi/orig/          native/imported-grid MRSI signal maps only
+<out>/mrsiprep/sub-*/ses-*/mrsi/orig-pvc/      PVC-corrected native-grid signal maps only
+<out>/mrsiprep/sub-*/ses-*/mrsi/t1w/           T1w-aligned MRSI signal maps only (opt-in, --output-mrsi-t1w)
+<out>/mrsiprep/sub-*/ses-*/mrsi/mni/           MNI-normalized MRSI signal maps only
 <out>/mrsiprep/sub-*/ses-*/mrsi/parcel/        parc-con mode metabolite profile NPZ files
 <out>/mrsiprep/sub-*/ses-*/anat/               raw T1w tissue files, brainCSF/registration inputs
 <out>/mrsiprep/sub-*/ses-*/anat/synthseg/      SynthSeg brain/dseg outputs and parcelwise QC tables
-<out>/mrsiprep/sub-*/ses-*/anat/tissue/        GM/WM/CSF tissue probsegs (T1w and MRSI space)
-<out>/mrsiprep/sub-*/ses-*/qmasks/             QC, spike, and brain masks
+<out>/mrsiprep/sub-*/ses-*/confounds/          every quantity that encodes a preprocessing assumption
+                                                rather than signal itself, one file per space/metabolite
+                                                (space-* entity in the filename): CRLB, SNR, FWHM/linewidth,
+                                                spike masks, QC masks, brain mask, GM/WM/CSF tissue probsegs
 <out>/mrsiprep/sub-*/ses-*/transforms/         ANTs MRSI→T1w and T1w→MNI transforms
 <out>/mrsiprep/sub-*/ses-*/reports/coverage/   subject HTML report + parcelwise coverage/CRLB figures
 <out>/mrsiprep/sub-*/ses-*/reports/qc-reports/ per-step QC HTML reports and figures
