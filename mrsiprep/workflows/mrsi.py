@@ -8,11 +8,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from mrsiprep.io.loaders import MRSIInputs
+from mrsiprep.io.mrsinmrs import resolve_mrsinmrs
 from mrsiprep.io.naming import mrsi_derivative
 from mrsiprep.mrsi.filtering import filter_metabolite_maps
 from mrsiprep.mrsi.masks import ensure_brainmask
 from mrsiprep.mrsi.quality import make_quality_masks
 from mrsiprep.mrsi.reference import generate_reference
+from mrsiprep.mrsi.t1_correction import apply_t1_correction, resolve_acquisition_params
 
 
 @dataclass
@@ -26,10 +28,16 @@ class MRSIResult:
         tree, unmodified from ``derivatives/mrsi-orig/``.
     :ivar preproc_maps: Metabolite maps after spike detection and
         biharmonic repair (see :func:`mrsiprep.mrsi.filtering.filter_metabolite_maps`).
-    :ivar corrected_maps: Currently identical to ``preproc_maps`` -- kept
-        as a separate field for downstream consumers that expect a
-        post-PVC map, even though partial volume correction happens
-        later (see :func:`mrsiprep.mrsi.pvc.run_pvc`), not in this workflow.
+    :ivar corrected_maps: Identical to ``preproc_maps`` unless
+        ``config.t1_correction == "literature"``, in which case this holds
+        the T1-saturation-corrected maps (see
+        :func:`mrsiprep.mrsi.t1_correction.apply_t1_correction`). Partial
+        volume correction happens later (see
+        :func:`mrsiprep.mrsi.pvc.run_pvc`), not in this workflow, and
+        always consumes ``corrected_maps`` as its input.
+    :ivar t1_correction_provenance: Per-metabolite T1-correction summary
+        rows (TR, flip angle, T1, factor, source, warnings), or ``None``
+        when ``config.t1_correction == "none"``.
     :ivar crlb_maps: Per-metabolite Cramér-Rao lower bound maps, copied
         through unchanged from the raw inputs.
     :ivar snr_map: Whole-brain signal-to-noise-ratio map, if the input
@@ -59,6 +67,7 @@ class MRSIResult:
     reference: Path
     qcmasks: dict[str, Path]
     qc_summary: Path
+    t1_correction_provenance: list[dict] | None = None
 
 
 def _same_file(a: Path, b: Path) -> bool:
@@ -153,12 +162,20 @@ def run_mrsi_workflow(config, subject: str, session: str | None, inputs: MRSIInp
     _copy_native_maps(config, subject, session, inputs)
     brainmask = ensure_brainmask(config, subject, session, inputs.brainmask, inputs.water_map, inputs.metabolite_maps)
     preproc = filter_metabolite_maps(config, subject, session, inputs.metabolite_maps, brainmask)
-    reference = generate_reference(config, subject, session, preproc, preferred_met=config.ref_met)
+    corrected = preproc
+    t1_correction_provenance = None
+    if config.t1_correction == "literature":
+        mrsinmrs_resolved = resolve_mrsinmrs(config.mrsinmrs, subject, session)
+        acquisition_params = resolve_acquisition_params(mrsinmrs_resolved)
+        corrected, t1_correction_provenance, _ = apply_t1_correction(
+            config, subject, session, preproc, acquisition_params, config.t1_correction_water_status
+        )
+    reference = generate_reference(config, subject, session, corrected, preferred_met=config.ref_met)
     qcmasks, qc_summary = make_quality_masks(
         config,
         subject,
         session,
-        preproc,
+        corrected,
         inputs.crlb_maps,
         inputs.snr_map,
         inputs.linewidth_map,
@@ -167,7 +184,7 @@ def run_mrsi_workflow(config, subject: str, session: str | None, inputs: MRSIInp
     return MRSIResult(
         raw_maps=inputs.metabolite_maps,
         preproc_maps=preproc,
-        corrected_maps=preproc,
+        corrected_maps=corrected,
         crlb_maps=inputs.crlb_maps,
         snr_map=inputs.snr_map,
         linewidth_map=inputs.linewidth_map,
@@ -176,4 +193,5 @@ def run_mrsi_workflow(config, subject: str, session: str | None, inputs: MRSIInp
         reference=reference,
         qcmasks=qcmasks,
         qc_summary=qc_summary,
+        t1_correction_provenance=t1_correction_provenance,
     )
