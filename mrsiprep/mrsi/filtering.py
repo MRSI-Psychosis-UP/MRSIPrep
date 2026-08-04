@@ -29,7 +29,7 @@ def filter_metabolite_maps(config, subject: str, session: str | None, metabolite
     brain = brain_data.astype(bool)
     filtered: dict[str, Path] = {}
     for met, path in metabolite_maps.items():
-        out = mrsi_derivative(config.derivative_dir, subject, session, space="MRSI", met=met, desc="preproc", suffix_override="mrsi")
+        out = mrsi_derivative(config.derivative_dir, subject, session, space="MRSI", met=met, desc="signalspikefilt", suffix_override="mrsi")
         if out.exists() and not (config.overwrite_filt or config.overwrite):
             filtered[met] = out
             continue

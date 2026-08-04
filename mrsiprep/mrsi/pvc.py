@@ -52,12 +52,18 @@ def run_pvc(
     brain = brain_data.astype(bool)
     out_maps: dict[str, Path] = {}
     for met, path in metabolite_maps.items():
-        out = mrsi_derivative(config.derivative_dir, subject, session, space="MRSI", met=met, desc="pvc", suffix_override="mrsi")
+        out = mrsi_derivative(config.derivative_dir, subject, session, space="MRSI", met=met, desc="signalpvc", suffix_override="mrsi")
         if out.exists() and not (config.overwrite_pve or config.overwrite):
             out_maps[met] = out
             continue
         out.parent.mkdir(parents=True, exist_ok=True)
-        tmp_out = out.with_name(out.name.replace("_desc-pvc_", "_desc-petpvcraw_"))
+        # PETPVC's own direct RBV output, before mrsiprep's own overshoot/
+        # negative-value clipping below -- a --work-dir scratch file (not a
+        # permanent derivative), since nothing reads it back; kept only so
+        # the clipping's effect can be inspected by diffing against `out`.
+        scratch_dir = config.work_dir / f"sub-{subject}" / (f"ses-{session}" if session else "ses-none") / "pvc"
+        scratch_dir.mkdir(parents=True, exist_ok=True)
+        tmp_out = scratch_dir / out.name.replace("_desc-signalpvc_", "_desc-petpvcraw_")
         cmd = ["petpvc", "-i", str(path), "-m", str(tissue_4d), "-p", "RBV", "-x", str(psf_width), "-y", str(psf_width), "-z", str(psf_width), "-o", str(tmp_out)]
         result = run_checked(cmd, check=False)
         if result.returncode != 0:

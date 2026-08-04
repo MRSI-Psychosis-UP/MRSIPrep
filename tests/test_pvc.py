@@ -22,7 +22,7 @@ class PVCTests(unittest.TestCase):
             nib.save(image, metabolite)
             nib.save(image, brainmask)
             nib.save(nib.Nifti1Image(np.ones((2, 2, 2, 3), dtype=np.float32), np.eye(4)), tissue)
-            config = SimpleNamespace(derivative_dir=root / "derivatives", overwrite=False, overwrite_pve=False)
+            config = SimpleNamespace(derivative_dir=root / "derivatives", work_dir=root / "work", overwrite=False, overwrite_pve=False)
 
             def fake_petpvc(command, **_kwargs):
                 output = Path(command[command.index("-o") + 1])
@@ -48,7 +48,7 @@ class PVCTests(unittest.TestCase):
             nib.save(image, metabolite)
             nib.save(image, brainmask)
             nib.save(nib.Nifti1Image(np.ones((2, 2, 2, 3), dtype=np.float32), np.eye(4)), tissue)
-            config = SimpleNamespace(derivative_dir=root / "derivatives", overwrite=False, overwrite_pve=False)
+            config = SimpleNamespace(derivative_dir=root / "derivatives", work_dir=root / "work", overwrite=False, overwrite_pve=False)
             failure = subprocess.CompletedProcess(["petpvc"], 1, "", "cannot write output")
 
             with patch("mrsiprep.mrsi.pvc.shutil.which", return_value="/usr/bin/petpvc"), patch(
