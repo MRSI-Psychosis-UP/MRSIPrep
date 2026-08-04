@@ -102,7 +102,7 @@ def _mrsi_folder(entities: dict) -> str:
     space = entities.get("space")
     if entities.get("label") in {"GM", "WM", "CSF"}:
         return "confounds"
-    if desc == "pvc":
+    if desc == "signalpvc":
         return "mrsi/orig-pvc"
     if desc in _CONFOUND_DESCS or suffix == "mask":
         return "confounds"
