@@ -18,26 +18,12 @@ absolute values agree.
 
 ## Dataset
 
-Two independently acquired real-world cohorts, merged into one group-level
-MRSIPrep connectivity/profile archive
-(`LPN-BioPsych-Project_atlas-chimeraLFMIHIFIS_scale3_desc-group_connectivity_mrsi.npz`):
+Two independently acquired real-world datasets, merged into one group-level
+MRSIPrep connectivity/profile archive.
 
-| | LPN-Project | BioPsych-Project |
+| | Lausanne3T-FID | Lausanne3T-ECCENTRIC |
 |---|---|---|
-| `MRSI_SEQ` code | 0 | 1 |
-| Participant ID prefixes | `CHUVA`, `CHUVL`, `CHUVF` | `CHUVUP`, `CHUVLFT` |
-| n (healthy controls, after exclusion) | 12 | 15 |
-
-Restricted to healthy controls (`Cohort == 'CTRL'`, equivalently
-`Diag == 0` / `State == 0` — all three fields agree exactly on the same 28
-subjects) specifically so the comparison isolates acquisition effects from
-clinical-group composition; the full merged cohort's `MRSI_SEQ` does **not**
-collapse onto diagnostic group (both sequences mix CTRL/ARMS/EPP/LOFT/EP
-subjects elsewhere), so restricting to controls here is a deliberate choice
-to compare like with like, not a workaround for a confounded design. Of 28
-available controls, 1 was excluded for flagged spectral quality
-(`exclude` or `exclude_noisy_metsim` in the archive's `covars` field),
-leaving 27 (12 LPN-Project, 15 BioPsych-Project).
+| n | 12 | 15 |
 
 ## Method
 
@@ -71,7 +57,7 @@ each of the 203 parcels of the `chimeraLFMIHIFIS` scale-3 parcellation:
 
 ## Results
 
-![Cross-sequence regional metabolic profile reproducibility, healthy controls, 82 GM root regions, all 5 metabolites, each cohort on its own y-axis with 95% CI bands](figures/cross_sequence_regional_profile.png)
+![Cross-sequence regional metabolic profile reproducibility, 82 GM root regions, all 5 metabolites, each cohort on its own y-axis with 95% CI bands](figures/cross_sequence_regional_profile.png)
 
 | Metabolite | Spearman ρ | p-value | n roots |
 |---|---:|---:|---:|
@@ -80,43 +66,3 @@ each of the 203 parcels of the `chimeraLFMIHIFIS` scale-3 parcellation:
 | NAANAAG | 0.89 | 5.0×10⁻²⁹ | 82 |
 | Ins | 0.88 | 7.0×10⁻²⁸ | 82 |
 | GluGln | 0.85 | 9.4×10⁻²⁴ | 82 |
-
-### Interpretation
-
-* **Regional profiles reproduce strongly across sites and sequences for
-  every metabolite tested** (ρ = 0.85–0.93, all p < 10⁻²³). This is direct
-  evidence that MRSIPrep's registration, parcellation, and regional-profile
-  estimation preserve genuine spatial structure in the underlying
-  metabolite maps across acquisitions that differ in essentially every
-  technical respect except the processing pipeline itself — not just on
-  the specific acquisition the pipeline was developed and tuned against.
-
-* **LPN-Project and BioPsych-Project's absolute signal levels differ by
-  roughly three orders of magnitude** (LPN-Project regional values in the
-  hundreds-to-low-thousands; BioPsych-Project in the 0–2 range), uniform
-  in direction and magnitude across all five metabolites. This is
-  consistent with a scanner-, sequence-, or reconstruction-level scaling
-  or referencing difference between the two acquisitions, not a
-  biological effect or a pipeline artifact — a genuinely different
-  absolute unit convention upstream of MRSIPrep, not something MRSIPrep
-  itself introduces. The figure above plots each cohort on its own
-  y-axis specifically to make the shared *pattern* visible despite this;
-  the Spearman correlations are computed on each cohort's native scale,
-  before that per-axis rescaling for display, and are unaffected by it
-  (Spearman's rank correlation is scale- and offset-invariant by
-  construction).
-
-* **Practical consequence**: any secondary analysis that pools MRSIPrep
-  regional outputs across these two cohorts directly — a group comparison
-  or a connectivity analysis spanning both — would need an explicit
-  harmonization or normalization step first, despite the underlying
-  relative regional pattern being highly consistent. Reproducibility of
-  pattern does not imply poolability of raw values.
-
-* **GPCPCh has the strongest cross-cohort agreement (ρ = 0.93) and GluGln
-  the weakest (ρ = 0.85)**, though the weakest is still a strong, highly
-  significant correlation. This differentiation across metabolites is
-  more informative than a single pooled "everything correlates" number
-  would be, and is broadly consistent with GluGln's known greater
-  sensitivity to sequence and TE choice relative to more robust
-  metabolites like creatine-referenced signals.
