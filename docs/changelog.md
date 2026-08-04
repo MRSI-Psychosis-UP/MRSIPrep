@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.8.0
 
 - **Breaking: consolidated per-voxel confound outputs into a single
   `confounds/` folder.** CRLB, SNR, FWHM/linewidth, spike masks, QC masks,
