@@ -86,6 +86,36 @@ def build_parser() -> argparse.ArgumentParser:
         help="Maximum per-voxel Cramér-Rao lower bound (%%) to include a voxel, when 'crlb' is in --quality-metrics.",
     )
 
+    t1_correction = parser.add_argument_group("T1 saturation correction")
+    t1_correction.add_argument(
+        "--t1-correction",
+        choices=["none", "literature"],
+        default="none",
+        help="Correct metabolite maps for incomplete T1 relaxation recovery (T1 saturation) using the "
+        "steady-state spoiled-gradient-echo signal equation (default: 'none', no correction applied). "
+        "'literature' applies a single scalar correction factor per metabolite, derived from the "
+        "acquisition's TR/flip angle (read from mrsinmrs.json) and a curated literature T1 value per "
+        "metabolite per field strength (see mrsiprep/config/t1_literature.json). Requires a dataset-level "
+        "mrsinmrs.json with unambiguous TR/FlipAngle/MagneticFieldStrength entries -- fails loudly, "
+        "per-recording, if these or a requested metabolite's T1 value are missing, rather than silently "
+        "skipping or substituting. A future 'voxelwise' mode (per-voxel correction using a measured B1+ "
+        "map) is planned but not yet implemented; mrsiprep does not currently ingest B1+ maps.",
+    )
+    t1_correction.add_argument(
+        "--t1-correction-water-status",
+        choices=["uncorrected", "corrected", "unknown"],
+        default="unknown",
+        help="Whether the input metabolite maps are already water-referenced/water-T1-corrected upstream "
+        "(e.g. by the quantification pipeline's own internal water-scaling step). 'unknown' (default, "
+        "conservative) applies the metabolite-T1-only correction and flags the ambiguity in the QC/"
+        "provenance output. Ignored when --t1-correction none.",
+    )
+    t1_correction.add_argument(
+        "--overwrite-t1corr",
+        action="store_true",
+        help="Force recomputation of T1-corrected maps even if cached outputs exist.",
+    )
+
     processing = parser.add_argument_group("Options for performing only a subset of the workflow")
     processing.add_argument(
         "--mode",
@@ -637,6 +667,9 @@ def parse_args(argv: list[str] | None = None) -> MRSIPrepConfig:
         spike_percentile=args.spikepc,
         spike_max_cluster_voxels=args.spike_max_cluster_voxels,
         no_pvc=args.no_pvc,
+        t1_correction=args.t1_correction,
+        t1_correction_water_status=args.t1_correction_water_status,
+        overwrite_t1corr=args.overwrite_t1corr,
         longitudinal=args.longitudinal,
         transform_spikemask=args.transform_spikemask,
         nthreads=args.nthreads,

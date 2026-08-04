@@ -67,6 +67,9 @@ class MRSIPrepConfig:
     spike_percentile: float = 99.0
     spike_max_cluster_voxels: int | None = None
     no_pvc: bool = False
+    t1_correction: str = "none"
+    t1_correction_water_status: str = "unknown"
+    overwrite_t1corr: bool = False
     longitudinal: bool = False
     transform_spikemask: bool = False
     overwrite: bool = False
@@ -93,12 +96,14 @@ class MRSIPrepConfig:
 
     def _resolve_paths(self) -> None:
         from mrsiprep.io.bids import load_bids_filters
+        from mrsiprep.io.mrsinmrs import load_mrsinmrs
 
         self.bids_dir = Path(self.bids_dir).resolve()
         self.output_dir = Path(self.output_dir).resolve()
         if self.bids_filter_file is not None:
             self.bids_filter_file = Path(self.bids_filter_file).resolve()
         self.bids_filters = load_bids_filters(self.bids_filter_file)
+        self.mrsinmrs = load_mrsinmrs(self.bids_dir)
         self.output_spaces = _normalize_output_spaces(self.output_spaces)
         self.work_dir = Path(self.work_dir).resolve() if self.work_dir is not None else self.output_dir / "work"
         if self.fs_subjects_dir is not None:
@@ -111,6 +116,10 @@ class MRSIPrepConfig:
             raise ValueError(f"Unsupported SynthSeg mode: {self.synthseg_mode}")
         if self.tissue_backend not in {"synthseg-fast", "existing", "none"}:
             raise ValueError(f"Unsupported tissue backend: {self.tissue_backend}")
+        if self.t1_correction not in {"none", "literature"}:
+            raise ValueError(f"Unsupported --t1-correction: {self.t1_correction}")
+        if self.t1_correction_water_status not in {"uncorrected", "corrected", "unknown"}:
+            raise ValueError(f"Unsupported --t1-correction-water-status: {self.t1_correction_water_status}")
 
     def _validate_registration_backend(self) -> None:
         if self.registration_backend in {"flirt/fnirt", "flirt_fnirt", "flirt-fnirt"}:
