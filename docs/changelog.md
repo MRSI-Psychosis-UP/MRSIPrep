@@ -28,7 +28,20 @@
   this default. Existing scripts/pipelines that rely on the previous
   T1w-resolution default should pass `--mni-resolution t1wres` explicitly.
 
-## 1.7.7
+- **Breaking: renamed two native-space MRSI signal derivatives so their
+  filename always starts with `signal`, distinguishing the actual
+  metabolite data from confound maps at a glance.** `mrsi/orig/`'s
+  spike-filtered map is now `desc-signalspikefilt` (was `desc-preproc`);
+  `mrsi/orig-pvc/`'s final PVC-corrected map is now `desc-signalpvc` (was
+  `desc-pvc`) so it's unambiguous that the file is metabolite signal, not
+  a CRLB/SNR/FWHM confound, and that it specifically underwent PVC.
+  PETPVC's own raw RBV output -- previously kept as a permanent
+  `desc-petpvcraw` derivative alongside `desc-pvc` in `mrsi/orig-pvc/` --
+  is now a `--work-dir` scratch file instead, since nothing reads it back
+  and it exists only so mrsiprep's own overshoot/negative-value clipping
+  (applied on top of PETPVC's output to produce the final `desc-signalpvc`
+  map) can be inspected by diffing against it when `--work-dir` is kept.
+
 
 - Relabeled `docs/vba_benchmark.md`'s two ANTs configurations from
   "ANTs (SyN)" / "ANTs (no SyN)" to **ANTs (R+SyN)** / **ANTs (R+Aff)**
