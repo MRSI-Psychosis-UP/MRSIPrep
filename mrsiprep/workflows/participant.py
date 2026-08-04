@@ -25,6 +25,7 @@ from mrsiprep.reports.parcel_figures import write_parcel_qc_figures
 from mrsiprep.reports.qc_combine import combine_qc_reports
 from mrsiprep.reports.connectivity_overview import write_connectivity_qc_report
 from mrsiprep.reports.mrsi_preproc import write_mrsi_preproc_qc_report
+from mrsiprep.reports.t1_correction import write_t1_correction_qc_report
 from mrsiprep.reports.parcellation_overview import write_parcellation_qc_report
 from mrsiprep.reports.registration_overview import write_registration_overview_report
 from mrsiprep.tissue.synthseg_fast import (
@@ -519,7 +520,12 @@ def _step_mrsi_preprocessing(config, subject, session, inputs, debug):
     with debug.step("MRSI preprocessing"):
         mrsi = run_mrsi_workflow(config, subject, session, inputs)
         qc_report_mrsi_preproc = write_mrsi_preproc_qc_report(config, subject, session, mrsi.raw_maps, mrsi.preproc_maps)
-    return mrsi, qc_report_mrsi_preproc
+        qc_report_t1_correction = None
+        if mrsi.t1_correction_provenance is not None:
+            qc_report_t1_correction = write_t1_correction_qc_report(
+                config, subject, session, mrsi.preproc_maps, mrsi.corrected_maps, mrsi.t1_correction_provenance
+            )
+    return mrsi, qc_report_mrsi_preproc, qc_report_t1_correction
 
 
 def _step_registration(config, subject, session, mrsi, anat, debug, subject_template=None):
@@ -717,6 +723,6 @@ def _step_reports(config, subject, session, outputs, debug):
         report = run_reports_workflow(config, subject, session, outputs)
         outputs["report"] = report
         outputs["qc_report_combined"] = combine_qc_reports(config, subject, session)
-        for key in ("qc_report_tissue", "qc_report_mrsi_preproc", "qc_report_registration", "qc_report_parcellation", "qc_report_connectivity"):
+        for key in ("qc_report_tissue", "qc_report_mrsi_preproc", "qc_report_t1_correction", "qc_report_registration", "qc_report_parcellation", "qc_report_connectivity"):
             outputs.pop(key, None)
     return outputs

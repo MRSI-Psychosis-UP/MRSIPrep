@@ -70,9 +70,9 @@ def step_mrsi(config, subject, session, ctx):
     from mrsiprep.workflows.participant import _step_mrsi_preprocessing
 
     debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""))
-    mrsi, qc_report_mrsi_preproc = _step_mrsi_preprocessing(config, subject, session, ctx["inputs"], debug)
+    mrsi, qc_report_mrsi_preproc, qc_report_t1_correction = _step_mrsi_preprocessing(config, subject, session, ctx["inputs"], debug)
     ctx = dict(ctx)
-    ctx.update(mrsi=mrsi, qc_report_mrsi_preproc=qc_report_mrsi_preproc)
+    ctx.update(mrsi=mrsi, qc_report_mrsi_preproc=qc_report_mrsi_preproc, qc_report_t1_correction=qc_report_t1_correction)
     return ctx
 
 
@@ -229,6 +229,7 @@ def step_reports(config, subject, session, ctx):
         "transformed_maps": ctx["transformed"],
         "qc_report_tissue": ctx["qc_report_tissue"],
         "qc_report_mrsi_preproc": ctx["qc_report_mrsi_preproc"],
+        "qc_report_t1_correction": ctx["qc_report_t1_correction"],
         "qc_report_registration": ctx["qc_report_registration"],
         "qc_report_parcellation": ctx["qc_report_parcellation"],
         "qc_report_connectivity": ctx["qc_report_connectivity"],
@@ -237,7 +238,18 @@ def step_reports(config, subject, session, ctx):
     outputs["provenance"] = write_provenance(
         config,
         provenance_derivative(config.derivative_dir, subject, session),
-        {"subject": subject, "session": session, "outputs": outputs},
+        {
+            "subject": subject,
+            "session": session,
+            "outputs": outputs,
+            "t1_correction": {
+                "mode": config.t1_correction,
+                "water_status": config.t1_correction_water_status,
+                "per_metabolite": mrsi.t1_correction_provenance,
+            }
+            if mrsi.t1_correction_provenance is not None
+            else None,
+        },
     )
     ctx = dict(ctx)
     ctx["outputs"] = outputs

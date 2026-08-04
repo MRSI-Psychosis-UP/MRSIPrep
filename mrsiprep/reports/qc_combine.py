@@ -8,7 +8,7 @@ from pathlib import Path
 from mrsiprep.io.naming import qc_report_derivative
 from mrsiprep.reports.slices import STYLE
 
-STEP_ORDER = ("tissue", "mrsi-preproc", "registration", "parcellation", "connectivity")
+STEP_ORDER = ("tissue", "mrsi-preproc", "t1-correction", "registration", "parcellation", "connectivity")
 
 _BODY_RE = re.compile(r"<body>(.*)</body>", re.S)
 

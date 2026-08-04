@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+- **Added optional protocol-level T1 saturation correction
+  (`--t1-correction {none, literature}`, default `none`).** Corrects
+  metabolite maps for incomplete T1 relaxation recovery using the
+  steady-state spoiled-gradient-echo signal equation, TR/flip angle read
+  from a dataset-level `mrsinmrs.json`, and a curated literature T1 value
+  per metabolite per field strength (`mrsiprep/config/t1_literature.json`;
+  editable data-only configuration; entries marked `todo` raise an explicit
+  error if requested). Purely additive/opt-in: the
+  default `none` produces byte-identical output to before this change. New
+  outputs when enabled: `mrsi/orig-t1corr/*_desc-signalt1corr_mrsi.nii.gz`,
+  `confounds/*_desc-t1corr.tsv`, a new QC report, and a `t1_correction`
+  provenance block. See `--t1-correction-water-status` for handling
+  already water-referenced inputs, and
+  [T1 Saturation Correction](usage_t1_correction.md).
+
 ## 1.8.0
 
 - **Breaking: consolidated per-voxel confound outputs into a single

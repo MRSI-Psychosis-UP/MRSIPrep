@@ -65,6 +65,7 @@ mrsiprep = [
   "data/atlas/**/*.nii",
   "data/atlas/**/*.tsv",
   "data/atlas/**/*.md",
+  "config/*.json",
   "reports/templates/*.html",
   "config/presets/*.json",
 ]

@@ -286,6 +286,8 @@ and `--output-mrsi-t1w`, and
 
 ```text
 <out>/mrsiprep/sub-*/ses-*/mrsi/orig/          native/imported-grid MRSI signal maps only
+<out>/mrsiprep/sub-*/ses-*/mrsi/orig-t1corr/   T1-saturation-corrected native-grid signal maps
+                                                (opt-in, --t1-correction literature)
 <out>/mrsiprep/sub-*/ses-*/mrsi/orig-pvc/      PVC-corrected native-grid signal maps only
 <out>/mrsiprep/sub-*/ses-*/mrsi/t1w/           T1w-aligned MRSI signal maps only (opt-in, --output-mrsi-t1w)
 <out>/mrsiprep/sub-*/ses-*/mrsi/mni/           MNI-normalized MRSI signal maps only
@@ -295,7 +297,8 @@ and `--output-mrsi-t1w`, and
 <out>/mrsiprep/sub-*/ses-*/confounds/          every quantity that encodes a preprocessing assumption
                                                 rather than signal itself, one file per space/metabolite
                                                 (space-* entity in the filename): CRLB, SNR, FWHM/linewidth,
-                                                spike masks, QC masks, brain mask, GM/WM/CSF tissue probsegs
+                                                spike masks, QC masks, brain mask, GM/WM/CSF tissue probsegs,
+                                                T1-correction summary (opt-in, --t1-correction literature)
 <out>/mrsiprep/sub-*/ses-*/transforms/         ANTs MRSI→T1w and T1w→MNI transforms
 <out>/mrsiprep/sub-*/ses-*/reports/coverage/   subject HTML report + parcelwise coverage/CRLB figures
 <out>/mrsiprep/sub-*/ses-*/reports/qc-reports/ per-step QC HTML reports and figures

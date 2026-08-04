@@ -1,0 +1,366 @@
+{
+  "GPCPCh": {
+    "3.0": {
+      "t1_s": 1.06,
+      "t1_sd_s": 0.11,
+      "t1_se_s": null,
+      "uncertainty_type": "SD",
+      "tissue": "parietal white matter",
+      "resonance": "total choline singlet near 3.22 ppm",
+      "source": "Li et al. 2012, T1 and T2 Metabolite Relaxation Times in Normal Brain at 3T and 7T, J Mol Imaging Dynam S1:002",
+      "doi": "10.4172/2155-9937.S1-002",
+      "n_subjects": 8,
+      "status": "verified",
+      "notes": "Directly reported mean ± SD."
+    },
+    "7.0": {
+      "t1_s": 1.24,
+      "t1_sd_s": 0.21,
+      "t1_se_s": null,
+      "uncertainty_type": "SD",
+      "tissue": "parietal white matter",
+      "resonance": "total choline singlet near 3.22 ppm",
+      "source": "Li et al. 2012, T1 and T2 Metabolite Relaxation Times in Normal Brain at 3T and 7T, J Mol Imaging Dynam S1:002",
+      "doi": "10.4172/2155-9937.S1-002",
+      "n_subjects": 7,
+      "status": "verified",
+      "notes": "Directly reported mean ± SD."
+    }
+  },
+  "CrPCr": {
+    "3.0": {
+      "t1_s": 1.38,
+      "t1_sd_s": 0.13,
+      "t1_se_s": null,
+      "uncertainty_type": "SD",
+      "tissue": "parietal white matter",
+      "resonance": "total creatine CH3 singlet near 3.03 ppm",
+      "source": "Li et al. 2012, T1 and T2 Metabolite Relaxation Times in Normal Brain at 3T and 7T, J Mol Imaging Dynam S1:002",
+      "doi": "10.4172/2155-9937.S1-002",
+      "n_subjects": 8,
+      "status": "verified",
+      "notes": "Directly reported mean ± SD."
+    },
+    "7.0": {
+      "t1_s": 1.78,
+      "t1_sd_s": 0.23,
+      "t1_se_s": null,
+      "uncertainty_type": "SD",
+      "tissue": "parietal white matter",
+      "resonance": "total creatine CH3 singlet near 3.03 ppm",
+      "source": "Li et al. 2012, T1 and T2 Metabolite Relaxation Times in Normal Brain at 3T and 7T, J Mol Imaging Dynam S1:002",
+      "doi": "10.4172/2155-9937.S1-002",
+      "n_subjects": 7,
+      "status": "verified",
+      "notes": "Directly reported mean ± SD."
+    }
+  },
+  "NAANAAG": {
+    "3.0": {
+      "t1_s": 1.38,
+      "t1_sd_s": 0.13,
+      "t1_se_s": null,
+      "uncertainty_type": "SD",
+      "tissue": "parietal white matter",
+      "resonance": "NAA singlet near 2.01 ppm",
+      "source": "Li et al. 2012, T1 and T2 Metabolite Relaxation Times in Normal Brain at 3T and 7T, J Mol Imaging Dynam S1:002",
+      "doi": "10.4172/2155-9937.S1-002",
+      "n_subjects": 8,
+      "status": "proxy",
+      "notes": "The source measured NAA, not the fitted NAA+NAAG aggregate. This is a practical tNAA proxy and should not be presented as a direct aggregate measurement."
+    },
+    "7.0": {
+      "t1_s": 1.73,
+      "t1_sd_s": 0.22,
+      "t1_se_s": null,
+      "uncertainty_type": "SD",
+      "tissue": "parietal white matter",
+      "resonance": "NAA singlet near 2.01 ppm",
+      "source": "Li et al. 2012, T1 and T2 Metabolite Relaxation Times in Normal Brain at 3T and 7T, J Mol Imaging Dynam S1:002",
+      "doi": "10.4172/2155-9937.S1-002",
+      "n_subjects": 7,
+      "status": "proxy",
+      "notes": "The source measured NAA, not the fitted NAA+NAAG aggregate. Xin et al. 2013 reported substantially different 7T WM T1 values for NAA and NAAG, so an aggregate tNAA T1 depends on their relative contributions."
+    }
+  },
+  "GluGln": {
+    "3.0": {
+      "t1_s": 0.96,
+      "t1_sd_s": null,
+      "t1_se_s": 0.2,
+      "uncertainty_type": "SE",
+      "tissue": "occipital white matter",
+      "resonance": "overlapping Glu+Gln signal near 3.75 ppm",
+      "source": "Mlynárik, Gruber & Moser 2001, Proton T1 and T2 relaxation times of human brain metabolites at 3 Tesla, NMR Biomed 14:325-331",
+      "doi": "10.1002/nbm.713",
+      "n_subjects": null,
+      "status": "verified",
+      "notes": "Directly reported Glx-resonance estimate; uncertainty was reported as SE, not SD. It may not equal the effective T1 of a concentration map obtained by numerically adding separately fitted Glu and Gln."
+    },
+    "7.0": {
+      "t1_s": 1.75,
+      "t1_sd_s": null,
+      "t1_se_s": null,
+      "uncertainty_type": null,
+      "tissue": "occipital white-matter-rich voxel",
+      "resonance": "effective Glu+Gln concentration-map approximation",
+      "source": "Derived from Xin et al. 2013, Magn Reson Med 69:931-936: Glu T1=1.75±0.04 s and Gln T1=1.74±0.23 s in WM-rich voxels",
+      "doi": "10.1002/mrm.24352",
+      "n_subjects": 6,
+      "status": "derived",
+      "notes": "Not directly measured as composite Glx. Because the reported Glu and Gln T1 values are nearly identical, 1.75 s is a robust concentration-weighted approximation for this tissue and protocol."
+    }
+  },
+  "Glu": {
+    "3.0": {
+      "t1_s": 1.17,
+      "t1_sd_s": null,
+      "t1_se_s": 0.08,
+      "uncertainty_type": "SE",
+      "tissue": "occipital white matter",
+      "resonance": "Glu signal near 2.35 ppm",
+      "source": "Mlynárik, Gruber & Moser 2001, Proton T1 and T2 relaxation times of human brain metabolites at 3 Tesla, NMR Biomed 14:325-331",
+      "doi": "10.1002/nbm.713",
+      "n_subjects": null,
+      "status": "verified",
+      "notes": "Directly reported mean ± SE."
+    },
+    "7.0": {
+      "t1_s": 1.75,
+      "t1_sd_s": 0.04,
+      "t1_se_s": null,
+      "uncertainty_type": "SD",
+      "tissue": "occipital white-matter-rich voxel",
+      "resonance": "LCModel-fitted glutamate",
+      "source": "Xin et al. 2013, Proton T1 relaxation times of metabolites in human occipital white and gray matter at 7 T, Magn Reson Med 69:931-936",
+      "doi": "10.1002/mrm.24352",
+      "n_subjects": 6,
+      "status": "verified",
+      "notes": "Directly reported mean ± SD for the WM-rich group."
+    }
+  },
+  "Gln": {
+    "3.0": {
+      "t1_s": null,
+      "t1_sd_s": null,
+      "t1_se_s": null,
+      "uncertainty_type": null,
+      "tissue": null,
+      "resonance": null,
+      "source": "No sufficiently well-curated direct 3T Gln point estimate selected for this configuration.",
+      "doi": null,
+      "n_subjects": null,
+      "status": "todo",
+      "notes": "Raise rather than substituting Glu or Glx."
+    },
+    "7.0": {
+      "t1_s": 1.74,
+      "t1_sd_s": 0.23,
+      "t1_se_s": null,
+      "uncertainty_type": "SD",
+      "tissue": "occipital white-matter-rich voxel",
+      "resonance": "LCModel-fitted glutamine",
+      "source": "Xin et al. 2013, Proton T1 relaxation times of metabolites in human occipital white and gray matter at 7 T, Magn Reson Med 69:931-936",
+      "doi": "10.1002/mrm.24352",
+      "n_subjects": 6,
+      "status": "verified",
+      "notes": "Directly reported mean ± SD for the WM-rich group. A different 7T pgACC edited experiment reported a shorter value, illustrating substantial regional and methodological dependence."
+    }
+  },
+  "Ins": {
+    "3.0": {
+      "t1_s": 1.01,
+      "t1_sd_s": null,
+      "t1_se_s": 0.09,
+      "uncertainty_type": "SE",
+      "tissue": "occipital white matter",
+      "resonance": "myo-inositol signal near 3.57 ppm",
+      "source": "Mlynárik, Gruber & Moser 2001, Proton T1 and T2 relaxation times of human brain metabolites at 3 Tesla, NMR Biomed 14:325-331",
+      "doi": "10.1002/nbm.713",
+      "n_subjects": null,
+      "status": "verified",
+      "notes": "Directly reported mean ± SE. The same paper also reported 0.93±0.11 s for the 3.66 ppm WM resonance."
+    },
+    "7.0": {
+      "t1_s": 1.19,
+      "t1_sd_s": 0.07,
+      "t1_se_s": null,
+      "uncertainty_type": "SD",
+      "tissue": "occipital white-matter-rich voxel",
+      "resonance": "LCModel-fitted myo-inositol",
+      "source": "Xin et al. 2013, Proton T1 relaxation times of metabolites in human occipital white and gray matter at 7 T, Magn Reson Med 69:931-936",
+      "doi": "10.1002/mrm.24352",
+      "n_subjects": 6,
+      "status": "verified",
+      "notes": "Directly reported mean ± SD for the WM-rich group."
+    }
+  },
+  "GABA": {
+    "3.0": {
+      "t1_s": 1.31,
+      "t1_sd_s": 0.16,
+      "t1_se_s": null,
+      "uncertainty_type": "SD",
+      "tissue": "mesial parietal brain voxel",
+      "resonance": "macromolecule-suppressed J-difference-edited GABA",
+      "source": "Puts, Barker & Edden 2013, Measuring the longitudinal relaxation time of GABA in vivo at 3 Tesla, J Magn Reson Imaging 37:999-1003",
+      "doi": "10.1002/jmri.23817",
+      "n_subjects": 10,
+      "status": "verified",
+      "notes": "Direct edited-MRS measurement; applicability to unedited fitting and other regions should be documented as a limitation."
+    },
+    "7.0": {
+      "t1_s": 1.18,
+      "t1_sd_s": 0.42,
+      "t1_se_s": null,
+      "uncertainty_type": "SD",
+      "tissue": "pregenual anterior cingulate cortex",
+      "resonance": "edited GABA with macromolecule-relaxation handling",
+      "source": "An et al. 2020, Determination of Brain Metabolite T1 Without Interference From Macromolecule Relaxation, J Magn Reson Imaging",
+      "doi": "10.1002/jmri.27259",
+      "n_subjects": 5,
+      "status": "verified",
+      "notes": "Direct estimate but imprecise and strongly method/region dependent."
+    }
+  },
+  "GSH": {
+    "3.0": {
+      "t1_s": 0.397,
+      "t1_sd_s": 0.044,
+      "t1_se_s": null,
+      "uncertainty_type": "SD",
+      "tissue": "frontoparietal brain voxel",
+      "resonance": "doubly selective multiple-quantum-filtered glutathione",
+      "source": "Choi & Lee 2013, Doubly selective multiple quantum chemical shift imaging and T1 relaxation time measurement of glutathione in the human brain in vivo, NMR Biomed 26:28-34",
+      "doi": "10.1002/nbm.2815",
+      "n_subjects": 5,
+      "status": "verified",
+      "notes": "Direct mean ± SD, but highly sequence- and resonance-specific; do not assume equivalence to conventional short-TE LCModel GSH without validation."
+    },
+    "7.0": {
+      "t1_s": 1.06,
+      "t1_sd_s": 0.06,
+      "t1_se_s": null,
+      "uncertainty_type": "SD",
+      "tissue": "occipital white-matter-rich voxel",
+      "resonance": "LCModel-fitted glutathione",
+      "source": "Xin et al. 2013, Proton T1 relaxation times of metabolites in human occipital white and gray matter at 7 T, Magn Reson Med 69:931-936",
+      "doi": "10.1002/mrm.24352",
+      "n_subjects": 6,
+      "status": "verified",
+      "notes": "Directly reported mean ± SD for the WM-rich group."
+    }
+  },
+  "NAAG": {
+    "3.0": {
+      "t1_s": null,
+      "t1_sd_s": null,
+      "t1_se_s": null,
+      "uncertainty_type": null,
+      "tissue": null,
+      "resonance": null,
+      "source": "No sufficiently well-curated direct 3T NAAG point estimate selected for this configuration.",
+      "doi": null,
+      "n_subjects": null,
+      "status": "todo",
+      "notes": "Raise rather than substituting the NAA T1."
+    },
+    "7.0": {
+      "t1_s": 0.94,
+      "t1_sd_s": 0.08,
+      "t1_se_s": null,
+      "uncertainty_type": "SD",
+      "tissue": "occipital white-matter-rich voxel",
+      "resonance": "LCModel-fitted NAAG",
+      "source": "Xin et al. 2013, Proton T1 relaxation times of metabolites in human occipital white and gray matter at 7 T, Magn Reson Med 69:931-936",
+      "doi": "10.1002/mrm.24352",
+      "n_subjects": 6,
+      "status": "verified",
+      "notes": "Directly reported mean ± SD for the WM-rich group."
+    }
+  },
+  "Scyllo": {
+    "3.0": {
+      "t1_s": null,
+      "t1_sd_s": null,
+      "t1_se_s": null,
+      "uncertainty_type": null,
+      "tissue": null,
+      "resonance": null,
+      "source": "No sufficiently well-curated direct 3T scyllo-inositol point estimate selected for this configuration.",
+      "doi": null,
+      "n_subjects": null,
+      "status": "todo",
+      "notes": "Raise when unavailable."
+    },
+    "7.0": {
+      "t1_s": 1.23,
+      "t1_sd_s": 0.07,
+      "t1_se_s": null,
+      "uncertainty_type": "SD",
+      "tissue": "occipital white-matter-rich voxel",
+      "resonance": "LCModel-fitted scyllo-inositol",
+      "source": "Xin et al. 2013, Proton T1 relaxation times of metabolites in human occipital white and gray matter at 7 T, Magn Reson Med 69:931-936",
+      "doi": "10.1002/mrm.24352",
+      "n_subjects": 6,
+      "status": "verified",
+      "notes": "Directly reported mean ± SD for the WM-rich group."
+    }
+  },
+  "Tau": {
+    "3.0": {
+      "t1_s": null,
+      "t1_sd_s": null,
+      "t1_se_s": null,
+      "uncertainty_type": null,
+      "tissue": null,
+      "resonance": null,
+      "source": "No sufficiently well-curated direct 3T taurine point estimate selected for this configuration.",
+      "doi": null,
+      "n_subjects": null,
+      "status": "todo",
+      "notes": "Raise when unavailable."
+    },
+    "7.0": {
+      "t1_s": 2.09,
+      "t1_sd_s": 0.04,
+      "t1_se_s": null,
+      "uncertainty_type": "SD",
+      "tissue": "occipital white-matter-rich voxel",
+      "resonance": "LCModel-fitted taurine",
+      "source": "Xin et al. 2013, Proton T1 relaxation times of metabolites in human occipital white and gray matter at 7 T, Magn Reson Med 69:931-936",
+      "doi": "10.1002/mrm.24352",
+      "n_subjects": 6,
+      "status": "verified",
+      "notes": "Directly reported mean ± SD for the WM-rich group."
+    }
+  },
+  "PE": {
+    "3.0": {
+      "t1_s": null,
+      "t1_sd_s": null,
+      "t1_se_s": null,
+      "uncertainty_type": null,
+      "tissue": null,
+      "resonance": null,
+      "source": "No sufficiently well-curated direct 3T phosphoethanolamine point estimate selected for this configuration.",
+      "doi": null,
+      "n_subjects": null,
+      "status": "todo",
+      "notes": "Raise when unavailable."
+    },
+    "7.0": {
+      "t1_s": 1.32,
+      "t1_sd_s": 0.3,
+      "t1_se_s": null,
+      "uncertainty_type": "SD",
+      "tissue": "occipital white-matter-rich voxel",
+      "resonance": "LCModel-fitted phosphoethanolamine",
+      "source": "Xin et al. 2013, Proton T1 relaxation times of metabolites in human occipital white and gray matter at 7 T, Magn Reson Med 69:931-936",
+      "doi": "10.1002/mrm.24352",
+      "n_subjects": 6,
+      "status": "verified",
+      "notes": "Directly reported mean ± SD for the WM-rich group."
+    }
+  }
+}

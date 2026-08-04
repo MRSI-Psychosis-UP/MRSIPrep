@@ -104,10 +104,12 @@ def pipeline_trace(config) -> list[dict]:
     mode_reason = f"mode={config.processing_mode}, requires parc-con"
     pvc_ran = parc_con and not config.no_pvc
     pvc_reason = "" if pvc_ran else (mode_reason if not parc_con else "--no-pvc")
+    t1corr_ran = config.t1_correction == "literature"
     trace = [
         {"step": "Tissue segmentation", "ran": True, "reason": ""},
         {"step": "Anatomical preparation", "ran": True, "reason": ""},
         {"step": "MRSI preprocessing", "ran": True, "reason": ""},
+        {"step": "T1 saturation correction", "ran": t1corr_ran, "reason": "" if t1corr_ran else "--t1-correction none"},
         {"step": "MRSI-T1w-MNI registration", "ran": True, "reason": ""},
         {"step": "Tissue probability maps in MRSI space", "ran": parc_con, "reason": "" if parc_con else mode_reason},
         {"step": "Partial volume correction", "ran": pvc_ran, "reason": pvc_reason},
