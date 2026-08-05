@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.9.0
 
 - **Added optional protocol-level T1 saturation correction
   (`--t1-correction {none, literature}`, default `none`).** Corrects
@@ -16,6 +16,12 @@
   provenance block. See `--t1-correction-water-status` for handling
   already water-referenced inputs, and
   [T1 Saturation Correction](usage_t1_correction.md).
+
+- Anonymized the [Cross-Site/Cross-Sequence Regional Profile
+  Reproducibility](cross_sequence_benchmark.md) page: the two compared
+  datasets are now referred to as `Lausanne3T-FID`/`Lausanne3T-ECCENTRIC`
+  rather than by project name, with participant-ID-prefix and
+  clinical-group details removed.
 
 ## 1.8.0
 
