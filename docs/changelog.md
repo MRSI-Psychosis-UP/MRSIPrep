@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.9.1
+
+- Trimmed the [Registration Frameworks](benchmarks.md) benchmark's
+  interpretation into a concise Conclusions section.
+
 ## 1.9.0
 
 - **Added optional protocol-level T1 saturation correction
