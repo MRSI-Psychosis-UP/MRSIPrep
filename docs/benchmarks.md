@@ -165,27 +165,15 @@ new registration compute, not a reuse of an already-computed transform.
 ANTs' T1w→MNI stage (`antsRegistrationSyN[s]`) already runs the full
 three-stage Rigid → Affine → SyN pipeline by default, since subject
 anatomy genuinely differs from the MNI template in scale and shape, not
-just position — for that stage, `antsRegistration` always writes each
-linear stage's transform to its own independent file, so the
-already-computed Rigid+Affine transform is reused directly with the SyN
-warp simply dropped, no recompute needed there.
+just position.
 
 ### Method
 
 Full `mrsiprep --mode mni-norm` runs (not isolated registration calls) on
 the same 3 Tesla and 7 Tesla subjects used above, varying
 `--registration-backend`/`--fsl-deformable` and
-`--registration-t1-target` (6 combinations × 2 subjects = 12 runs). See
-`experiments/registration_backend_benchmark.py` (not published; internal
-validation script). **ANTs (Rigid+Affine)** is added on top of this: the
-MRSI→T1w stage is a genuine new `antsRegistration transform="a"` run (2
-subjects × 2 targets = 4 registrations, timed directly), while the
-T1w→MNI stage reuses the already-computed Rigid+Affine transform from
-the default **ANTs (Rigid+SyN)** run (SyN warp dropped, no recompute) —
-so this configuration is partly new compute, partly reused, unlike the
-VBA benchmark's equivalent comparison where both stages could be reused
-directly (see the note there on why the two benchmarks differ in this
-respect).
+`--registration-t1-target` (6 combinations × 2 subjects = 12 runs). 
+
 
 Leakage is reported as **signal-weighted mass outside the brain mask**:
 at each quality-passing voxel (resampled CRLB ≤ 20, mrsiprep's own default
@@ -226,10 +214,7 @@ scale, since 7T signal levels differ from 3T):
 
 ![CrPCr resampled to MNI space, overlaid on the full-head MNI152 template, 7 Tesla subject, 2 columns (brain / brain+CSF) x 4 rows (ANTs Rigid+SyN / ANTs Rigid+Affine / FLIRT / FLIRT+FNIRT)](figures/registration_backend_mni_overlay_7t.png)
 
-The full-head (non-skull-stripped) MNI152 template makes the skull
-boundary visible as a bright ring; voxels with values below 0.1 are
-rendered transparent so the underlying template stays visible through
-low-signal regions. Signal extending past the skull ring, or with a
+Signal extending past the skull ring, or with a
 jagged/scalloped rather than smooth outer edge, indicates voxels that have
 leaked beyond the true brain boundary during registration — visible here
 for both FSL variants and, most noticeably, for ANTs (Rigid+Affine) at
@@ -250,94 +235,12 @@ directly comparable total:
 
 ![Two-panel bar chart: (left) percentage of resampled CrPCr signal mass outside the MNI152 brain mask, by registration backend, faceted by 3 Tesla vs 7 Tesla; (right) total mni-norm runtime in minutes, by registration backend (ANTs Rigid+SyN, ANTs Rigid+Affine, FSL FLIRT, FSL FLIRT+FNIRT), for 3 Tesla vs 7 Tesla](figures/registration_backend_leakage_runtime.png)
 
-### Interpretation
+### Conclusions
+* **ANTs (Rigid+SyN), the mrsiprep default, produced the lowest signal-weighted leakage** at both 3T and 7T (0.34% and 0.44%), clearly outperforming FSL FLIRT-only (2.1% and 0.97%) and FLIRT+FNIRT (5.4% and 2.7%). This agrees with the visual overlays, where ANTs yielded the sharpest anatomical alignment.
 
-* **ANTs (Rigid+SyN), mrsiprep's default, has the least signal-weighted
-  leakage at both field strengths** (0.34% at 3T, 0.44% at 7T) — roughly
-  6-10× less than FSL FLIRT-only (2.1%, 0.97%) and 12-16× less than FSL
-  FLIRT+FNIRT (5.4%, 2.7%). Unlike the raw voxel-count metric, this
-  ranking agrees with the overlay figures' visual impression of ANTs
-  (Rigid+SyN) producing the sharpest, most anatomically detailed result.
-  In absolute terms all backends leak well under 6% of total signal
-  mass, so none is catastrophically wrong — but the relative gap between
-  backends is real and consistent across both subjects.
+* **ANTs (Rigid+Affine) performed unexpectedly poorly**, with 4.30% leakage at 3T and 4.73% at 7T. Its additional affine degrees of freedom may overfit the low-resolution MRSI reference when not followed by a deformable SyN stage. This non-default configuration therefore cannot currently be recommended.
 
-* **ANTs (Rigid+Affine) is, surprisingly, the second-leakiest of all
-  four configurations — worse than either FSL variant at 7T.** It leaks
-  4.30% of signal mass at 3T and 4.73% at 7T: roughly 12× more than the
-  default ANTs (Rigid+SyN) pipeline at 3T and roughly 11× more at 7T,
-  worse than FSL FLIRT-only at both field strengths (2.1%, 0.97%), and
-  at 7T even worse than FSL FLIRT+FNIRT (4.73% vs. 2.73%). This is a
-  genuinely unexpected result: adding a real affine correction on top of
-  rigid alignment at the MRSI→T1w stage did not reduce leakage relative
-  to rigid-only, it *increased* it. A plausible explanation is that the
-  affine stage's extra degrees of freedom (scale, shear) are being fit
-  to noise or local signal structure in the relatively low-resolution,
-  low-contrast MRSI reference image without a deformable stage
-  afterward to correct any resulting distortion — since ANTs' own
-  default pipeline never uses affine at this stage without immediately
-  following it with SyN, this backend combination is untested territory
-  for mrsiprep's own default configuration, and this result is a data
-  point against introducing it as an option without further
-  investigation, not a recommendation for it.
+* **Adding FNIRT to FLIRT increased both leakage and runtime.** At 7T, FNIRT required 53.0 minutes, compared with 11.2 minutes for FLIRT-only and 27.0 minutes for ANTs (Rigid+SyN). Overall, ANTs (Rigid+SyN) provides the best accuracy–runtime balance. For FSL users, FLIRT-only is preferable to FLIRT+FNIRT based on these results.
 
-* **This mirrors the direction (if not the exact numbers) of the VBA
-  Detection Benchmark's finding that ANTs' rigid+affine configuration
-  there performed at least as well as, and sometimes better than, the
-  full SyN pipeline for focal-signal detection** (see the [Voxel-Based
-  Detection Benchmark](vba_benchmark.md)) — but the two benchmarks are
-  not directly comparable: the VBA benchmark's "no SyN" comparison reused
-  mrsiprep's actual default transforms with SyN dropped (Rigid-only at
-  MRSI→T1w, since that is what mrsiprep's default pipeline already
-  computes there), while this benchmark's ANTs (Rigid+Affine) required a
-  genuinely different, non-default MRSI→T1w registration (a real Affine
-  stage that mrsiprep's own default pipeline never runs at that stage).
-  The two results are not in tension with each other; they are testing
-  different registration configurations under different tasks, and
-  should not be read as contradicting one another.
+* **The choice between brain-only and brain+CSF registration targets had only a minor and inconsistent effect** across field strengths, indicating that the registration backend is the dominant factor.
 
-* **FSL FLIRT+FNIRT leaks more signal mass than FLIRT-only, at both field
-  strengths** (5.4% vs. 2.1% at 3T; 2.7% vs. 0.97% at 7T) — i.e. adding
-  the deformable stage does not reduce real signal leakage relative to
-  the affine-only baseline in this metric, even though it did appear to
-  reduce the raw voxel-count leakage percentage at 7T under the earlier,
-  superseded mask-based metric. That earlier result was the mask-dilation
-  artifact described above; once leakage is weighted by actual signal
-  magnitude rather than counting dilated boundary voxels, FNIRT is
-  leakier than FLIRT-only, though less leaky than ANTs (Rigid+Affine) at
-  either field strength.
-
-* **Registration-only runtime for ANTs (Rigid+Affine) is well under a
-  minute at either field strength** (0.28 min at 3T, 0.73 min at 7T —
-  see the note above on why this isn't a like-for-like full-pipeline
-  comparison), far faster than any of the full `mni-norm` runs. But
-  given its leakage result above, this speed is not a useful tradeoff on
-  its own — a fast registration that leaks more signal than either FSL
-  variant is not obviously preferable to FSL FLIRT-only (3.1-11.2 min,
-  2.1%/0.97% leakage) purely on a speed/accuracy basis. **FNIRT's extra
-  runtime cost is not paying for reduced leakage either:** at 3T, FNIRT
-  (11.6 min) costs roughly 3.8× FLIRT-only (3.1 min) and is comparable
-  to ANTs (Rigid+SyN) (9.3 min); at 7T the gap widens sharply — FNIRT
-  (53.0 min) is roughly 4.7× FLIRT-only (11.2 min) and nearly 2× ANTs
-  (Rigid+SyN) itself (27.0 min), making it the slowest of the three
-  full-pipeline options despite also having higher leakage than either
-  ANTs (Rigid+SyN) or FSL FLIRT-only. There is no longer a clear case
-  for `--fsl-deformable` over FLIRT-only purely on these two metrics;
-  ANTs (Rigid+SyN) remains the best combination of accuracy and runtime
-  among the full-pipeline options, and `--no-fsl-deformable` is a
-  reasonable choice for FSL users who want to avoid FNIRT's runtime cost
-  without a leakage penalty.
-
-* **Brain vs. brain+CSF as the T1w registration target has a small effect
-  that flips direction between field strengths.** At 3T, brain+CSF is
-  very slightly better than brain-only for every backend (by ≤0.02
-  percentage points of signal mass). At 7T, brain+CSF is consistently
-  *worse* than brain-only for every backend (by 0.1–0.5 percentage
-  points) — the opposite of what higher spatial resolution alone would
-  predict (more voxels landing purely in CSF should, in principle, make a
-  CSF-inclusive target relatively more helpful, not less, at finer
-  resolution). The effect is small in both directions relative to the
-  gaps between backends, and its sign reverses between the two subjects
-  here, so it should not be read as a reliable advantage for either
-  target — the registration backend and deformable stage are the
-  dominant factors, not the brain-vs-brain+CSF choice.
