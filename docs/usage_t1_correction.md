@@ -39,14 +39,36 @@ docker run --rm \
 ## Requirements
 
 `--t1-correction literature` requires a `mrsinmrs.json` at the BIDS root
-with unambiguous `RepetitionTime`/`TR`, `FlipAngle`/`ExcitationFlipAngle`,
-and `MagneticFieldStrength`/`FieldStrength` entries (under `CommonMetadata`
-or a matching `Recordings` entry). Fails loudly, per-recording, if metadata
-is missing or if two recognized spellings of the same field disagree --
-other recordings in a batch still process normally. Since MRSinMRS defines
-no enforced schema, only a small whitelist of key spellings is recognized;
-values are also sanity-checked to be in a plausible range (e.g. TR must be
-in seconds, not milliseconds).
+with unambiguous TR, flip angle, and field-strength entries (under
+`CommonMetadata` or a matching `Recordings` entry). Fails loudly,
+per-recording, if metadata is missing or if two recognized spellings of
+the same field disagree -- other recordings in a batch still process
+normally. Since MRSinMRS defines no enforced schema, only a small
+whitelist of key spellings is recognized (below); values are also
+sanity-checked to be in a plausible range (e.g. TR must be in seconds,
+not milliseconds).
+
+### Recognized `mrsinmrs.json` keys
+
+Only these three keys are ever read by mrsiprep. Use the **canonical**
+spelling for any new `mrsinmrs.json` -- the alternates are accepted for
+compatibility with sidecars written elsewhere, but mixing spellings with
+different values for the same field is treated as an error, not resolved
+by preference order.
+
+| Field | Canonical key | Accepted alternates | Units | Required for |
+|---|---|---|---|---|
+| Repetition time | `RepetitionTime` | `TR` | seconds | `--t1-correction literature` |
+| Excitation flip angle | `FlipAngle` | `ExcitationFlipAngle` | degrees | `--t1-correction literature` |
+| Field strength | `MagneticFieldStrength` | `FieldStrength` | Tesla | `--t1-correction literature` |
+
+No other key is read programmatically by mrsiprep -- every other
+`mrsinmrs.json` field (echo time, coil, sequence name, matrix size, water
+suppression method, etc.) is accepted and stored for the QC report's
+free-form MRSinMRS section (\S below), but has no effect on processing.
+Field strength should be written as a bare number in Tesla (`7`, not
+`"7T"`); TR must be in seconds (`0.45`, not `450` -- a value outside
+0.05-20 is rejected as an implausible unit mismatch).
 
 ## Currently supported metabolites
 
