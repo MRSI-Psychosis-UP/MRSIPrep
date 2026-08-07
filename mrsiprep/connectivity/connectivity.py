@@ -196,13 +196,32 @@ def compute_metabolic_profiles(
     uncertainty propagation), yielding the augmented per-parcel feature
     matrix that both regional-profile consumers and
     ``compute_metabolite_connectivity`` build on.
+
+    A metabolite with no matching CRLB map is still included, with CRLB
+    treated as 0% (no injected noise) rather than excluded from the
+    profile entirely -- ``perturb_metabolite_map``'s ``sigma = signal *
+    crlb / 100`` is then exactly 0, so its "perturbed" draws are just the
+    raw signal value repeated, keeping the same output shape/consumers
+    (including ``--write-connectivity``) available regardless of CRLB
+    availability. If *no* requested metabolite has a real CRLB map, every
+    draw would otherwise be an identical repeat of the raw signal, so
+    ``n_perturbations`` is forced to 1 in that case to avoid wasted
+    computation -- the result is equivalent to a plain point estimate at
+    the native MRSI signal value.
     """
-    metabolites = [met for met in metabolite_maps if met in crlb_maps]
+    metabolites = list(metabolite_maps)
     if not metabolites:
-        raise ValueError("No metabolites with both signal and CRLB maps available for metabolic profile computation.")
+        raise ValueError("No metabolite maps available for metabolic profile computation.")
 
     signals = np.stack([load_3d_data(metabolite_maps[met], label=f"{met} map")[1] for met in metabolites])
-    crlbs = np.stack([load_3d_data(crlb_maps[met], label=f"{met} CRLB map")[1] for met in metabolites])
+    crlbs = np.stack(
+        [
+            load_3d_data(crlb_maps[met], label=f"{met} CRLB map")[1] if met in crlb_maps else np.zeros(signals.shape[1:], dtype=signals.dtype)
+            for met in metabolites
+        ]
+    )
+    if not any(met in crlb_maps for met in metabolites):
+        n_perturbations = 1
     brainmask = load_3d_data(brainmask_path, label="brainmask")[1]
     atlas = load_3d_data(atlas_path, label="MRSI atlas")[1].astype(int)
     parcel_ids_arr = np.asarray(parcel_ids, dtype=int)
