@@ -684,7 +684,15 @@ def _step_connectivity(config, subject, session, regional, parcels, corrected_ma
     """Regional metabolic profile estimation (CRLB-scaled Monte Carlo
     uncertainty propagation) always runs in parc-con mode; the metabolic
     connectivity matrix is the optional add-on gated on
-    ``--write-connectivity`` (see ``run_connectivity_workflow``)."""
+    ``--write-connectivity`` (see ``run_connectivity_workflow``).
+
+    Metabolites with no CRLB map (e.g. a dataset whose quantification
+    pipeline never exported per-metabolite CRLB) still get a profile --
+    ``compute_metabolic_profiles`` treats missing CRLB as 0% (no injected
+    noise), so their "perturbed" draws are just the raw signal value; see
+    that function's docstring for the ``n_perturbations`` degeneracy this
+    implies when no metabolite has real CRLB at all.
+    """
     if config.processing_mode != "parc-con":
         return {}, None
     with debug.step("Regional metabolic profiles" + (" and connectivity" if config.write_connectivity else ""), live=False):
