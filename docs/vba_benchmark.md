@@ -1,29 +1,29 @@
 # Voxel-Based Detection Benchmark
 
-This page validates whether MRSIPrep's pipeline — across four
-registration configurations (**ANTs (R+SyN)**, **ANTs (R+Aff)**, FSL
-FLIRT-only, FSL FLIRT+FNIRT — see the note on ANTs transform stages
-below) — can recover a known, deliberately-injected metabolic
+This page validates whether MRSIPrep's pipeline (across four
+registration configurations: **ANTs (R+SyN)**, **ANTs (R+Aff)**, FSL
+FLIRT-only, FSL FLIRT+FNIRT; see the note on ANTs transform stages
+below) can recover a known, deliberately-injected metabolic
 abnormality via a standard voxel-based-analysis (VBA) group comparison
 (`randomise -T`, FSL's TFCE-corrected permutation test).
 
 **A note on the ANTs transform stages, since the two ANTs
 configurations compared here are not simply "with SyN" vs. "rigid+affine,
 without SyN":** mrsiprep's default ANTs transform codes are
-`ants-mrsi-to-t1-transform=sr` (Rigid + SyN — no separate Affine stage)
+`ants-mrsi-to-t1-transform=sr` (Rigid + SyN, no separate Affine stage)
 for MRSI→T1w, and `ants-t1-to-mni-transform=s` (Rigid + Affine + SyN)
 for T1w→MNI. **ANTs (R+SyN)** is this default, full pipeline. **ANTs
 (R+Aff)** drops only the deformable SyN warp from each stage while keeping
-everything else identical — which means, precisely, **Rigid-only**
+everything else identical, which means, precisely, **Rigid-only**
 MRSI→T1w composed with **Rigid+Affine** T1w→MNI, not "rigid+affine" at
 both stages. `antsRegistration` always writes each stage's linear
 transform to its own independent `.mat` file regardless of whether a
 later SyN stage also ran, so this comparison reuses the exact same
-already-computed registrations with no recompute — see "Runs compared"
+already-computed registrations with no recompute. See "Runs compared"
 below.
 
 (The [Registration Frameworks benchmark](benchmarks.md) separately
-compares a genuine **ANTs Rigid+Affine** configuration — a real second
+compares a genuine **ANTs Rigid+Affine** configuration: a real second
 registration run with an actual Affine stage at MRSI→T1w, not a reuse
 of this page's Rigid-only transform. That page's ANTs (Rigid+Affine)
 and this page's ANTs (R+Aff) are different registration configurations
@@ -54,15 +54,15 @@ backend at the injected effect size and are out of scope here.
 An earlier version of this benchmark showed near-zero detection across
 every metabolite and backend. The root cause: MRSIPrep's biharmonic
 spike-repair filter (`--spikepc`, default 99th percentile) was removing
-the injected abnormality before it ever reached registration — a
+the injected abnormality before it ever reached registration: a
 spatially uniform region injection looks exactly like a spike artifact
 under a flat per-voxel threshold. This is now fixed with **cluster-size-
 aware spike filtering**: a connected cluster of spike-thresholded voxels
 is only median-repaired/biharmonic-inpainted when its size is at or below
 `--spike-max-cluster-voxels` (default: auto-derived from the MRSI
-acquisition's native voxel size — 6 voxels at ~5.0mm/3T-like resolution,
+acquisition's native voxel size: 6 voxels at ~5.0mm/3T-like resolution,
 9 voxels at ~3.4mm/7T-like resolution). Larger, spatially coherent
-clusters — like a genuine focal abnormality — are left unfiltered. The
+clusters (like a genuine focal abnormality) are left unfiltered. The
 default cutoffs were derived from the 90th-percentile connected-cluster
 size in a real spike-cluster-size survey across 1075 3T metabolite maps
 (BioPsych-Project + Mindfulness-Project) and 445 7T metabolite maps
@@ -71,7 +71,7 @@ size in a real spike-cluster-size survey across 1075 3T metabolite maps
 ### Runs compared
 
 Four registration configurations were run on the same 32 dummy subjects
-(one subject excluded for an independently-confirmed bad registration —
+(one subject excluded for an independently-confirmed bad registration,
 see below), at 2mm MNI resolution, then compared with `randomise -T`
 (500 permutations, two-sample unpaired design, contrast `group1 >
 group0`) restricted to each metabolite's population quality mask (CRLB
@@ -79,7 +79,7 @@ group0`) restricted to each metabolite's population quality mask (CRLB
 MRSI→T1w and T1w→MNI registrations already computed for the full
 **ANTs (R+SyN)** run, with only the deformable SyN warp dropped from the
 resampling transform chain at each stage (see the note above on what
-that leaves: Rigid-only MRSI→T1w, Rigid+Affine T1w→MNI) — no
+that leaves: Rigid-only MRSI→T1w, Rigid+Affine T1w→MNI), no
 registration recompute needed.
 
 | | |
@@ -95,18 +95,18 @@ registration recompute needed.
 
 The figures below outline each metabolite's injection region using a
 **real AAL atlas parcellation image** (not the population ground-truth
-mask used later in this report) — the same template subject and region
+mask used later in this report), the same template subject and region
 IDs actually used by the injection for one representative dummy subject,
 confirmed via `derivatives/mrsiprep/synthetic_orig_transform_provenance.tsv`:
 CrPCr uses AAL region IDs 67/68 (Precuneus L/R), GluGln uses AAL region
 IDs 77/78 (Thalamus L/R), from that template subject's own
 `space-mni_atlas-aal_dseg.nii.gz`.
 
-**CrPCr — bilateral Precuneus:**
+**CrPCr, bilateral Precuneus:**
 
 ![CrPCr injection region, bilateral Precuneus outlined on the MNI152 template from a real AAL atlas parcellation, axial and coronal slices](figures/vba_injection_region_crpcr.png)
 
-**GluGln — bilateral Thalamus:**
+**GluGln, bilateral Thalamus:**
 
 ![GluGln injection region, bilateral Thalamus outlined on the MNI152 template from a real AAL atlas parcellation, axial and coronal slices](figures/vba_injection_region_glugln.png)
 
@@ -119,7 +119,7 @@ show:
   mask.
 - **Outline (blue)**: the population ground-truth injection mask (the
   per-subject injection masks, averaged across all `group=1` subjects
-  and thresholded at &gt;0) — this is the one place in this report the
+  and thresholded at &gt;0), this is the one place in this report the
   ground-truth mask itself is used, for comparing detected voxels
   against the known injection footprint.
 
@@ -139,15 +139,15 @@ near-zero Dice on the GM-precise version of this same comparison below.
 ANTs (both with and without the SyN stage) detects a clean, tightly
 bilateral cluster inside the Thalamus. FSL FLIRT-only detects a real
 but visibly asymmetric cluster (stronger on one side). **FSL
-FLIRT+FNIRT detects nothing at `alpha=0.05`** — zero significant
-voxels at either slice — matching its near-chance ROC-AUC below.
+FLIRT+FNIRT detects nothing at `alpha=0.05`**: zero significant
+voxels at either slice, matching its near-chance ROC-AUC below.
 
 ## ROC / Precision-Recall curves
 
 A single `alpha=0.05` snapshot only shows one point on each backend's
 detection tradeoff curve. Sweeping the TFCE-corrected significance
 threshold (`corrp`) across its full range gives the complete ROC and
-precision-recall curves and their AUC — a threshold-independent measure
+precision-recall curves and their AUC, a threshold-independent measure
 of total discriminative power.
 
 ![ROC and precision-recall curves for CrPCr and GluGln, comparing ANTs, FSL FLIRT, and FSL FLIRT+FNIRT, with AUC in each legend](figures/vba_roc_pr_comparison.png)
@@ -161,7 +161,7 @@ of total discriminative power.
 
 **ANTs (R+Aff)** reuses the same MRSI→T1w/T1w→MNI
 registrations as the full ANTs run above, with the deformable SyN stage
-simply dropped from the resampling transform chain — see the
+simply dropped from the resampling transform chain. See the
 "GM-precise boundary tracking" section below for why this variant was
 added and how it's computed.
 
@@ -169,7 +169,7 @@ added and how it's computed.
 
 * **ANTs is the best-performing backend on both metabolites**, and
   **the R+Aff variant is consistently at least as good as the
-  full R+SyN pipeline** — on GluGln it has the highest ROC-AUC of any
+  full R+SyN pipeline**: on GluGln it has the highest ROC-AUC of any
   backend (0.95), and on CrPCr it leads on both ROC-AUC (0.81) and
   PR-AUC (0.45). The deformable SyN stage does not clearly improve
   detection power over the R+Aff configuration on either metabolite in
@@ -177,9 +177,9 @@ added and how it's computed.
 
 * **FSL FLIRT+FNIRT is competitive with the ANTs variants on CrPCr**
   (ROC-AUC 0.77, close to ANTs R+SyN's 0.76) **but collapses to
-  near-chance on GluGln** (ROC-AUC 0.48, PR-AUC 0.00 — no better than
+  near-chance on GluGln** (ROC-AUC 0.48, PR-AUC 0.00, no better than
   random). This is specific to the Thalamus, a small, deep,
-  centrally-located structure — consistent with the Registration
+  centrally-located structure, consistent with the Registration
   Frameworks benchmark's (see the [Benchmarks](benchmarks.md) page)
   finding that FNIRT's nonlinear warp has higher signal-weighted
   leakage than ANTs or FLIRT-only: a small deep structure is exactly
@@ -188,24 +188,24 @@ added and how it's computed.
 
 * **FSL FLIRT-only is consistently the weakest backend on both
   metabolites, but still clearly above chance** (ROC-AUC 0.73 and
-  0.76) — real detection power, just less than either ANTs variant.
+  0.76), real detection power, just less than either ANTs variant.
 
 * Taken together with the Registration Frameworks benchmark, ANTs is the
   best-supported default for analyses where recovering a real, focal
-  signal change matters — and since the R+Aff variant matches or
+  signal change matters, and since the R+Aff variant matches or
   exceeds full R+SyN's detection power here at a fraction of the
   registration cost (see the runtime comparison on the
   [Benchmarks](benchmarks.md) page), it is worth considering as the
   default over the full deformable pipeline for VBA workflows
   specifically. FSL FLIRT+FNIRT's extra registration cost does not
-  translate into better — and for deep structures, translates into
-  markedly worse — detection power than FLIRT-only.
+  translate into better (and for deep structures, translates into
+  markedly worse) detection power than FLIRT-only.
 
 ## GM-precise boundary tracking (CrPCr / Precuneus only)
 
 The CrPCr/Precuneus injection above used the raw AAL atlas parcel, which
 is only ~62% gray matter in native T1w space (35,227 mm³ total parcel vs.
-21,789 mm³ at CAT12 GM-probability &gt;0.5) — its coarse boundary sweeps
+21,789 mm³ at CAT12 GM-probability &gt;0.5), its coarse boundary sweeps
 into adjacent white matter rather than tightly tracing the folded
 cortical ribbon. Bulk-overlap metrics like Dice can't tell whether a
 detected cluster actually *tracks the true convoluted GM boundary*, or
@@ -218,7 +218,7 @@ boundary-distance metric to directly measure boundary-tracking accuracy.
 Instead of intersecting the AAL parcel with a separate gray-matter
 probability map, the injection's region *source* itself was switched to
 `mri_synthseg --parc`'s own DKT cortical labels
-(`ctx-lh-precuneus`/`ctx-rh-precuneus`) for the same template subject —
+(`ctx-lh-precuneus`/`ctx-rh-precuneus`) for the same template subject,
 these are inherently gray-matter-only, per-gyrus regions, so no separate
 masking step is needed. The combined bilateral region shrinks from
 35,227 mm³ (AAL) to 20,425 mm³ (SynthSeg) in native T1w space, and its
@@ -226,13 +226,13 @@ boundary is visibly more convoluted:
 
 ![CrPCr injection region: bilateral Precuneus, gray-matter-only, from a SynthSeg parcellation of the MNI152 template itself](figures/vba_injection_region_crpcr_gm.png)
 
-Only CrPCr's injection region changed — GluGln/Thalamus and the other
+Only CrPCr's injection region changed: GluGln/Thalamus and the other
 three metabolites keep their original AAL-based regions unchanged
 (Thalamus is already a compact subcortical nucleus, not a folded cortical
 structure, so the boundary-complexity question doesn't apply there). The
 signal was re-filtered (same cluster-size-aware spike filter) and
 re-resampled into MNI space through each backend's already-computed
-registration transforms — no registration rerun, since registration
+registration transforms, no registration rerun, since registration
 depends only on anatomy, not on the injected signal.
 
 ### Detection vs. the GM-precise ground truth
@@ -246,7 +246,7 @@ inter-subject registration variance smooths the union back out into a
 diffuse, AAL-shaped blob (confirmed directly: no voxel is inside the
 injected region for more than 50% of `group=1` subjects). Instead, the
 ground-truth outline below is `mri_synthseg --parc`'s own segmentation
-of the **MNI152 template itself** — the same fixed anatomical space
+of the **MNI152 template itself**, the same fixed anatomical space
 every backend's detected voxels are already shown in, so no
 inter-subject registration variance is introduced and the true
 gyrus-following boundary stays sharp:
@@ -261,7 +261,7 @@ gyrus-following boundary stays sharp:
 | FSL FLIRT+FNIRT | 0.017 | 0.009 | 0.721 | 0.815 | 0.268 |
 
 **ANTs (R+Aff) has the best Dice, sensitivity, and ROC-AUC
-of all four backends** on this harder, GM-precise target — the
+of all four backends** on this harder, GM-precise target: the
 deformable SyN stage actually *reduces* Dice here (0.341 vs. 0.432)
 relative to skipping it. This mirrors the pattern seen on the
 coarser AAL-parcel version of this benchmark above: SyN's nonlinear
@@ -269,10 +269,10 @@ warp does not clearly help focal-signal detection, and on this metric
 actively hurts it.
 
 Dice drops for every backend relative to the AAL-parcel version of this
-benchmark — expected, since a tight, convoluted GM boundary is a
+benchmark, expected, since a tight, convoluted GM boundary is a
 harder target to hit exactly than a bulk parcel. **FSL FLIRT+FNIRT's
-Dice collapses to 0.017** — visibly almost no detected voxels at
-`alpha=0.05` in the figure above — while its ROC-AUC (0.815) is close
+Dice collapses to 0.017** (visibly almost no detected voxels at
+`alpha=0.05` in the figure above), while its ROC-AUC (0.815) is close
 to ANTs SyN's and not far off ANTs (R+Aff)'s. This combination
 means FLIRT+FNIRT's `corrp` map does carry real discriminative signal,
 but it is spread too diffusely (or offset) to ever cross the
@@ -299,16 +299,16 @@ surface distance and Hausdorff distance (mm) between them:
 ### Interpretation
 
 * **ANTs (R+Aff) tracks the true gray-matter boundary most
-  closely of all four backends** (4.32mm mean surface distance —
+  closely of all four backends** (4.32mm mean surface distance,
   under two and a half voxels at this 2mm resolution), narrowly ahead
   of full ANTs SyN (5.47mm) and FSL FLIRT-only (6.46mm). Skipping the
-  deformable stage does not cost boundary precision here — if
+  deformable stage does not cost boundary precision here; if
   anything, it modestly improves it, consistent with SyN's effect on
   Dice above.
 
 * **FSL FLIRT+FNIRT's boundary is roughly 3-4x farther from the true
   GM boundary than either ANTs variant** (17.94mm mean, 45.52mm
-  Hausdorff, vs. ANTs (R+Aff)'s 4.32mm/22.36mm) — this is the
+  Hausdorff, vs. ANTs (R+Aff)'s 4.32mm/22.36mm), this is the
   clearest signal in this follow-up that FNIRT's nonlinear warp,
   whatever discriminative power it retains (reflected in its
   ROC-AUC), is not spatially anchoring that signal to the correct
@@ -323,10 +323,10 @@ surface distance and Hausdorff distance (mm) between them:
   variants ≥ FSL FLIRT-only ≫ FSL FLIRT+FNIRT), but the gap between
   FLIRT+FNIRT and the other backends widens substantially once the
   target requires tracking a genuinely convoluted boundary rather than
-  bulk overlap with a smooth parcel — a harder, more realistic test of
+  bulk overlap with a smooth parcel, a harder, more realistic test of
   cortical-abnormality detection. Across both the AAL-parcel and
   GM-precise versions of this benchmark, **ANTs' deformable SyN stage
   never clearly outperforms the no-SyN configuration for this kind of
-  focal, planted-signal VBA detection task** — its extra registration cost
+  focal, planted-signal VBA detection task**: its extra registration cost
   buys smoother anatomical correspondence in general, but not better
   recovery of a known focal abnormality.
