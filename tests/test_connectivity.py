@@ -6,6 +6,7 @@ import nibabel as nib
 import numpy as np
 
 from mrsiprep.connectivity.connectivity import (
+    compute_metabolic_profiles,
     compute_metabolite_connectivity,
     parcellate_means,
     parcellate_zscored,
@@ -177,6 +178,68 @@ class ComputeMetaboliteConnectivityTests(unittest.TestCase):
             self.assertEqual(result.method, "pearson")
             self.assertEqual(result.n_perturbations, 7)
             self.assertEqual(result.sigma_scale, 1.5)
+
+
+class ComputeMetabolicProfilesMissingCrlbTests(unittest.TestCase):
+    def _build_inputs(self, tmp_path: Path, metabolites: tuple[str, ...]):
+        rng = np.random.default_rng(11)
+        atlas = np.zeros((6, 6, 6), dtype=int)
+        atlas[:3] = 1
+        atlas[3:] = 2
+        atlas_path = _save_volume(tmp_path / "atlas.nii.gz", atlas)
+        brainmask_path = _save_volume(tmp_path / "brainmask.nii.gz", np.ones((6, 6, 6)))
+
+        metabolite_maps = {}
+        for met in metabolites:
+            signal = rng.uniform(5, 15, size=(6, 6, 6))
+            metabolite_maps[met] = _save_volume(tmp_path / f"{met}_signal.nii.gz", signal)
+
+        return metabolite_maps, brainmask_path, atlas_path
+
+    def test_no_crlb_at_all_forces_single_deterministic_perturbation(self):
+        with tempfile.TemporaryDirectory() as td:
+            tmp_path = Path(td)
+            metabolite_maps, brainmask_path, atlas_path = self._build_inputs(tmp_path, ("CrPCr", "GPCPCh"))
+
+            result = compute_metabolic_profiles(
+                metabolite_maps, {}, brainmask_path, atlas_path, [1, 2],
+                n_perturbations=50, seed=0,
+            )
+
+            # (n_parcels, n_metabolites * n_perturbations) with n_perturbations
+            # forced down to 1 despite the caller requesting 50, since every
+            # draw would otherwise be an identical repeat of the raw signal.
+            self.assertEqual(result.features.shape, (2, len(metabolite_maps) * 1))
+
+    def test_no_crlb_draw_equals_raw_parcel_mean(self):
+        with tempfile.TemporaryDirectory() as td:
+            tmp_path = Path(td)
+            metabolite_maps, brainmask_path, atlas_path = self._build_inputs(tmp_path, ("CrPCr",))
+
+            result = compute_metabolic_profiles(
+                metabolite_maps, {}, brainmask_path, atlas_path, [1, 2], n_perturbations=10, seed=0,
+            )
+            # With zero injected noise, the single perturbed draw's parcel
+            # z-score feature is deterministic -- running it twice with
+            # different seeds must give bit-identical output.
+            repeat = compute_metabolic_profiles(
+                metabolite_maps, {}, brainmask_path, atlas_path, [1, 2], n_perturbations=10, seed=99,
+            )
+            np.testing.assert_array_equal(result.features, repeat.features)
+
+    def test_partial_crlb_coverage_keeps_configured_perturbation_count(self):
+        with tempfile.TemporaryDirectory() as td:
+            tmp_path = Path(td)
+            metabolite_maps, brainmask_path, atlas_path = self._build_inputs(tmp_path, ("CrPCr", "GPCPCh"))
+            crlb_maps = {"CrPCr": _save_volume(tmp_path / "CrPCr_crlb.nii.gz", np.random.default_rng(2).uniform(1, 10, size=(6, 6, 6)))}
+
+            result = compute_metabolic_profiles(
+                metabolite_maps, crlb_maps, brainmask_path, atlas_path, [1, 2],
+                n_perturbations=6, seed=0,
+            )
+            # At least one metabolite has real CRLB, so the configured
+            # n_perturbations is respected rather than collapsed to 1.
+            self.assertEqual(result.features.shape, (2, len(metabolite_maps) * 6))
 
 
 class ExportConnectivityTests(unittest.TestCase):
