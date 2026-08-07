@@ -298,9 +298,11 @@ and `--output-mrsi-t1w`, and
                                                 rather than signal itself, one file per space/metabolite
                                                 (space-* entity in the filename): CRLB, SNR, FWHM/linewidth,
                                                 spike masks, QC masks, brain mask, GM/WM/CSF tissue probsegs,
-                                                T1-correction summary (opt-in, --t1-correction literature)
+                                                T1-correction summary (opt-in, --t1-correction literature),
+                                                per-metabolite signal leakage summary (desc-leakageqc)
 <out>/mrsiprep/sub-*/ses-*/transforms/         ANTs MRSI→T1w and T1w→MNI transforms
-<out>/mrsiprep/sub-*/ses-*/reports/coverage/   subject HTML report + parcelwise coverage/CRLB figures
+<out>/mrsiprep/sub-*/ses-*/reports/coverage/   subject HTML report + parcelwise coverage/CRLB figures +
+                                                per-metabolite signal leakage table
 <out>/mrsiprep/sub-*/ses-*/reports/qc-reports/ per-step QC HTML reports and figures
 <out>/mrsiprep/sub-*/ses-*/reports/            provenance JSON (config, software versions, pipeline_trace)
 <out>/mrsiprep/sub-*/ses-*/logs/                per-recording timestamped logbook
