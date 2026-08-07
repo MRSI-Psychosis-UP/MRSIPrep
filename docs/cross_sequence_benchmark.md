@@ -57,16 +57,37 @@ each of the 203 parcels of the `chimeraLFMIHIFIS` scale-3 parcellation:
    independent, scale-free test of whether the two acquisitions rank
    regions the same way, deliberately insensitive to any absolute scale
    difference between them.
+6. **Spatially-aware significance testing**: root regions are not
+   independent, exchangeable units — neighboring regions share spatial
+   autocorrelation (biology, PVC/registration smoothing, GM gradients),
+   which anti-conservatively inflates the significance of a plain
+   parametric Spearman test. Because this parcellation spans cortex,
+   subcortex, thalamus, cerebellum, and hippocampus rather than a single
+   continuous cortical sheet, a classical spherical spin test does not
+   apply; instead, p-values are computed against a null distribution of
+   variogram-matched spatial surrogate maps (Burt et al. 2020,
+   `brainsmash`), built from a Euclidean distance matrix between
+   root-region centroids (from the bundled `chimera-LFMIHIFIS-3` atlas).
+   For each metabolite, 5,000 surrogates are generated independently for
+   each side of the comparison (preserving that side's own spatial
+   autocorrelation while destroying its true correspondence with the
+   other side); the reported p-value is the more conservative of the two
+   resulting one-sided empirical tests.
 
 ### Results
 
 | Metabolite | Spearman ρ | p-value | n roots |
 |---|---:|---:|---:|
-| GPCPCh | 0.93 | 2.1×10⁻³⁵ | 82 |
-| CrPCr | 0.90 | 3.2×10⁻³¹ | 82 |
-| NAANAAG | 0.89 | 5.0×10⁻²⁹ | 82 |
-| Ins | 0.88 | 7.0×10⁻²⁸ | 82 |
-| GluGln | 0.85 | 9.4×10⁻²⁴ | 82 |
+| GPCPCh | 0.93 | <2×10⁻⁴ | 82 |
+| CrPCr | 0.90 | <2×10⁻⁴ | 82 |
+| NAANAAG | 0.89 | <2×10⁻⁴ | 82 |
+| Ins | 0.88 | <2×10⁻⁴ | 82 |
+| GluGln | 0.85 | <2×10⁻⁴ | 82 |
+
+p-values are empirical (5,000 surrogates per side); `<2×10⁻⁴` indicates
+no surrogate in either direction ever matched or exceeded the observed
+correlation, i.e. the true p-value is below the resolution of this many
+surrogates, not exactly this value.
 
 ## 7T: Vienna7T-FID vs. Geneva7T-ECCENTRIC
 
@@ -90,8 +111,10 @@ per-subject point estimate via the median across draws.
 
 ### Method
 
-Same GM-only filtering and sub-parcel-merging procedure as the 3T
-comparison above, applied to the 9 metabolites both datasets fit as
+Same GM-only filtering, sub-parcel-merging, and spatially-aware
+significance testing (variogram-matched surrogates against root-region
+centroid distances, 5,000 surrogates per side) as the 3T comparison
+above, applied to the 9 metabolites both datasets fit as
 individually-resolved channels (CrPCr, GPCPCh, Ins, NAA, NAAG, Glu, Gln,
 GABA, GSH — not combined into MRSIPrep's usual 5 aggregate channels,
 since Vienna7T-FID's quantification never produced e.g. a joint NAA+NAAG
@@ -105,16 +128,22 @@ of 265 parcels, merged into 119 GM root regions.
 
 | Metabolite | Spearman ρ | p-value | n roots |
 |---|---:|---:|---:|
-| Ins | 0.90 | 2.2×10⁻⁴⁴ | 119 |
-| Glu | 0.90 | 1.7×10⁻⁴⁴ | 119 |
-| CrPCr | 0.90 | 7.0×10⁻⁴³ | 119 |
-| GPCPCh | 0.90 | 6.0×10⁻⁴³ | 119 |
-| NAA | 0.88 | 1.9×10⁻⁴⁰ | 119 |
-| NAAG | 0.82 | 9.3×10⁻³¹ | 119 |
-| GABA | 0.81 | 6.8×10⁻²⁹ | 119 |
-| GSH | 0.72 | 4.0×10⁻²⁰ | 119 |
-| Gln | 0.68 | 1.6×10⁻¹⁷ | 119 |
+| Ins | 0.90 | <2×10⁻⁴ | 119 |
+| Glu | 0.90 | <2×10⁻⁴ | 119 |
+| CrPCr | 0.90 | <2×10⁻⁴ | 119 |
+| GPCPCh | 0.90 | <2×10⁻⁴ | 119 |
+| NAA | 0.88 | <2×10⁻⁴ | 119 |
+| NAAG | 0.82 | <2×10⁻⁴ | 119 |
+| GABA | 0.81 | <2×10⁻⁴ | 119 |
+| GSH | 0.72 | 6×10⁻⁴ | 119 |
+| Gln | 0.68 | 1×10⁻³ | 119 |
+
+p-values are empirical (5,000 surrogates per side, see the 3T Method
+above); `<2×10⁻⁴` indicates no surrogate in either direction ever
+matched or exceeded the observed correlation.
 
 Regional profiles reproduce strongly at both field strengths, across four
 independent sites/sequences in total, with every metabolite reaching a
-significant, positive Spearman correlation.
+significant, positive Spearman correlation under a spatially-aware null
+model that accounts for the non-independence of neighboring brain
+regions.
