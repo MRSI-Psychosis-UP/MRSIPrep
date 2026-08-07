@@ -47,6 +47,9 @@ class DerivativeNameTests(unittest.TestCase):
         self.assertTrue(str(mrsi_derivative(root, "S001", "V1", desc="t1corr", suffix_override="tsv")).endswith(
             "sub-S001/ses-V1/confounds/sub-S001_ses-V1_desc-t1corr.tsv"
         ))
+        self.assertTrue(str(mrsi_derivative(root, "S001", "V1", desc="leakageqc", suffix_override="tsv")).endswith(
+            "sub-S001/ses-V1/confounds/sub-S001_ses-V1_desc-leakageqc.tsv"
+        ))
         self.assertTrue(str(mrsi_derivative(root, "S001", "V1", space="MRSI", label="GM", suffix_override="probseg")).endswith(
             "sub-S001/ses-V1/confounds/sub-S001_ses-V1_space-mrsi_label-GM_probseg.nii.gz"
         ))

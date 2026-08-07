@@ -142,6 +142,16 @@ def step_resampling(config, subject, session, ctx):
     return ctx
 
 
+def step_leakage_qc(config, subject, session, ctx):
+    from mrsiprep.utils.debug import Debug
+    from mrsiprep.workflows.participant import _step_leakage_qc
+
+    debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""))
+    ctx = dict(ctx)
+    ctx["leakage_qc"] = _step_leakage_qc(config, subject, session, ctx["anat"], ctx["transformed"], debug)
+    return ctx
+
+
 def step_synthseg_parc_qc(config, subject, session, ctx):
     from mrsiprep.utils.debug import Debug
     from mrsiprep.workflows.participant import _step_synthseg_parcellation_qc
@@ -219,6 +229,7 @@ def step_reports(config, subject, session, ctx):
         "mrsi_reference": mrsi.reference,
         "qc_summary": mrsi.qc_summary,
         "parcel_qc": ctx["parcel_qc"],
+        "leakage_qc": ctx["leakage_qc"],
         "tissue_4d": ctx["tissue_4d"],
         "atlas_mrsi": parcels.atlas_mrsi,
         "preliminary_atlas_mrsi": ctx["preliminary_parcels"].atlas_mrsi,
@@ -267,6 +278,7 @@ STEP_SEQUENCE = [
     ("tissue_qc", step_tissue_qc),
     ("pvc", step_pvc),
     ("resampling", step_resampling),
+    ("leakage_qc", step_leakage_qc),
     ("synthseg_parc_qc", step_synthseg_parc_qc),
     ("parcellation", step_parcellation),
     ("regional", step_regional),
