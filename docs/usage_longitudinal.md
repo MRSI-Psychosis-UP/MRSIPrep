@@ -5,7 +5,7 @@ unbiased ANTs template across all of that subject's sessions and registers
 the template to MNI once, instead of registering each session directly to
 MNI independently. Every session's final MNI-space maps are then produced by
 composing (session→template) with (template→MNI), reducing registration
-noise/bias across timepoints — the same "custom template" concept used by
+noise/bias across timepoints, the same "custom template" concept used by
 fMRIPrep's longitudinal processing.
 
 ```bash
@@ -34,7 +34,7 @@ construction step.
    ready sessions, all of that subject's session T1w reference images
    (the same `registration_t1w` each session already registers MRSI onto)
    are fed to `antsMultivariateTemplateConstruction2.sh -d 3 -i 4 -g 0.2 -k 1
-   -r 1` — 4 iterations, rigid initial alignment — producing one unbiased
+   -r 1` (4 iterations, rigid initial alignment), producing one unbiased
    template image plus a (session→template) transform for every input
    session. This mirrors the longitudinal normalization already validated in
    the MRSI-Metabolic-Connectome research pipeline
@@ -46,7 +46,7 @@ construction step.
    composing that session's (session→template) transform with the single
    (template→MNI) transform, instead of registering the session directly to
    MNI. The composed forward-transform list is applied with the same
-   `antsApplyTransforms`/antspyx machinery used everywhere else in MRSIPrep —
+   `antsApplyTransforms`/antspyx machinery used everywhere else in MRSIPrep,
    no new transform file format.
 
 Single-session subjects are unaffected: `--longitudinal` is a no-op for any
@@ -57,7 +57,7 @@ per-session T1w→MNI registration as usual.
 
 The subject template is built **once per subject**, in a pre-pass before any
 of that subject's individual session recordings are dispatched to the Nipype
-engine — so every session's per-recording workflow can be seeded with its
+engine, so every session's per-recording workflow can be seeded with its
 subject's already-built template instead of re-deriving it. Building the
 template itself requires each session's tissue segmentation and anatomical
 preparation to have already run (to obtain each session's `registration_t1w`
@@ -77,7 +77,7 @@ starts.
 
 ## Derivatives
 
-Outputs are written per subject as well as per session — the template and
+Outputs are written per subject as well as per session: the template and
 its MNI registration live under a subject-level `ses-all` transform
 directory, while each session keeps only its (session→template) transform:
 
@@ -94,7 +94,7 @@ sub-<label>/ses-<session>/transforms/anat/
 
 Every other derivative (final MNI-space MRSI maps, QC reports, parcellation,
 regional extraction) is written in exactly the same location and naming
-convention as a non-longitudinal run — `--longitudinal` only changes how the
+convention as a non-longitudinal run. `--longitudinal` only changes how the
 T1w→MNI transform is produced, not where or how anything downstream is
 stored.
 

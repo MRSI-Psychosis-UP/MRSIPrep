@@ -40,7 +40,7 @@ the source publication.
 
 ## Test Dataset
 
-A small, public, synthetic MRSI dataset — **SynthMRSI-Project** — is
+A small, public, synthetic MRSI dataset (**SynthMRSI-Project**) is
 available for anyone to download and run through MRSIPrep themselves,
 without needing access to real MRSI acquisitions. It pairs real T1w
 anatomical images (subsetted from two CC0 OpenNeuro datasets) with
@@ -73,13 +73,13 @@ also the fixture for MRSIPrep's own automated end-to-end pipeline test.
 
 MRSIPrep runs in one of two modes, selected with `--mode`:
 
-- **`mni-norm`** (MNI normalization, default) — registers MRSI maps to a SynthSeg-extracted T1w image,
+- **`mni-norm`** (MNI normalization, default): registers MRSI maps to a SynthSeg-extracted T1w image,
   generates SynthSeg+FAST tissue probability maps, applies PETPVC
   partial-volume correction (`--no-pvc` to disable), resamples to the
   requested output spaces, and parcellates with SynthSeg cortical/subcortical
   labels. No Chimera, no `recon-all`. This is the fast default path for
   anatomical coverage and CRLB reporting.
-- **`parc-con`** (parcellation and connectivity) — adds a choice of Chimera
+- **`parc-con`** (parcellation and connectivity): adds a choice of Chimera
   multi-atlas or bundled MNI-atlas parcellation, plus optional
   perturbation-based connectivity matrices.
 

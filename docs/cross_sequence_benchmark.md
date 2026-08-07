@@ -1,18 +1,18 @@
 # Cross-Site/Cross-Sequence Regional Profile Reproducibility
 
 The benchmarks on the other two pages validate MRSIPrep's registration and
-detection performance on data it was built and tuned against — a real
+detection performance on data it was built and tuned against: a real
 3T/7T ECCENTRIC pair, and a synthetic ground-truth cohort. This page tests
 something harder: whether MRSIPrep-derived regional metabolite profiles
-reproduce on entirely independent real-world data — different subjects,
+reproduce on entirely independent real-world data: different subjects,
 different scanners, different sites, and different MRSI sequences,
 processed with the same pipeline and parcellation. Two independent
 comparisons are reported, one at 3T and one at 7T.
 
 Because absolute metabolite units are not expected to agree across
-different sequences and field strengths — scanner-, sequence-, and
+different sequences and field strengths (scanner-, sequence-, and
 reconstruction-dependent scaling and referencing choices affect the
-overall signal level independently of true tissue concentration — this is
+overall signal level independently of true tissue concentration), this is
 deliberately framed as a test of whether the **relative spatial pattern**
 of regional metabolite levels reproduces across acquisitions, not whether
 absolute values agree.
@@ -36,29 +36,29 @@ each of the 203 parcels of the `chimeraLFMIHIFIS` scale-3 parcellation:
 1. **Per-subject point estimate**: the median across the
    $K_{\mathrm{pert}}=50$ CRLB-perturbed draws in the archive's
    `metab_profiles_subj_list` array (shape `(subjects, parcels, nperm,
-   metabolites)`) — MRSIPrep's uncertainty-propagated regional profile
+   metabolites)`), MRSIPrep's uncertainty-propagated regional profile
    estimation, see the main docs' connectivity/profile documentation.
 2. **GM-only filtering**: excludes only `brain-stem-midbrain` (203 → 202
    parcels) as not cleanly gray matter. This parcellation scheme contains
-   no white matter parcels at all — cortex (`ctx-`), cerebellum (`cer-`),
+   no white matter parcels at all: cortex (`ctx-`), cerebellum (`cer-`),
    hippocampus (`hipp-`), subcortical nuclei (`subc-`), and thalamic
    nuclei (`thal-`) are all retained. A GM+WM follow-up is left for future
    work once a scheme with WM parcels is used.
 3. **Sub-parcel merging**: parcels sharing the same anatomical root differ
    only by the Lausanne scheme's finer sub-parcellation index (e.g.
    `ctx-lh-superiorfrontal_1` through `_8` are the same gyrus at finer
-   granularity, not eight distinct regions) — averaged into a single
+   granularity, not eight distinct regions), averaged into a single
    root-region value per subject. This collapses 202 GM parcels into **82
    root regions**.
 4. **Group profile**: for each metabolite and root region, the mean (and
    95% CI, across subjects) within each cohort.
 5. **Cross-cohort comparison**: Spearman correlation between the two
-   cohorts' 82-region mean profiles, per metabolite — a threshold-
+   cohorts' 82-region mean profiles, per metabolite, a threshold-
    independent, scale-free test of whether the two acquisitions rank
    regions the same way, deliberately insensitive to any absolute scale
    difference between them.
 6. **Spatially-aware significance testing**: root regions are not
-   independent, exchangeable units — neighboring regions share spatial
+   independent, exchangeable units: neighboring regions share spatial
    autocorrelation (biology, PVC/registration smoothing, GM gradients),
    which anti-conservatively inflates the significance of a plain
    parametric Spearman test. Because this parcellation spans cortex,
@@ -94,7 +94,7 @@ surrogates, not exactly this value.
 ### Dataset
 
 Two independently acquired 7T datasets, entirely disjoint from the 3T
-comparison above — different sites, scanners, and MRSI sequences.
+comparison above: different sites, scanners, and MRSI sequences.
 
 | | Vienna7T-FID | Geneva7T-ECCENTRIC |
 |---|---|---|
@@ -116,7 +116,7 @@ significance testing (variogram-matched surrogates against root-region
 centroid distances, 5,000 surrogates per side) as the 3T comparison
 above, applied to the 9 metabolites both datasets fit as
 individually-resolved channels (CrPCr, GPCPCh, Ins, NAA, NAAG, Glu, Gln,
-GABA, GSH — not combined into MRSIPrep's usual 5 aggregate channels,
+GABA, GSH, not combined into MRSIPrep's usual 5 aggregate channels,
 since Vienna7T-FID's quantification never produced e.g. a joint NAA+NAAG
 value). Brainstem sub-parcels (midbrain, pons, medulla, superior
 cerebellar peduncle) are excluded as not cleanly gray matter, leaving 261

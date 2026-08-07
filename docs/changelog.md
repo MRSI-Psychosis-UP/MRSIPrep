@@ -94,7 +94,7 @@
   the CrPCr detection figures (`vba_detection_crpcr_4backend.png`,
   `vba_detection_crpcr_gm.png`) and the CrPCr/GluGln ROC/PR comparison
   (`vba_roc_pr_comparison.png`) from source, since matplotlib bakes
-  labels into the rendered PNGs — a markdown-only text fix does not
+  labels into the rendered PNGs: a markdown-only text fix does not
   update already-generated figures. Two of the six affected figures'
   underlying `randomise` CrPCr results had been deleted by an earlier
   cleanup pass in this same benchmark's development; re-derived both
@@ -106,7 +106,7 @@
   Dice/ROC-AUC/boundary-distance table's re-derived numbers matched the
   previous release's exactly, so that table is unchanged. Also
   corrected a stale prose claim that FSL FLIRT+FNIRT's detected CrPCr
-  cluster was merely "visibly smaller" than the other three backends —
+  cluster was merely "visibly smaller" than the other three backends:
   the re-rendered figure shows it detects zero significant voxels at
   that slice.
 
@@ -117,14 +117,14 @@
   SyN)" reused mrsiprep's default MRSI→T1w transform with SyN dropped,
   which is **Rigid-only** at that stage (mrsiprep's default
   `antsRegistrationSyN[sr]` never computes a separate Affine stage there
-  to fall back to) — not a genuine Rigid+Affine configuration. This
+  to fall back to), not a genuine Rigid+Affine configuration. This
   release replaces it with **ANTs (Rigid+Affine)**: a real second
   `antsRegistration transform="a"` run at the MRSI→T1w stage (new
   registration compute, 2 subjects × 2 targets), composed with the
   already-correct Rigid+Affine T1w→MNI transform (reused, no recompute
   needed there). Finding, now based on a genuine Rigid+Affine
   configuration: ANTs (Rigid+Affine) is the **second-leakiest** of all
-  four configurations — 4.30% signal mass leakage at 3T and 4.73% at 7T,
+  four configurations: 4.30% signal mass leakage at 3T and 4.73% at 7T,
   roughly 11-12× worse than the default ANTs (Rigid+SyN) pipeline, worse
   than FSL FLIRT-only at both field strengths, and at 7T even worse than
   FSL FLIRT+FNIRT. Adding a real affine correction at this stage
@@ -140,7 +140,7 @@
 - Added **ANTs (no SyN)** as a fourth registration configuration to the
   Registration Frameworks benchmark (`docs/benchmarks.md`), reusing the
   already-computed ANTs (SyN) run's linear-stage transforms with the
-  deformable warp dropped — no registration recompute. Also corrected a
+  deformable warp dropped, no registration recompute. Also corrected a
   pre-existing error in that page's transform-stage table and prose:
   mrsiprep's default MRSI→T1w ANTs transform (`antsRegistrationSyN[sr]`)
   is **Rigid + SyN with no separate Affine stage**, not "rigid+affine+SyN"
@@ -148,11 +148,11 @@
   genuinely runs the full Rigid+Affine+SyN pipeline. The same correction
   was applied to `docs/vba_benchmark.md`, where the fourth backend added
   in an earlier release was likewise mislabeled "ANTs (rigid+affine
-  only)" — both pages now consistently use **ANTs (SyN)** / **ANTs (no
+  only)", both pages now consistently use **ANTs (SyN)** / **ANTs (no
   SyN)**, with an explicit note on what "no SyN" means at each stage.
   Finding: unlike the VBA benchmark (where dropping SyN never clearly
   hurt, and sometimes helped, focal-signal detection), **the deformable
-  SyN stage does real, measurable work for MNI-space leakage** — ANTs (no
+  SyN stage does real, measurable work for MNI-space leakage**: ANTs (no
   SyN) leaks roughly 10× more signal mass than full ANTs (SyN) at 3T
   (3.3% vs. 0.34%) and roughly 5× more at 7T (2.2% vs. 0.44%), even
   falling behind FSL FLIRT-only at 3T. ANTs (no SyN)'s registration-only
@@ -164,7 +164,7 @@
   (`docs/vba_benchmark.md`) with a third, independent CrPCr injection
   site: a bilateral deep white-matter sphere pair (~13mm radius,
   centrum semiovale, intersected with SynthSeg's own WM label so the
-  injection never spills into gray matter or CSF — no finer WM
+  injection never spills into gray matter or CSF; no finer WM
   sub-parcellation is available from this pipeline, so a size-matched
   sphere is the closest fair-volume analogue to the two cortical
   targets). All three regions (medial GM, peripheral GM, deep WM) are
@@ -172,7 +172,7 @@
   region. Finding: **deep WM has the highest ROC-AUC of all three
   regions for every backend** (0.84-0.97, vs. Precuneus's 0.77-0.86 and
   Postcentral's 0.52-0.60), but its Dice (0.05-0.06) is far below
-  Precuneus's (0.32-0.42) — strong group-level statistical separation
+  Precuneus's (0.32-0.42): strong group-level statistical separation
   without tight spatial precision, a materially different failure mode
   than Postcentral's near-total absence of signal. Also documents a
   pre-existing, unrelated ~700-voxel false-positive cluster (present
@@ -184,33 +184,33 @@
   unrestricted).
 - Added a **medial vs. peripheral cortex** follow-up to the Voxel-Based
   Detection Benchmark (`docs/vba_benchmark.md`), for CrPCr only. Injects
-  a second, independent GM-only cluster — bilateral **postcentral gyrus**
-  (primary somatosensory cortex, lateral convexity) — alongside the
+  a second, independent GM-only cluster, bilateral **postcentral gyrus**
+  (primary somatosensory cortex, lateral convexity), alongside the
   existing medial Precuneus injection, in the same CrPCr channel, using
   the same per-subject bump amplitude. Reports Dice/ROC-AUC/PR-AUC/
   boundary-distance separately per region across all four registration
   configurations. Finding: **no backend detects the peripheral cluster
-  at `alpha=0.05`** (Dice 0.000 everywhere, ROC-AUC 0.52-0.60 — barely
+  at `alpha=0.05`** (Dice 0.000 everywhere, ROC-AUC 0.52-0.60, barely
   above chance), while the medial Precuneus injection is detected
   normally by every backend (Dice 0.32-0.43). Group-level statistics on
   the merged signal show a comparable mean group difference at both
   sites, but more than 2x higher inter-subject variability at the
-  peripheral site (SD 138.3 vs. 62.5) — the direct, measurable signature
+  peripheral site (SD 138.3 vs. 62.5): the direct, measurable signature
   of registration/inter-subject-alignment accuracy being worse for a
   superficial gyrus than a deeper medial structure, independent of which
   of the four registration configurations is used.
 - Added a fourth registration configuration, **ANTs (rigid+affine
   only)**, throughout the Voxel-Based Detection Benchmark
-  (`docs/vba_benchmark.md`) — both the original AAL-parcel comparison
+  (`docs/vba_benchmark.md`): both the original AAL-parcel comparison
   (CrPCr/Precuneus, GluGln/Thalamus) and the GM-precise boundary-tracking
   follow-up. It reuses the same MRSI→T1w/T1w→MNI registrations already
-  computed for the full ANTs (rigid+affine+SyN) run — `antsRegistration`
+  computed for the full ANTs (rigid+affine+SyN) run: `antsRegistration`
   always writes the affine stage to its own independent transform file
   regardless of a later SyN stage, so the deformable warp can simply be
   dropped from the resampling chain with no registration recompute.
   Consistent finding across both metabolites and both ground-truth
   granularities: **ANTs affine-only matches or exceeds full ANTs SyN on
-  every metric** (ROC-AUC, PR-AUC, Dice, boundary distance) — the
+  every metric** (ROC-AUC, PR-AUC, Dice, boundary distance): the
   deformable stage does not clearly improve focal, planted-signal VBA
   detection, and on the GM-precise Precuneus target affine-only is the
   best-performing backend overall (Dice 0.432 vs. SyN's 0.341, mean
@@ -236,14 +236,14 @@
   the true GM boundary most closely (5.47mm mean surface distance),
   FSL FLIRT-only close behind (6.46mm); FSL FLIRT+FNIRT's Dice
   collapses (0.017) despite having the highest ROC-AUC of the three,
-  with boundary distance roughly 3x worse (17.94mm) — indicating its
+  with boundary distance roughly 3x worse (17.94mm), indicating its
   warp retains discriminative signal but doesn't spatially anchor it to
   the correct convoluted cortical shape.
 - Added **cluster-size-aware spike filtering**: `get_spike_mask()` now
   only median-repairs/biharmonic-inpaints a connected cluster of
   spike-thresholded voxels when its size is at or below
   `--spike-max-cluster-voxels` (new flag; default auto-derived from the
-  MRSI acquisition's native voxel size — 6 voxels at ~5.0mm/3T-like
+  MRSI acquisition's native voxel size: 6 voxels at ~5.0mm/3T-like
   resolution, 9 voxels at ~3.4mm/7T-like resolution). Previously every
   voxel above the `--spikepc` percentile threshold was filtered
   regardless of how large or spatially coherent its cluster was, which
@@ -273,7 +273,7 @@
   with Sphinx `autodoc`/`autosummary` over `mrsiprep.workflows.*`,
   `mrsiprep.registration.*`, `mrsiprep.interfaces.*`, `mrsiprep.mrsi.*`,
   `mrsiprep.tissue.*`, `mrsiprep.parcellation.*`/`mrsiprep.connectivity.*`,
-  and `mrsiprep.io.*` — for anyone calling mrsiprep's pipeline stages
+  and `mrsiprep.io.*`: for anyone calling mrsiprep's pipeline stages
   directly from Python (`import mrsiprep`) rather than through the CLI.
   Added short docstrings to previously-undocumented top-level entry
   points (`run_participant_workflow`, `run_mrsi_workflow`,
@@ -310,14 +310,14 @@
   independent of true registration accuracy. Weighting by actual signal
   magnitude removes this artifact; under the corrected metric, ANTs has
   the least leakage at both field strengths, followed by FSL FLIRT-only,
-  with FSL FLIRT+FNIRT leaking the most signal mass of the three — the
+  with FSL FLIRT+FNIRT leaking the most signal mass of the three, the
   opposite ranking of FNIRT vs. FLIRT-only that the mask-based metric had
   shown at 7T. See `docs/benchmarks.md`.
 - Corrected the Registration Frameworks benchmark's "outside brain mask"
   metric: it now resamples the native-resolution MRSI acquisition
   brainmask with nearest-neighbor interpolation and requires CRLB ≤ 20
   (mrsiprep's own `--crlb-max` default) rather than treating any nonzero
-  resampled signal as "covered" — the previous signal-based metric
+  resampled signal as "covered": the previous signal-based metric
   overstated leakage by counting linear/spline interpolation smear at the
   brain boundary as real coverage. Also added a wall-clock runtime
   comparison (ANTs vs. FSL FLIRT vs. FSL FLIRT+FNIRT, 3T vs. 7T) to the
@@ -335,7 +335,7 @@
   search) were found to reliably diverge on the small, low-contrast MRSI
   reference maps used here. `registration_t1_target=brain-csf` is now
   accepted under `--mode mni-norm` too (previously restricted to `brain`/
-  `raw` with no technical justification — SynthSeg parcellation always
+  `raw` with no technical justification: SynthSeg parcellation always
   parcellates the raw T1w directly, independent of the registration
   target). See `experiments/registration_backend_benchmark.py` for the
   validation comparing backends and targets on real 3T/7T subjects.
@@ -367,10 +367,10 @@
   verbosity level and the full traceback only at `--verbose 3`; the
   per-recording logbook (`sub-*/ses-*/logs/*_desc-mrsiprep_log.txt`) always
   gets the full exception text and traceback regardless of `--verbose`, so
-  nothing is lost — added `Debug.exception()` for this.
+  nothing is lost. Added `Debug.exception()` for this.
 - **Breaking:** `--metabolites` and `--ref-met` are now required, with no
   defaults. `--b0` (and the field-strength-dependent default metabolite
-  lists it selected between) has been removed entirely — there is no
+  lists it selected between) has been removed entirely: there is no
   implicit metabolite list; always pass `--metabolites` explicitly as a
   comma-separated string, e.g. `--metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins`
   (previously space-separated). `--ref-met` (e.g. `CrPCr`) must likewise
@@ -385,7 +385,7 @@
   analogue exists (e.g. "subject/session selection" →
   "Options for filtering BIDS queries"); groups with no fMRIPrep equivalent
   (quality thresholds, parcellation, connectivity, overwrite/recompute) keep
-  their existing names. Cosmetic/additive only — no existing flag was
+  their existing names. Cosmetic/additive only. No existing flag was
   renamed or removed.
 - Added `--longitudinal` subject-template normalization: for multi-session
   subjects, builds one unbiased ANTs template across sessions
@@ -405,7 +405,7 @@
   failing at the final "MeasureMinMaxMean: command not found").
 - Fixed broken ANTs CLI fallback: `antsRegistrationSyN.sh` calls `PrintHeader`
   internally for image header inspection, but the previous Docker pruning pass
-  only kept the four binaries mrsiprep directly invokes and missed it —
+  only kept the four binaries mrsiprep directly invokes and missed it,
   causing `PrintHeader: command not found` and registration failures during
   Chimera parcellation (confirmed by exhaustive grepping of all ANTs binary
   names against the script). Added `PrintHeader` to the kept set and updated

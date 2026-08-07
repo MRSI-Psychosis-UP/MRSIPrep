@@ -4,7 +4,7 @@ MRSIPrep runs as a Docker container; there is no supported host installation
 of the pipeline itself. Either invoke `docker run` directly, or install the
 [`mrsiprep-docker`](https://pypi.org/project/mrsiprep-docker/) wrapper from
 PyPI (`pip install mrsiprep-docker`), which builds the equivalent `docker
-run` command for you — see [Installation](installation.md) for both options.
+run` command for you. See [Installation](installation.md) for both options.
 The examples below use plain `docker run`; drop the bind-mount flags and
 image name for the equivalent `mrsiprep-docker` command.
 
@@ -30,8 +30,8 @@ T1w parcel covered by MRSI, parcelwise CRLB, and valid-voxel fractions.
 `mni-norm` does not run FAST, PETPVC, Chimera, or `recon-all`.
 
 SynthSeg-based brain extraction always retains the whole brain (GM, WM,
-ventricles, and inner/outer CSF, including extra-ventricular CSF label 24) —
-only SynthSeg background (label 0) is excluded from the brain mask, so FAST
+ventricles, and inner/outer CSF, including extra-ventricular CSF label 24).
+Only SynthSeg background (label 0) is excluded from the brain mask, so FAST
 sees the complete CSF compartment when estimating tissue probabilities.
 
 ## Try it now: demo on the public SynthMRSI-Project dataset
@@ -106,8 +106,8 @@ be reused), and the MRSI→T1/T1→MNI transform status.
 Every processing run is orchestrated by a per-recording
 [Nipype](https://nipype.readthedocs.io/) workflow
 (`mrsiprep/workflows/nipype_engine/`) rather than a hand-rolled script. This
-is transparent to normal use — the CLI, its arguments, and the console output
-are unchanged — but it has two practical consequences:
+is transparent to normal use (the CLI, its arguments, and the console output
+are unchanged) but it has two practical consequences:
 
 - **Rerunning a completed subject/session skips already-finished steps.**
   Each of the 13 pipeline steps (tissue segmentation, anatomical prep, MRSI
@@ -116,7 +116,7 @@ are unchanged — but it has two practical consequences:
   connectivity, metprofiles export, reports) is a cached Nipype node, keyed
   on the step name plus the full run configuration. If nothing about the
   configuration or the subject/session changed since a prior successful run,
-  the step is skipped rather than recomputed — a rerun of an already-fully
+  the step is skipped rather than recomputed: a rerun of an already-fully
   processed recording typically finishes in a few seconds instead of tens of
   minutes. Pass `--overwrite` (or one of the step-specific `--overwrite-*`
   flags) to force recomputation regardless of the cache.
@@ -129,7 +129,7 @@ The engine's own working files (node caches, intermediate SynthSeg/FAST
 outputs, scratch resampled maps used only to build QC figures) live under
 `--work-dir` (default `<output_dir>/work`), separate from the permanent
 derivatives in `<output_dir>/mrsiprep/`. It is safe to delete `--work-dir`
-between runs to reclaim space — the next run will simply recompute
+between runs to reclaim space: the next run will simply recompute
 everything from scratch (the permanent derivatives in `mrsiprep/` are
 unaffected either way, though already-cached recordings will then rerun
 since their node cache is gone).
@@ -153,21 +153,21 @@ docker run --rm \
 
 `--verbose` (`0`-`3`, default `1`):
 
-- `0` — only the start/finish line and elapsed time (hours-minutes, e.g.
+- `0`: only the start/finish line and elapsed time (hours-minutes, e.g.
   `0h06m`; seconds for sub-minute/cached runs) per subject/session.
-- `1` — also prints each processing step as it starts (tissue segmentation,
+- `1`: also prints each processing step as it starts (tissue segmentation,
   anatomical prep, MRSI preprocessing, registration, tissue maps, PVC,
   resampling, parcellation, regional extraction, connectivity, reports), with
   no per-step detail.
-- `2` — also prints step-level detail (info/success/warning/error messages),
+- `2`: also prints step-level detail (info/success/warning/error messages),
   including Chimera milestone markers (`processing supra-region: ...`,
-  `starting cortical parcellation fusion`) so a single-threaded Chimera run —
-  which can otherwise sit silently for 10-20+ minutes — shows visible
+  `starting cortical parcellation fusion`) so a single-threaded Chimera run
+  (which can otherwise sit silently for 10-20+ minutes) shows visible
   progress.
-- `3` — also lets ANTs, `recon-all`, and `mri_synthseg` print their own raw
+- `3`: also lets ANTs, `recon-all`, and `mri_synthseg` print their own raw
   subprocess output instead of being captured, and prints the full traceback
   for a failed recording (at `0`-`2`, a failure shows only a one-line
-  summary on console — the full traceback is always written to that
+  summary on console; the full traceback is always written to that
   recording's logbook regardless of `--verbose`, see below).
 
 Every console line is timestamped `dd/mm-HH:MM`, e.g. `07/07-14:35 [ PROC ]
@@ -183,14 +183,14 @@ A full-detail DEBUG log is always written to
 
 Each subject/session additionally gets, inside its own output folder:
 
-- `sub-*/ses-*/logs/sub-*_ses-*_desc-mrsiprep_log.txt` — every timestamped
+- `sub-*/ses-*/logs/sub-*_ses-*_desc-mrsiprep_log.txt`: every timestamped
   console message for that recording only, useful when re-reading a single
   subject's history out of a large batch run's combined log. If the
   recording fails, this logbook always contains the full exception text and
-  traceback (an `ERROR`/`TRACE` entry), regardless of `--verbose` — the
+  traceback (an `ERROR`/`TRACE` entry), regardless of `--verbose`; the
   console itself only shows the full traceback at `--verbose 3`, to keep
   batch-run output readable at lower verbosity levels.
-- `sub-*/ses-*/reports/sub-*_ses-*_desc-provenance.json` — the full run
+- `sub-*/ses-*/reports/sub-*_ses-*_desc-provenance.json`: the full run
   configuration, software versions, and a `pipeline_trace` array listing
   each of the 13 steps as `RAN` or `SKIPPED` with a one-line reason (e.g.
   `"mode=mni-norm, requires parc-con"`, `"--no-pvc"`, `"--write-connectivity
@@ -203,7 +203,7 @@ Each subject/session additionally gets, inside its own output folder:
 gets `--nthreads` ANTs/ITK threads. MRSIPrep coerces `--nthreads` down (never
 `--nproc`) if `nproc * nthreads` would exceed the host's CPU count, and shows
 the resulting thread budget (or the coercion warning) in the preflight
-summary before any recordings are processed — e.g. on a 32-core machine,
+summary before any recordings are processed, e.g. on a 32-core machine,
 `--nproc 4 --nthreads 10` (40 threads) is coerced down to `--nthreads 8` (32
 threads).
 
@@ -328,17 +328,17 @@ The import helpers preserve the MRSI-Metabolic-Connectome derivative layout:
 MRSIPrep is a BIDS App for whole-brain quantified MRSI derivatives, not a
 general-purpose neuroimaging pipeline. In particular:
 
-- It has no fieldmap/BOLD/functional-MRI handling — those are out of scope
+- It has no fieldmap/BOLD/functional-MRI handling: those are out of scope
   entirely, since the inputs are already-quantified MRSI metabolite maps
   rather than raw k-space or functional time series.
 - Registration can use ANTs (default, rigid+affine+SyN, generally most
   accurate) or FSL via `--registration-backend fsl` (FLIRT+FNIRT deformable
   by default; pass `--no-fsl-deformable` for FLIRT-only, faster but less
   accurate); there is no TemplateFlow catalog, and normalization targets are
-  limited to MNI152 (`MNI152NLin2009cAsym`) plus native T1w/MRSI space — see
+  limited to MNI152 (`MNI152NLin2009cAsym`) plus native T1w/MRSI space, see
   [MNI Normalization Usage](usage_normalization.md).
 - `--longitudinal` builds one ANTs subject-template across sessions
-  (requires `--registration-backend ants`) — see
+  (requires `--registration-backend ants`), see
   [Longitudinal (Subject-Template) Normalization](usage_longitudinal.md); it
   does not otherwise change per-session processing, and assumes reasonably
   stable anatomy across a subject's sessions.
@@ -355,7 +355,7 @@ general-purpose neuroimaging pipeline. In particular:
   `--verbose 3` (raw ANTs/`recon-all`/`mri_synthseg` subprocess output) to
   see exactly where a failure occurs.
 - `--validate-only` checks all selected subject/session inputs before any
-  expensive processing starts — run it first when troubleshooting a batch.
+  expensive processing starts, run it first when troubleshooting a batch.
 - `--check-external-libs` verifies required external binaries
   (ANTs/FSL/FreeSurfer/PETPVC/Chimera, as applicable to the selected mode)
   are present and exits.
