@@ -1,7 +1,7 @@
 # Parcellation and Connectivity Usage
 
-`parc-con` mode supports two parcellation backends — Chimera's multi-atlas fusion
-or a bundled MNI atlas — plus optional perturbation-based connectivity
+`parc-con` mode supports two parcellation backends: Chimera's multi-atlas fusion
+or a bundled MNI atlas, plus optional perturbation-based connectivity
 matrices computed from regional metabolite values.
 
 ## Chimera parcellation
@@ -23,7 +23,7 @@ docker run --rm \
   --chimera-scheme LFMIHIFIFF --chimera-scale 3
 ```
 
-Chimera parcellation requires `recon-all` and a valid `FS_LICENSE` — mount a
+Chimera parcellation requires `recon-all` and a valid `FS_LICENSE`. Mount a
 FreeSurfer license file as shown above. `parc-con` mode also writes a
 legacy-compatible parcel profile archive under
 `<out>/mrsiprep/sub-*/ses-*/mrsi/parcel/*_desc-{GM,}metprofiles_mrsi.npz`

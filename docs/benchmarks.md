@@ -53,14 +53,14 @@ designed for fast, high-resolution whole-brain MRSI.
 
 ### Water reference
 
-Matched spatial coverage, lower resolution — used for coil combination,
+Matched spatial coverage, lower resolution: used for coil combination,
 field correction, and metabolite intensity normalization.
 
 | Parameter | 3 Tesla | 7 Tesla |
 |---|---|---|
 | Field of view | 220 × 220 × 130 mm³ | 220 × 220 × 110 mm³ |
 | Nominal voxel size / resolution | 10.0 × 10.0 × 10.0 mm³ | 10 × 10 × 10 mm³ |
-| Scan resolution | 22 × 22 × 13 | — |
+| Scan resolution | 22 × 22 × 13 | N/A |
 | TR | 460 ms | 404 ms |
 | TE₁ / TE₂ | 0.72 ms / 65 ms | 0.59 ms |
 | Flip angle | 45° | 35° |
@@ -76,7 +76,7 @@ with **LCModel**.
 ## MRSIPrep Benchmark Method
 
 Two single-subject `mrsiprep` runs, one per dataset, repeated at
-`--nthreads` 8, 12, 16, and 32 (`--nproc 1` throughout — one subject per
+`--nthreads` 8, 12, 16, and 32 (`--nproc 1` throughout, one subject per
 run, so `--nthreads` is the only varying parameter). Each run used a
 **fresh `--work-dir`** (no Nipype caching carried over between
 thread-count variants), so every number below reflects genuine
@@ -85,8 +85,8 @@ subjects × 4 thread counts) were executed **strictly sequentially, one at
 a time**, with no other run or concurrent load on the machine, to rule
 out cross-run resource contention affecting the timings.
 
-- **3 Tesla subject** — a real MRSI acquisition with an MP2RAGE anatomical.
-- **7 Tesla subject** — a real MRSI acquisition with an MP2RAGE
+- **3 Tesla subject**: a real MRSI acquisition with an MP2RAGE anatomical.
+- **7 Tesla subject**: a real MRSI acquisition with an MP2RAGE
   anatomical.
 
 Both runs: `--mode mni-norm --metabolites NAANAAG,GPCPCh,CrPCr,GluGln,Ins
@@ -96,16 +96,16 @@ registration backend.
 ### Resolution and useful-voxel counts
 
 The two subjects differ substantially in both anatomical (T1w) and MRSI
-grid resolution — this is the main driver of the runtime difference below,
+grid resolution: this is the main driver of the runtime difference below,
 since ANTs registration and SynthSeg both operate on the full-resolution
 T1w volume, not the coarser MRSI grid.
 
 | | 3 Tesla | 7 Tesla | Ratio (7T / 3T) |
 |---|---:|---:|---:|
-| T1w voxel size (mm) | 1.00 × 1.33 × 1.33 | 0.66 × 0.60 × 0.60 | — |
-| T1w volume shape | 160 × 192 × 192 | 256 × 396 × 416 | — |
+| T1w voxel size (mm) | 1.00 × 1.33 × 1.33 | 0.66 × 0.60 × 0.60 | N/A |
+| T1w volume shape | 160 × 192 × 192 | 256 × 396 × 416 | N/A |
 | T1w total voxels | ~5.9 M | ~42.2 M | **~7.2×** |
-| MRSI voxel size (mm) | 5.00 × 5.00 × 5.25 | 3.44 × 3.44 × 3.55 | — |
+| MRSI voxel size (mm) | 5.00 × 5.00 × 5.25 | 3.44 × 3.44 × 3.55 | N/A |
 | MRSI useful (non-zero, in-brain) voxels | 15,315 | 32,638 | **~2.1×** |
 
 ## Results
@@ -121,17 +121,17 @@ which aren't wrapped in a named, timed pipeline step.
 
 * **Runtime is essentially flat from 8 to 32 threads** for both subjects when each run is isolated from other load: 3T ranges 300–318s (~6% spread) and 7T ranges 1227–1235s (under 1% spread), with no consistent downward trend past 8 threads. ANTs registration (the largest single segment at both field strengths) and SynthSeg tissue segmentation show effectively no benefit from more than ~8 threads, so for batch processing it is generally better to use ~8 threads per subject and increase `--nproc` (running more subjects in parallel) rather than allocate more threads to each individual subject.
 
-* **The 7T subject takes about 4× longer than the 3T subject** (~20.5 vs. ~5.1 minutes). This is mainly due to the 7T T1w image having ~7.2× more voxels, which increases registration and segmentation costs. The MRSI grid has only ~2.1× more usable voxels, making anatomical — not MRSI — resolution the main runtime driver. Tissue segmentation (`mri_synthseg`) and MRSI-T1w-MNI registration (ANTs rigid+affine+SyN) together account for the large majority of total runtime at both field strengths.
+* **The 7T subject takes about 4× longer than the 3T subject** (~20.5 vs. ~5.1 minutes). This is mainly due to the 7T T1w image having ~7.2× more voxels, which increases registration and segmentation costs. The MRSI grid has only ~2.1× more usable voxels, making anatomical, not MRSI, resolution the main runtime driver. Tissue segmentation (`mri_synthseg`) and MRSI-T1w-MNI registration (ANTs rigid+affine+SyN) together account for the large majority of total runtime at both field strengths.
 
 ## Registration Frameworks
 
 `--registration-backend` offers **ANTs** (default: rigid+SyN for
-MRSI→T1w, rigid+affine+SyN for T1w→MNI — see the transform-stage table
+MRSI→T1w, rigid+affine+SyN for T1w→MNI; see the transform-stage table
 below, since the two ANTs stages are not symmetric) and **FSL** (FLIRT
-affine, with an FNIRT deformable stage on by default —
+affine, with an FNIRT deformable stage on by default,
 `--no-fsl-deformable` for FLIRT-only). This section compares four
-MRSI→T1w registration configurations — **ANTs (Rigid+SyN)**, **ANTs
-(Rigid+Affine)**, **FSL FLIRT-only**, and **FSL FLIRT+FNIRT** — each
+MRSI→T1w registration configurations: **ANTs (Rigid+SyN)**, **ANTs
+(Rigid+Affine)**, **FSL FLIRT-only**, and **FSL FLIRT+FNIRT**, each
 against both supported T1w registration targets, **brain**
 (skull-stripped) and **brain+CSF** (skull-stripped T1w with the CSF
 compartment re-added, since CSF also produces real MRSI signal that a
@@ -141,10 +141,10 @@ brain-only target would otherwise clip at the boundary).
 
 | Backend | MRSI → T1w | T1w → MNI |
 |---|---|---|
-| ANTs (Rigid+SyN) — mrsiprep's default | Rigid + SyN (deformable) — **no separate Affine stage**, `antsRegistrationSyN[sr]` | Rigid + Affine + SyN (deformable), `antsRegistrationSyN[s]` |
-| ANTs (Rigid+Affine) | Rigid + Affine — a genuine second registration run (`antsRegistration`, `transform="a"`), since mrsiprep's default MRSI→T1w stage never computes an Affine stage to reuse | Rigid + Affine (the SyN warp dropped from the default `[s]` run above — this stage already has a real Affine, so no extra registration needed here) |
+| ANTs (Rigid+SyN), mrsiprep's default | Rigid + SyN (deformable), **no separate Affine stage**, `antsRegistrationSyN[sr]` | Rigid + Affine + SyN (deformable), `antsRegistrationSyN[s]` |
+| ANTs (Rigid+Affine) | Rigid + Affine, a genuine second registration run (`antsRegistration`, `transform="a"`), since mrsiprep's default MRSI→T1w stage never computes an Affine stage to reuse | Rigid + Affine (the SyN warp dropped from the default `[s]` run above; this stage already has a real Affine, so no extra registration needed here) |
 | FSL FLIRT-only | Affine only (FLIRT, 12 DOF, `corratio` cost) | Affine only (FLIRT, 12 DOF) |
-| FSL FLIRT+FNIRT | Affine (FLIRT) + deformable warp (FNIRT, `--fsl-deformable`) | Affine only (FLIRT, 12 DOF) — FNIRT is not used for this stage |
+| FSL FLIRT+FNIRT | Affine (FLIRT) + deformable warp (FNIRT, `--fsl-deformable`) | Affine only (FLIRT, 12 DOF), FNIRT is not used for this stage |
 
 Note that `--fsl-deformable` only adds a deformable (FNIRT) stage to the
 **MRSI→T1w** registration; the **T1w→MNI** stage is always FLIRT affine-only
@@ -154,13 +154,13 @@ compared here.
 **The two ANTs stages are asymmetric, which is why "ANTs (Rigid+Affine)"
 needed a real second registration run, not just a transform dropped from
 the default pipeline.** ANTs' default MRSI→T1w stage
-(`antsRegistrationSyN[sr]`) runs a Rigid stage followed directly by SyN —
+(`antsRegistrationSyN[sr]`) runs a Rigid stage followed directly by SyN:
 `antsRegistrationSyN.sh`'s own `sr` code has no separate Affine stage at
 all (MRSI and T1w start from roughly the same subject geometry, so
 mrsiprep's default skips the extra affine correction there). Dropping
 SyN from that default leaves Rigid-only, not Rigid+Affine. **ANTs
 (Rigid+Affine)** in this comparison therefore required actually running
-`antsRegistration` with `transform="a"` at the MRSI→T1w stage — genuine
+`antsRegistration` with `transform="a"` at the MRSI→T1w stage, genuine
 new registration compute, not a reuse of an already-computed transform.
 ANTs' T1w→MNI stage (`antsRegistrationSyN[s]`) already runs the full
 three-stage Rigid → Affine → SyN pipeline by default, since subject
@@ -180,7 +180,7 @@ at each quality-passing voxel (resampled CRLB ≤ 20, mrsiprep's own default
 `--crlb-max`) the resampled CrPCr signal magnitude is summed; the
 percentage reported is the fraction of that total signal mass that falls
 outside the reference brain mask. This is deliberately **not** a raw
-voxel count of "covered" voxels outside the mask — a boundary voxel
+voxel count of "covered" voxels outside the mask: a boundary voxel
 carrying negligible signal and a voxel carrying real, substantial signal
 in the wrong location both count as "1 voxel" under a voxel-count metric,
 which conflates thin resampling/registration boundary artifacts with
@@ -199,7 +199,7 @@ problems at once.)
 
 This is computed against three reference masks: the T1w brain-only mask,
 the T1w brain+CSF mask, and the MNI152 template's own standard brain mask
-(in MNI space) — summing how much "covered" signal mass falls **outside**
+(in MNI space), summing how much "covered" signal mass falls **outside**
 each reference mask.
 
 This same signal-weighted metric is computed automatically for every
@@ -224,7 +224,7 @@ scale, since 7T signal levels differ from 3T):
 
 Signal extending past the skull ring, or with a
 jagged/scalloped rather than smooth outer edge, indicates voxels that have
-leaked beyond the true brain boundary during registration — visible here
+leaked beyond the true brain boundary during registration, visible here
 for both FSL variants and, most noticeably, for ANTs (Rigid+Affine) at
 both field strengths, which shows the coarsest, most scalloped outer edge
 of any of the four configurations.
@@ -232,7 +232,7 @@ of any of the four configurations.
 **Signal-weighted MNI-space leakage and total `mni-norm` wall-clock
 runtime, by backend** (brain target; brain+CSF leakage is within ±0.3
 points of these and shows the same pattern, not shown). Runtime is
-averaged across the `brain`/`brain+CSF` targets — **ANTs (Rigid+Affine)**
+averaged across the `brain`/`brain+CSF` targets; **ANTs (Rigid+Affine)**
 is not a full `mni-norm` run (see Method above), so it isn't a
 like-for-like total-pipeline number; instead its bar reports the
 **registration-only** wall-clock time (both stages combined, timed

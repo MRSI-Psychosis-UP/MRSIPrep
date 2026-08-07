@@ -23,7 +23,7 @@ docker run --rm \
 space(s) the final MRSI maps are resampled into as permanent derivatives:
 `MRSI`, `MNI152NLin2009cAsym` (aliases `mrsi`, `mni` accepted). `--mni-resolution`
 selects the MNI template resolution used for both T1w→MNI registration and
-final resampling: `origres` (MRSI native resolution, **default** — avoids
+final resampling: `origres` (MRSI native resolution, **default**, avoids
 implying spatial precision the MRSI acquisition never had, and matches the
 resolution mrsiprep's own spatial-smoothness benchmark evaluates at),
 `t1wres` (T1w resolution), or an explicit `<N>mm`. In `--longitudinal`
@@ -35,7 +35,7 @@ unaffected.
 
 T1w-space resampling of every metabolite (+ CRLB/SNR/FWHM/spikemask) is
 **opt-in** via `--output-mrsi-t1w`, since nothing downstream (regional
-extraction, connectivity, metprofiles) consumes it — only the
+extraction, connectivity, metprofiles) consumes it; only the
 registration-overview QC report needs one reference-metabolite map in T1w
 space, and it generates that itself into `--work-dir` regardless of this
 flag, so the QC figure is always available even without `--output-mrsi-t1w`:
@@ -85,7 +85,7 @@ docker run --rm \
   --nthreads 16
 ```
 
-`existing` reuses a precomputed transform instead of registering — useful
+`existing` reuses a precomputed transform instead of registering, useful
 when a T1w→MNI transform was already produced by a prior run or an external
 pipeline.
 
