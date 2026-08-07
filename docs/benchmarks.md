@@ -202,6 +202,14 @@ the T1w brain+CSF mask, and the MNI152 template's own standard brain mask
 (in MNI space) — summing how much "covered" signal mass falls **outside**
 each reference mask.
 
+This same signal-weighted metric is computed automatically for every
+recording, not just this benchmark: against the MNI152 standard brain
+mask for the default MNI-space output, and against the T1w reference
+brain mask when T1w-space output is also requested
+(`--output-mrsi-t1w`). See the per-metabolite leakage table in the
+standard `reports/coverage/*_desc-report.html` output, backed by
+`confounds/*_desc-leakageqc.tsv`.
+
 ### Results
 
 **3 Tesla subject**, all four backends × both targets, axial slice, same

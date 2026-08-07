@@ -43,6 +43,17 @@ def generate_subject_report(config, subject: str, session: str | None, outputs: 
             f"<p>Mean anatomical MRSI coverage: <strong>{overview['anatomical_coverage_percent'].mean():.1f}%</strong>; "
             f"mean parcel CRLB: <strong>{parcel_df['mean_crlb'].mean():.2f}</strong>.</p>"
         )
+    leakage_html = ""
+    leakage_qc = outputs.get("leakage_qc")
+    if leakage_qc and Path(leakage_qc).exists():
+        leakage_df = pd.read_csv(leakage_qc, sep="\t")
+        leakage_html = (
+            "<p>Signal-weighted leakage: at each CRLB-passing voxel of a resampled metabolite map "
+            "(T1w and/or MNI152, whichever this run produced), the fraction of total signal "
+            "magnitude that falls outside the reference brain mask (same metric used to compare "
+            "registration backends; see <code>docs/benchmarks.md</code>).</p>"
+            + leakage_df.to_html(index=False, border=0, float_format=lambda value: f"{value:.3f}")
+        )
     lines = [
         "<!doctype html>",
         "<html><head><meta charset='utf-8'><title>MRSIPrep report</title>",
@@ -62,6 +73,8 @@ def generate_subject_report(config, subject: str, session: str | None, outputs: 
         parcel_qc_summary,
         _parcel_figures_html(out.parent),
         parcel_qc_html or "<p>No parcelwise QC table available.</p>",
+        "<h2>Signal Leakage</h2>",
+        leakage_html or "<p>No leakage QC table available (requires MNI-space output or T1w-space output with a T1w reference brain mask; not computed for <code>--registration-t1-target raw</code> with no MNI output).</p>",
         "<h2>Regional Metabolites</h2>",
         regional_html or "<p>No regional table available.</p>",
         "<h2>Outputs</h2>",

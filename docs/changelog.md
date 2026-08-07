@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+- **Added a per-metabolite signal leakage metric to the standard
+  coverage report.** Reuses the signal-weighted leakage metric from the
+  [Registration Frameworks](benchmarks.md) benchmark (fraction of
+  CRLB-passing signal mass falling outside the reference brain mask) and
+  now computes it automatically for every recording, not just that
+  benchmark: against the MNI152 standard brain mask for the default
+  MNI-space output, and against the T1w reference brain mask when
+  T1w-space output is also requested (`--output-mrsi-t1w`). New outputs:
+  `confounds/*_desc-leakageqc.tsv` and a "Signal Leakage" table in
+  `reports/coverage/*_desc-report.html`. Skipped (no new files) when
+  neither space is available, e.g. `--registration-t1-target raw` with
+  no MNI output.
+
 ## 1.9.1
 
 - Trimmed the [Registration Frameworks](benchmarks.md) benchmark's

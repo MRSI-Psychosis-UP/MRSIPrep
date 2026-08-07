@@ -22,6 +22,7 @@ from mrsiprep.parcellation.metprofiles import export_metprofile_npz
 from mrsiprep.parcellation.synthseg import run_synthseg_parcellation
 from mrsiprep.reports.parcel_qc import write_parcel_qc
 from mrsiprep.reports.parcel_figures import write_parcel_qc_figures
+from mrsiprep.reports.leakage_qc import write_signal_leakage_qc
 from mrsiprep.reports.qc_combine import combine_qc_reports
 from mrsiprep.reports.connectivity_overview import write_connectivity_qc_report
 from mrsiprep.reports.mrsi_preproc import write_mrsi_preproc_qc_report
@@ -601,6 +602,17 @@ def _step_resampling(config, subject, session, anat, mrsi, registration, correct
             mrsi_to_t1_transforms=registration.mrsi_to_t1.forward,
         )
     return transformed, qc_report_registration
+
+
+def _step_leakage_qc(config, subject, session, anat, transformed, debug):
+    """Per-metabolite signal-weighted leakage outside the reference brain
+    mask, in whichever resampled space(s) were produced -- the same
+    metric used to compare registration backends (docs/benchmarks.md).
+    Returns None if no resampled space has a reference brain mask
+    available (e.g. neither MNI output nor T1w output with a T1w
+    reference brain mask, as with ``--registration-t1-target raw``)."""
+    with debug.step("Signal leakage QC"):
+        return write_signal_leakage_qc(config, subject, session, transformed, anat.registration_mask)
 
 
 def _step_synthseg_parcellation_qc(config, subject, session, raw_t1, mrsi, registration, debug):
