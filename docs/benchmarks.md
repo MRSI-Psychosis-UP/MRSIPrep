@@ -172,7 +172,8 @@ just position.
 Full `mrsiprep --mode mni-norm` runs (not isolated registration calls) on
 the same 3 Tesla and 7 Tesla subjects used above, varying
 `--registration-backend`/`--fsl-deformable` and
-`--registration-t1-target` (6 combinations × 2 subjects = 12 runs). 
+`--registration-t1-target` (4 configurations × 2 targets × 2 subjects =
+16 runs).
 
 
 Leakage is reported as **signal-weighted mass outside the brain mask**:
@@ -232,14 +233,12 @@ of any of the four configurations.
 **Signal-weighted MNI-space leakage and total `mni-norm` wall-clock
 runtime, by backend** (brain target; brain+CSF leakage is within ±0.3
 points of these and shows the same pattern, not shown). Runtime is
-averaged across the `brain`/`brain+CSF` targets; **ANTs (Rigid+Affine)**
-is not a full `mni-norm` run (see Method above), so it isn't a
-like-for-like total-pipeline number; instead its bar reports the
-**registration-only** wall-clock time (both stages combined, timed
-directly via `mrsiprep.interfaces.ants.register()`, `nthreads=16`
-matching the other runs' default, hatched in the figure), which should be
-read as a lower bound on how much a full `mni-norm` run would take, not a
-directly comparable total:
+averaged across the `brain`/`brain+CSF` targets; **ANTs (Rigid+Affine)**'s
+bar reports registration-only wall-clock time (both stages combined,
+timed directly via `mrsiprep.interfaces.ants.register()`, `nthreads=16`
+matching the other runs' default, hatched in the figure), since a full
+`mni-norm` run for this configuration was not executed (see Method
+above):
 
 ![Two-panel bar chart: (left) percentage of resampled CrPCr signal mass outside the MNI152 brain mask, by registration backend, faceted by 3 Tesla vs 7 Tesla; (right) total mni-norm runtime in minutes, by registration backend (ANTs Rigid+SyN, ANTs Rigid+Affine, FSL FLIRT, FSL FLIRT+FNIRT), for 3 Tesla vs 7 Tesla](figures/registration_backend_leakage_runtime.png)
 
