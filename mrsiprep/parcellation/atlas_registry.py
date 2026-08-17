@@ -89,9 +89,42 @@ def _find_bundled_atlas(atlas: str) -> tuple[Path, Path, str] | None:
         images = sorted(directory.glob("*.nii.gz")) or sorted(directory.glob("*.nii"))
         labels = sorted(directory.glob("*.tsv"))
         if images and labels:
-            return images[0], labels[0], directory.name.replace("-", "")
+            return images[0], labels[0], _bundled_atlas_label(directory.name)
     return None
 
 
+def _bundled_atlas_label(dirname: str) -> str:
+    """Turn a bundled atlas directory name into a BIDS-safe entity value
+    that keeps the scheme code and its trailing number unambiguously
+    delimited (e.g. 'chimera-LFMIHIFIS_scale3' -> 'chimeraLFMIHIFIS_scale3').
+    Bundled atlas directories already use this delimited naming; this is a
+    defensive fallback for a directory name that still uses the old bare
+    '<scheme>-<N>' convention (e.g. 'chimera-LFMIHIFIS-3'), which plain
+    hyphen-stripping would otherwise fuse into an ambiguous
+    'chimeraLFMIHIFIS3' with no separator between scheme code and number.
+
+    'scale' is only used for schemes whose cortex position (the scheme
+    code's first letter) is 'L' (Lausanne), matching --chimera-scale's own
+    documented meaning; for other schemes the trailing number means
+    something else (e.g. a fixed total parcel count), so it is kept
+    delimited without claiming it is a scale.
+    """
+    parts = dirname.split("-")
+    if len(parts) >= 3 and parts[-1].isdigit():
+        prefix = "".join(parts[:-1])
+        suffix = parts[-1]
+        scheme = parts[1] if len(parts) > 2 else ""
+        if scheme[:1].upper() == "L":
+            return f"{prefix}_scale{suffix}"
+        return f"{prefix}_{suffix}"
+    return dirname.replace("-", "")
+
+
 def _atlas_key(value: str) -> str:
-    return "".join(character for character in value.lower() if character.isalnum())
+    # Strip the literal word "scale" in addition to non-alphanumerics, so
+    # both the current delimited directory naming ('chimera-LFMIHIFIS_scale3')
+    # and the old bare-number style some callers/configs may still pass
+    # ('chimera-LFMIHIFIS-3') normalize to the same key and still resolve to
+    # the same bundled atlas.
+    cleaned = "".join(character for character in value.lower() if character.isalnum())
+    return cleaned.replace("scale", "")

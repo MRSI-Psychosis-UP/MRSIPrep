@@ -23,12 +23,21 @@ class ProcessingModeTests(unittest.TestCase):
         self.assertEqual(round_mm_resolution(1.6), 2)
 
     def test_bundled_mni_atlas_is_discoverable(self):
-        self.assertIn("chimera-LFMIHIFIS-3", available_bundled_atlases())
+        self.assertIn("chimera-LFMIHIFIS_scale3", available_bundled_atlases())
+        config = SimpleNamespace(atlas="chimera-LFMIHIFIS_scale3")
+        image, labels, name = load_mni_atlas(config, "/tmp/unused-atlas-work")
+        self.assertTrue(image.exists())
+        self.assertTrue(labels.exists())
+        self.assertEqual(name, "chimeraLFMIHIFIS_scale3")
+
+    def test_bundled_mni_atlas_accepts_old_style_atlas_arg(self):
+        # --atlas matching is alphanumeric-only (_atlas_key), so the old
+        # bare-number CLI value must still resolve to the renamed directory.
         config = SimpleNamespace(atlas="chimera-LFMIHIFIS-3")
         image, labels, name = load_mni_atlas(config, "/tmp/unused-atlas-work")
         self.assertTrue(image.exists())
         self.assertTrue(labels.exists())
-        self.assertEqual(name, "chimeraLFMIHIFIS3")
+        self.assertEqual(name, "chimeraLFMIHIFIS_scale3")
 
     def test_full_mode_metprofile_export_matches_legacy_core_fields(self):
         with tempfile.TemporaryDirectory() as tmpdir:
