@@ -45,7 +45,7 @@ class MRSIPrepConfig:
     chimera_scheme: str = "LFMIHIFIS"
     chimera_scale: int = 3
     chimera_grow: int = 2
-    atlas: str = "chimera-LFMIHIFIS-3"
+    atlas: str = "chimera-LFMIHIFIS_scale3"
     custom_atlas: Path | None = None
     custom_atlas_lut: Path | None = None
     fs_subjects_dir: Path | None = None

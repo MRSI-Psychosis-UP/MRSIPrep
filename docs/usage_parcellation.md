@@ -44,7 +44,7 @@ docker run --rm \
   --ref-met CrPCr \
   --mode parc-con \
   --tissue-backend synthseg-fast \
-  --parcellation-mode mni --atlas chimera-LFMIHIFIS-3
+  --parcellation-mode mni --atlas chimera-LFMIHIFIS_scale3
 ```
 
 A custom atlas can be supplied with `--custom-atlas` and its lookup table
@@ -71,7 +71,7 @@ docker run --rm \
   --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \
   --ref-met CrPCr \
   --mode parc-con \
-  --parcellation-mode mni --atlas chimera-LFMIHIFIS-3 \
+  --parcellation-mode mni --atlas chimera-LFMIHIFIS_scale3 \
   --write-connectivity \
   --connectivity-method spearman \
   --connectivity-space MNI
