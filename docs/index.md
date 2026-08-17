@@ -56,16 +56,21 @@ also the fixture for MRSIPrep's own automated end-to-end pipeline test.
 
 ## What it uses
 
-- **[Nipype](https://nipype.readthedocs.io/)** as the workflow engine: each
+Every dependency below is pinned to a fixed version inside the
+distributed Docker image (`mrsiprep`'s own version and each external
+tool's resolved binary path are recorded in the per-recording provenance
+output):
+
+- **[Nipype](https://nipype.readthedocs.io/)** (v1.11.0) as the workflow engine: each
   subject/session is a cached, per-step Nipype workflow, so a rerun of an
   already-processed recording skips finished steps instead of recomputing
   them.
-- **[ANTs](http://stnava.github.io/ANTs/)** for MRSI↔T1w and T1w↔MNI registration.
-- **[FreeSurfer](https://surfer.nmr.mgh.harvard.edu/)** (`mri_synthseg`, `recon-all`, `mri_vol2vol`) for brain
+- **[ANTs](http://stnava.github.io/ANTs/)** (v2.6.5) for MRSI↔T1w and T1w↔MNI registration.
+- **[FreeSurfer](https://surfer.nmr.mgh.harvard.edu/)** (v8.2.0; `mri_synthseg`, `recon-all`, `mri_vol2vol`) for brain
   extraction, cortical/subcortical parcellation, and surface reconstruction.
-- **[FSL](https://fsl.fmrib.ox.ac.uk/fsl/fslwiki) FAST** for tissue-class probability segmentation.
+- **[FSL](https://fsl.fmrib.ox.ac.uk/fsl/fslwiki) FAST** (v6.0.7.22) for tissue-class probability segmentation.
 - **[PETPVC](https://github.com/UCL/PETPVC)** for partial-volume correction of MRSI maps.
-- **[Chimera](https://github.com/connectomicslab/chimera)** for multi-atlas cortical/subcortical parcellation
+- **[Chimera](https://github.com/connectomicslab/chimera)** (v0.3.1) for multi-atlas cortical/subcortical parcellation
   fusion.
 - **[TemplateFlow](https://www.templateflow.org/)** for the bundled MNI152 reference templates and atlases.
 
