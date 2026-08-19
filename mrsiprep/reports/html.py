@@ -218,9 +218,7 @@ def _mrsinmrs_html(config, subject: str, session: str | None) -> str:
         unit = _MRSINMRS_UNITS.get(key, "")
         rows.append(f"<tr><td>{key}</td><td>{resolved[key]}</td><td>{unit}</td></tr>")
     table = "<table><tr><th>Parameter</th><th>Value</th><th>Unit</th></tr>" + "".join(rows) + "</table>"
-    citation = resolved.get("SequenceCitation")
-    citation_html = f"<p>Sequence reference: {citation}</p>" if citation else ""
-    return table + citation_html
+    return table
 
 
 def _citations_html(config) -> str:
