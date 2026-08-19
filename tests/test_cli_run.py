@@ -13,6 +13,7 @@ def _config(**overrides):
         analysis_level="participant",
         check_external_libs=False,
         validate_only=False,
+        reports_only=False,
         nproc=1,
         nthreads=1,
     )
@@ -65,6 +66,22 @@ class MainValidateOnlyTests(unittest.TestCase):
         config = _config(validate_only=True)
         statuses = [RecordingStatus("S001", "V1", "success"), RecordingStatus("S002", None, "failed", error="boom")]
         with patch("mrsiprep.cli.run.parse_args", return_value=config), patch("mrsiprep.cli.run.validate_participant_inputs", return_value=statuses):
+            code = main([])
+        self.assertEqual(code, 1)
+
+
+class MainReportsOnlyTests(unittest.TestCase):
+    def test_returns_0_when_all_recordings_succeed(self):
+        config = _config(reports_only=True)
+        statuses = [RecordingStatus("S001", "V1", "success")]
+        with patch("mrsiprep.cli.run.parse_args", return_value=config), patch("mrsiprep.cli.run.run_reports_only_workflow", return_value=statuses):
+            code = main([])
+        self.assertEqual(code, 0)
+
+    def test_returns_1_when_all_recordings_fail(self):
+        config = _config(reports_only=True)
+        statuses = [RecordingStatus("S001", "V1", "failed", error="boom")]
+        with patch("mrsiprep.cli.run.parse_args", return_value=config), patch("mrsiprep.cli.run.run_reports_only_workflow", return_value=statuses):
             code = main([])
         self.assertEqual(code, 1)
 

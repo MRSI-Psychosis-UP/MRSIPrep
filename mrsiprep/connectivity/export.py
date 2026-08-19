@@ -129,6 +129,7 @@ def export_connectivity(
     matrix_npz = _connectivity_matrix_path(config, subject, session, atlas_name, scale, result.gm_weighted, result.n_perturbations)
     nodes_tsv = matrix_npz.with_name(matrix_npz.stem.replace("desc-connectivity", "desc-nodes") + ".tsv")
     edges_tsv = matrix_npz.with_name(matrix_npz.stem.replace("desc-connectivity", "desc-edges") + ".tsv")
+    matrix_tsv = matrix_npz.with_suffix(".tsv")
     np.savez(
         matrix_npz,
         matrix=sim.to_numpy(),
@@ -141,6 +142,10 @@ def export_connectivity(
         sigma_scale=result.sigma_scale,
         gm_weighted=result.gm_weighted,
     )
+    sim_labeled = sim.copy()
+    sim_labeled.index = parcel_names
+    sim_labeled.columns = parcel_names
+    sim_labeled.to_csv(matrix_tsv, sep="\t")
     build_nodes(table).to_csv(nodes_tsv, sep="\t", index=False)
     build_edges(sim, config.connectivity_method).to_csv(edges_tsv, sep="\t", index=False)
-    return {"matrix_npz": matrix_npz, "nodes": nodes_tsv, "edges": edges_tsv}
+    return {"matrix_npz": matrix_npz, "matrix_tsv": matrix_tsv, "nodes": nodes_tsv, "edges": edges_tsv}

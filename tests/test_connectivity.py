@@ -4,6 +4,7 @@ from pathlib import Path
 
 import nibabel as nib
 import numpy as np
+import pandas as pd
 
 from mrsiprep.connectivity.connectivity import (
     compute_metabolic_profiles,
@@ -303,6 +304,13 @@ class ExportConnectivityTests(unittest.TestCase):
 
             np.testing.assert_array_equal(data["labels_indices"], [1, 2])
             np.testing.assert_array_equal(data["parcel_names"], ["parcel-1", "parcel-2"])
+
+            matrix_tsv = outputs["matrix_tsv"]
+            self.assertTrue(matrix_tsv.exists())
+            matrix_df = pd.read_csv(matrix_tsv, sep="\t", index_col=0)
+            self.assertEqual(list(matrix_df.index), ["parcel-1", "parcel-2"])
+            self.assertEqual(list(matrix_df.columns), ["parcel-1", "parcel-2"])
+            np.testing.assert_allclose(matrix_df.to_numpy(), data["matrix"])
 
     def test_already_prefixed_scale_string_does_not_double_up(self):
         from mrsiprep.connectivity.export import _connectivity_matrix_path

@@ -38,7 +38,13 @@ def filter_metabolite_maps(config, subject: str, session: str | None, metabolite
         max_cluster = config.spike_max_cluster_voxels
         if max_cluster is None:
             max_cluster = default_spike_max_cluster_voxels(img.header.get_zooms()[:3])
-        spike_mask = get_spike_mask(data, percentile=config.spike_percentile, max_cluster_voxels=max_cluster)
+        spike_mask = get_spike_mask(
+            data,
+            percentile=config.spike_percentile,
+            max_cluster_voxels=max_cluster,
+            extreme_zscore=config.spike_extreme_zscore,
+            mask=brain,
+        )
         repaired, missing = biharmonic_repair(data, brain, spike_mask, img.header, img.affine, fwhm_mm=config.filter_fwhm_mm)
         filtered[met] = save_nifti(repaired.astype(np.float32), img, out, dtype=np.float32)
         spike_out = mrsi_derivative(config.derivative_dir, subject, session, space="MRSI", met=met, desc="spikemask", suffix_override="mask")
@@ -77,25 +83,69 @@ def default_spike_max_cluster_voxels(voxel_mm: tuple[float, float, float]) -> in
     return 6 if abs(volume_mm3 - volume_3t) <= abs(volume_mm3 - volume_7t) else 9
 
 
-def get_spike_mask(data: np.ndarray, percentile: float = 99.0, max_cluster_voxels: int | None = None) -> np.ndarray:
+def get_spike_mask(
+    data: np.ndarray,
+    percentile: float = 99.0,
+    max_cluster_voxels: int | None = None,
+    extreme_zscore: float | None = 4.0,
+    mask: np.ndarray | None = None,
+) -> np.ndarray:
     """Voxels exceeding ``percentile`` of positive signal, restricted to
-    connected clusters no larger than ``max_cluster_voxels`` (26-connectivity).
+    connected clusters no larger than ``max_cluster_voxels`` (26-connectivity)
+    -- except a cluster this large is still repaired anyway if its mean
+    intensity is an implausible outlier (mean z-score, against the
+    map's own inside-brain mean/std, above ``extreme_zscore``).
 
-    ``max_cluster_voxels=None`` disables cluster-size filtering, matching
-    the original flat per-voxel threshold behavior (every above-threshold
-    voxel is treated as a spike, regardless of how large its connected
-    cluster is).
+    Cluster size alone doesn't separate real focal signal from acquisition
+    noise: on real data, large spike clusters are just as likely to be
+    extreme intensity outliers as small ones (no correlation between
+    cluster size and z-score), so exempting every oversized cluster left
+    genuinely implausible voxels (z-score in the tens) untouched -- visibly
+    distorting the report's display scale -- alongside real, modest-intensity
+    large clusters (mean z around 0.5) that should stay untouched. The
+    z-score ceiling is a safety net specifically for the former: it only
+    ever pulls a cluster back into repair, never exempts one that the
+    percentile/size gate would otherwise have caught.
+
+    ``max_cluster_voxels=None`` disables cluster-size filtering entirely,
+    matching the original flat per-voxel threshold behavior (every
+    above-threshold voxel is treated as a spike, regardless of cluster
+    size) -- ``extreme_zscore`` has no effect in that case, since nothing
+    is exempted by size to begin with. ``extreme_zscore=None`` disables the
+    z-score safety net, restoring pure size-based exemption.
+
+    ``mask`` restricts both the percentile-threshold *and* the resulting
+    spike mask to a boundary region (typically the brain mask) -- matching
+    ``mrsitoolbox.filters.biharmonic.BiHarmonic.get_spike_mask``'s optional
+    ``bnd_np`` parameter, which mrsiprep's earlier port never exposed.
+    Defaults to ``data > 0`` (the original's own default when no boundary is
+    given) when ``mask=None``, unchanged from before. Restricting to the
+    brain matters whenever positive-valued voxels exist outside it (e.g.
+    skull/scalp signal in some acquisitions/reconstructions): those would
+    otherwise pull the percentile threshold and could themselves register
+    as (irrelevant, later-clipped) spikes.
     """
     inside = data > 0
+    if mask is not None:
+        inside &= mask
     if not np.any(inside):
         return np.zeros_like(data, dtype=bool)
     threshold = np.percentile(data[inside], percentile)
     spike_mask = data > threshold
+    if mask is not None:
+        spike_mask &= mask
     if max_cluster_voxels is None or not np.any(spike_mask):
         return spike_mask
     labeled, n_clusters = ndimage.label(spike_mask, structure=np.ones((3, 3, 3)))
     cluster_sizes = ndimage.sum(spike_mask, labeled, index=np.arange(1, n_clusters + 1))
     oversized_labels = np.flatnonzero(cluster_sizes > max_cluster_voxels) + 1
+    if oversized_labels.size and extreme_zscore is not None:
+        std = data[inside].std()
+        if std > 0:
+            mean = data[inside].mean()
+            cluster_mean_z = ndimage.mean(data, labeled, index=oversized_labels)
+            cluster_mean_z = (cluster_mean_z - mean) / std
+            oversized_labels = oversized_labels[cluster_mean_z <= extreme_zscore]
     if oversized_labels.size:
         spike_mask = spike_mask & ~np.isin(labeled, oversized_labels)
     return spike_mask
