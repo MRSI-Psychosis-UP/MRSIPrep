@@ -93,7 +93,7 @@ def generate_subject_report(config, subject: str, session: str | None, outputs: 
         mrsi_qc_body += "<h3>Raw metabolite maps (pre-pipeline)</h3>" + _sections_html(mrsi_raw_sections)
 
     tabs: list[tuple[str, str, str]] = [
-        ("acquisition", "Acquisition", _mrsinmrs_html(config, subject, session)),
+        ("acquisition", "MRSinMRS", _mrsinmrs_html(config, subject, session)),
         ("mrsi-raw-qc", "MRSI Raw QC", mrsi_qc_body),
         ("preproc", "Preproc", _sections_html(build_preproc_overview_sections(config))),
         ("anatomical", "Anatomical", _sections_html(qc_sections.get("tissue"))),
@@ -172,6 +172,29 @@ def _outputs_html(outputs: dict) -> str:
     return f"<ul>{items}</ul>"
 
 
+_MRSINMRS_UNITS: dict[str, str] = {
+    "TE": "s",
+    "RepetitionTime": "s",
+    "TR": "s",
+    "FlipAngle": "°",
+    "ExcitationFlipAngle": "°",
+    "MagneticFieldStrength": "T",
+    "FieldStrength": "T",
+    "RotationDeg": "°",
+    "SlabThicknessMM": "mm",
+    "SpectralBandwidthHz": "Hz",
+    "AcquisitionDurationMS": "ms",
+    "WaterReferenceTE": "s",
+    "WaterReferenceTR": "s",
+    "WaterReferenceFlipAngle": "°",
+    "WaterSupprBWHz": "Hz",
+    "DeltaFrequencyPPM": "ppm",
+    "FOV": "mm",
+    "ResolutionMM3": "mm",
+    "WaterReferenceResolutionMM3": "mm",
+}
+
+
 def _mrsinmrs_html(config, subject: str, session: str | None) -> str:
     """MRSI acquisition/hardware/reconstruction parameters, per the MRSinMRS
     minimum reporting standard (Lin et al. 2021), read from an optional
@@ -192,10 +215,11 @@ def _mrsinmrs_html(config, subject: str, session: str | None) -> str:
     for key in sorted(resolved):
         if key == "SequenceCitation":
             continue
-        rows.append(f"<tr><td>{key}</td><td>{resolved[key]}</td></tr>")
-    table = "<table><tr><th>Parameter</th><th>Value</th></tr>" + "".join(rows) + "</table>"
+        unit = _MRSINMRS_UNITS.get(key, "")
+        rows.append(f"<tr><td>{key}</td><td>{resolved[key]}</td><td>{unit}</td></tr>")
+    table = "<table><tr><th>Parameter</th><th>Value</th><th>Unit</th></tr>" + "".join(rows) + "</table>"
     citation = resolved.get("SequenceCitation")
-    citation_html = f"<p>Sequence reference: <a href='{citation}'>{citation}</a></p>" if citation else ""
+    citation_html = f"<p>Sequence reference: {citation}</p>" if citation else ""
     return table + citation_html
 
 
