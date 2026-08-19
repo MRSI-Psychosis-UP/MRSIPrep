@@ -94,7 +94,7 @@ def generate_subject_report(config, subject: str, session: str | None, outputs: 
 
     tabs: list[tuple[str, str, str]] = [
         ("acquisition", "Acquisition", _mrsinmrs_html(config, subject, session)),
-        ("mrsi-qc", "MRSI QC", mrsi_qc_body),
+        ("mrsi-raw-qc", "MRSI Raw QC", mrsi_qc_body),
         ("preproc", "Preproc", _sections_html(build_preproc_overview_sections(config))),
         ("anatomical", "Anatomical", _sections_html(qc_sections.get("tissue"))),
         ("spike-filter", "Spike filter", _sections_html(qc_sections.get("mrsi_preproc"))),
