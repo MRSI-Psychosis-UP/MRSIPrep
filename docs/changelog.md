@@ -2,8 +2,8 @@
 
 ## Unreleased
 
-- **Added a native-space ventricle visibility check to the MRSI QC tab,**
-  run before any T1w coregistration touches the data. A cheap,
+- **Added a native-space ventricle visibility check to the MRSI Raw QC
+  tab,** run before any T1w coregistration touches the data. A cheap,
   prior-only placement (translation + per-axis scale from brainmask
   centroid/extent, no iterative registration) warps FSL's Harvard-Oxford
   lateral-ventricle prior into each recording's own native MRSI grid;
@@ -13,10 +13,12 @@
   for visual inspection. Deliberately not reduced to a single pass/fail
   metric -- a naive summary ratio was tried and found to invert
   direction on real data, so the outline itself is the QC signal, not a
-  derived score. Requires `FSLDIR` and the Harvard-Oxford atlas data
-  (bundled in the standard image); skipped gracefully, with no new
-  section, when unavailable. New output:
-  `reports/coverage/figures/*_met-<name>_ventricle-qc.png`.
+  derived score. All metabolites are laid out in a single combined
+  montage, at most 5 per row (e.g. 9 metabolites -> 5 columns x 2 rows),
+  rather than one image per metabolite. Requires `FSLDIR` and the
+  Harvard-Oxford atlas data (bundled in the standard image); skipped
+  gracefully, with no new section, when unavailable. New output:
+  `reports/coverage/figures/*_ventricle-qc.png`.
 
 - **Added a per-metabolite signal leakage metric to the standard
   coverage report.** Reuses the signal-weighted leakage metric from the
