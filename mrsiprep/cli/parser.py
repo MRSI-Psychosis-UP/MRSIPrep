@@ -436,6 +436,19 @@ def build_parser() -> argparse.ArgumentParser:
         "regardless of cluster size, matching pre-existing behavior).",
     )
     processing_control.add_argument(
+        "--spike-extreme-zscore",
+        type=float,
+        default=4.0,
+        help="Safety net on top of --spike-max-cluster-voxels: a cluster larger than the size cap is still "
+        "repaired (rather than exempted as real focal signal) if its mean intensity is an implausible "
+        "outlier -- a z-score (against the map's own inside-brain mean/std) above this value. On real data, "
+        "large spike clusters are just as likely as small ones to be extreme intensity outliers (acquisition "
+        "artifacts, typically near the FOV/slab edge), which the size cap alone would otherwise leave "
+        "unfiltered and visibly distort the report's display scale. Default 4.0. Set to a very large number "
+        "or a negative value has no safety effect (nothing exceeds it); pass a value close to 0 to make the "
+        "safety net dominate the size cap entirely.",
+    )
+    processing_control.add_argument(
         "--no-pvc",
         action="store_true",
         help="Skip partial-volume correction (PETPVC) entirely, even in --mode parc-con. Equivalent to "
@@ -520,6 +533,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Print available built-in --config-preset names and their source citation, then exit.",
     )
     runtime.add_argument("--validate-only", action="store_true", help="Check selected subject/session inputs and exit without running preprocessing.")
+    runtime.add_argument(
+        "--reports-only",
+        action="store_true",
+        help="Skip recomputation of already-completed steps (tissue segmentation, registration, parcellation, etc. "
+        "are reused as-is when their output derivatives already exist) and only rewrite QC tables, figures, and "
+        "HTML reports. Fails a recording with a clear error, rather than silently recomputing, if a required "
+        "upstream derivative (e.g. registration transforms) is missing.",
+    )
     runtime.add_argument(
         "--skip-file-integrity-check",
         action="store_true",
@@ -666,6 +687,7 @@ def parse_args(argv: list[str] | None = None) -> MRSIPrepConfig:
         filter_fwhm_mm=args.filter_fwhm_mm,
         spike_percentile=args.spikepc,
         spike_max_cluster_voxels=args.spike_max_cluster_voxels,
+        spike_extreme_zscore=args.spike_extreme_zscore,
         no_pvc=args.no_pvc,
         t1_correction=args.t1_correction,
         t1_correction_water_status=args.t1_correction_water_status,
@@ -684,6 +706,7 @@ def parse_args(argv: list[str] | None = None) -> MRSIPrepConfig:
         overwrite_transform=args.overwrite_transform,
         overwrite_chimera=args.overwrite_chimera,
         validate_only=args.validate_only,
+        reports_only=args.reports_only,
         skip_file_integrity_check=args.skip_file_integrity_check,
         check_external_libs=args.check_external_libs,
         stop_on_first_crash=args.stop_on_first_crash,

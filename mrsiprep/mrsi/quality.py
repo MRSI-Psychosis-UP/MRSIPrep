@@ -36,8 +36,6 @@ def make_quality_masks(config, subject: str, session: str | None, metabolite_map
             {
                 "metabolite": met,
                 "n_total_voxels": int(brain.sum()),
-                "n_valid_voxels": int(valid.sum()),
-                "valid_fraction": float(valid.sum() / max(brain.sum(), 1)),
                 "mean_snr": _safe_mean(snr, valid),
                 "median_snr": _safe_median(snr, valid),
                 "mean_linewidth": _safe_mean(linewidth, valid),

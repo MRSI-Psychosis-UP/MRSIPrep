@@ -70,9 +70,14 @@ def step_mrsi(config, subject, session, ctx):
     from mrsiprep.workflows.participant import _step_mrsi_preprocessing
 
     debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""))
-    mrsi, qc_report_mrsi_preproc, qc_report_t1_correction = _step_mrsi_preprocessing(config, subject, session, ctx["inputs"], debug)
+    mrsi, qc_sections_mrsi_raw, qc_sections_mrsi_preproc, qc_sections_t1_correction = _step_mrsi_preprocessing(config, subject, session, ctx["inputs"], debug)
     ctx = dict(ctx)
-    ctx.update(mrsi=mrsi, qc_report_mrsi_preproc=qc_report_mrsi_preproc, qc_report_t1_correction=qc_report_t1_correction)
+    ctx.update(
+        mrsi=mrsi,
+        qc_sections_mrsi_raw=qc_sections_mrsi_raw,
+        qc_sections_mrsi_preproc=qc_sections_mrsi_preproc,
+        qc_sections_t1_correction=qc_sections_t1_correction,
+    )
     return ctx
 
 
@@ -101,8 +106,8 @@ def step_tissue_probmaps(config, subject, session, ctx):
 
 
 def step_tissue_qc(config, subject, session, ctx):
-    """Tissue QC report."""
-    from mrsiprep.reports.tissue import write_tissue_qc_report
+    """Tissue QC section (Anatomical tab)."""
+    from mrsiprep.reports.tissue import build_tissue_qc_sections
     from mrsiprep.tissue.synthseg_fast import synthseg_native_labels_path
 
     # synthseg-fast is now also mni-norm's tissue backend (not just
@@ -112,7 +117,7 @@ def step_tissue_qc(config, subject, session, ctx):
     dseg_for_qc = candidate_dseg if candidate_dseg.exists() else None
     tissue = ctx["tissue"]
     ctx = dict(ctx)
-    ctx["qc_report_tissue"] = write_tissue_qc_report(
+    ctx["qc_sections_tissue"] = build_tissue_qc_sections(
         config, subject, session, ctx["raw_t1"], dseg_for_qc, tissue.t1 if tissue is not None else None
     )
     return ctx
@@ -134,11 +139,11 @@ def step_resampling(config, subject, session, ctx):
     from mrsiprep.workflows.participant import _step_resampling
 
     debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""))
-    transformed, qc_report_registration = _step_resampling(
+    transformed, qc_sections_t1w_alignment, qc_sections_mni_alignment = _step_resampling(
         config, subject, session, ctx["anat"], ctx["mrsi"], ctx["registration"], ctx["corrected_maps"], ctx["raw_t1"], debug
     )
     ctx = dict(ctx)
-    ctx.update(transformed=transformed, qc_report_registration=qc_report_registration)
+    ctx.update(transformed=transformed, qc_sections_t1w_alignment=qc_sections_t1w_alignment, qc_sections_mni_alignment=qc_sections_mni_alignment)
     return ctx
 
 
@@ -168,11 +173,11 @@ def step_parcellation(config, subject, session, ctx):
     from mrsiprep.workflows.participant import _step_parcellation
 
     debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""))
-    parcels, qc_report_parcellation = _step_parcellation(
+    parcels, qc_sections_parcellation = _step_parcellation(
         config, subject, session, ctx["raw_t1"], ctx["mrsi"], ctx["anat"], ctx["registration"], ctx["preliminary_parcels"], debug
     )
     ctx = dict(ctx)
-    ctx.update(parcels=parcels, qc_report_parcellation=qc_report_parcellation)
+    ctx.update(parcels=parcels, qc_sections_parcellation=qc_sections_parcellation)
     return ctx
 
 
@@ -194,11 +199,11 @@ def step_connectivity(config, subject, session, ctx):
     from mrsiprep.workflows.participant import _step_connectivity
 
     debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""))
-    connectivity, qc_report_connectivity = _step_connectivity(
+    connectivity, qc_sections_connectivity = _step_connectivity(
         config, subject, session, ctx["regional"], ctx["parcels"], ctx["corrected_maps"], ctx["mrsi"], ctx["tissue"], debug
     )
     ctx = dict(ctx)
-    ctx.update(connectivity=connectivity, qc_report_connectivity=qc_report_connectivity)
+    ctx.update(connectivity=connectivity, qc_sections_connectivity=qc_sections_connectivity)
     return ctx
 
 
@@ -215,7 +220,8 @@ def step_metprofiles(config, subject, session, ctx):
 def step_reports(config, subject, session, ctx):
     """Assemble outputs, run reports, write provenance."""
     from mrsiprep.io.naming import provenance_derivative
-    from mrsiprep.utils.debug import Debug
+    from mrsiprep.reports.runtime_overview import build_runtime_qc_sections
+    from mrsiprep.utils.debug import Debug, collect_timings
     from mrsiprep.utils.provenance import write_provenance
     from mrsiprep.workflows.participant import _step_reports
 
@@ -238,14 +244,19 @@ def step_reports(config, subject, session, ctx):
         "metprofiles": ctx["metprofiles"],
         "connectivity": ctx["connectivity"],
         "transformed_maps": ctx["transformed"],
-        "qc_report_tissue": ctx["qc_report_tissue"],
-        "qc_report_mrsi_preproc": ctx["qc_report_mrsi_preproc"],
-        "qc_report_t1_correction": ctx["qc_report_t1_correction"],
-        "qc_report_registration": ctx["qc_report_registration"],
-        "qc_report_parcellation": ctx["qc_report_parcellation"],
-        "qc_report_connectivity": ctx["qc_report_connectivity"],
     }
-    outputs = _step_reports(config, subject, session, outputs, debug)
+    qc_sections = {
+        "tissue": ctx["qc_sections_tissue"],
+        "mrsi_raw": ctx["qc_sections_mrsi_raw"],
+        "mrsi_preproc": ctx["qc_sections_mrsi_preproc"],
+        "t1_correction": ctx["qc_sections_t1_correction"],
+        "t1w_alignment": ctx["qc_sections_t1w_alignment"],
+        "mni_alignment": ctx["qc_sections_mni_alignment"],
+        "parcellation": ctx["qc_sections_parcellation"],
+        "connectivity": ctx["qc_sections_connectivity"],
+        "runtime": build_runtime_qc_sections(config, collect_timings()),
+    }
+    outputs = _step_reports(config, subject, session, outputs, qc_sections, debug)
     outputs["provenance"] = write_provenance(
         config,
         provenance_derivative(config.derivative_dir, subject, session),

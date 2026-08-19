@@ -205,7 +205,8 @@ def _start_live_status_table(config, tags: "list[str]", status_queue):
 def _run_one_recording_nipype(config, subject: str, session: str | None, subject_template=None, status_queue=None) -> "RecordingStatus":
     from mrsiprep.io.naming import prefix as name_prefix
     from mrsiprep.io.naming import subject_session_dir
-    from mrsiprep.utils.debug import set_logbook, set_status_queue
+    from mrsiprep.utils.debug import collect_timings, set_logbook, set_status_queue, set_timing_sink
+    from mrsiprep.utils.runtime_metrics import write_runtime_metrics
     from mrsiprep.workflows.nipype_engine.build import TERMINAL_NODE, build_recording_workflow
     from mrsiprep.workflows.participant import RecordingStatus, _format_elapsed
 
@@ -219,6 +220,7 @@ def _run_one_recording_nipype(config, subject: str, session: str | None, subject
     # docstring for why (Nipype deep-copies ctx between nodes; deep-copying a
     # Manager Queue proxy fails).
     set_status_queue(status_queue)
+    set_timing_sink(True)
 
     tag = f"sub-{subject}" + (f" ses-{session}" if session else "")
     debug = Debug(verbose=config.verbose)
@@ -235,6 +237,7 @@ def _run_one_recording_nipype(config, subject: str, session: str | None, subject
         elapsed = time.monotonic() - start
         debug.always(f"[success]FINISHED[/success] {msg} in {_format_elapsed(elapsed)}")
         LOGGER.info("FINISHED %s in %s", msg, _format_elapsed(elapsed))
+        write_runtime_metrics(config, subject, session, collect_timings(), elapsed, status="success")
         return RecordingStatus(subject, session, "success", outputs=outputs)
     except Exception as exc:  # batch-safe failure, unless --stop-on-first-crash
         elapsed = time.monotonic() - start
@@ -248,12 +251,14 @@ def _run_one_recording_nipype(config, subject: str, session: str | None, subject
         debug.always(f"[failure]FAILED[/failure] {msg} after {_format_elapsed(elapsed)}: {exc_summary}")
         LOGGER.error("FAILED %s after %s: %s", msg, _format_elapsed(elapsed), exc_summary)
         debug.exception(f"FAILED {msg} after {_format_elapsed(elapsed)}: {exc}", traceback.format_exc())
+        write_runtime_metrics(config, subject, session, collect_timings(), elapsed, status="failed")
         if config.stop_on_first_crash:
             raise
         return RecordingStatus(subject, session, "failed", error=str(exc))
     finally:
         set_logbook(None)
         set_status_queue(None)
+        set_timing_sink(False)
 
 
 def _terminal_outputs(exec_graph, terminal_name: str) -> dict:

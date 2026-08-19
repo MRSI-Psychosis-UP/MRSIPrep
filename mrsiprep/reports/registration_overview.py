@@ -1,34 +1,61 @@
-"""MRSI-T1w-MNI registration alignment QC report."""
+"""MRSI-T1w-MNI registration alignment QC sections (T1w-space / MNI-space alignment tabs).
+
+Each builder returns the alignment triplanar figure section; the caller
+(:func:`mrsiprep.workflows.participant._step_reports`) appends that space's
+signal-weighted leakage table (via :func:`leakage_table_html`, once leakage
+QC has run -- a later pipeline step than registration/resampling) so the
+picture and the number that quantifies it end up in the same tab.
+"""
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from mrsiprep.io.naming import qc_report_derivative
+import pandas as pd
+
+from mrsiprep.io.naming import coverage_report_dir, qc_report_derivative
 from mrsiprep.mrsi.resampling import resample_ref_met_to_t1w
-from mrsiprep.reports.slices import html_page, load_canonical_data, render_triplanar_png, triplanar_slices
+from mrsiprep.reports.slices import load_canonical_data, render_triplanar_png, triplanar_slices
 
 
-def write_registration_overview_report(
+def leakage_table_html(leakage_df: pd.DataFrame | None, space: str) -> str:
+    if leakage_df is not None and not leakage_df.empty:
+        space_df = leakage_df[leakage_df["space"] == space]
+        if not space_df.empty:
+            table = space_df.drop(columns=["space"]).to_html(index=False, border=0, float_format=lambda value: f"{value:.3f}")
+            return f"<h3>Signal-weighted leakage</h3>{table}"
+    if space == "T1w":
+        # Leakage is computed only against maps that were actually resampled
+        # into T1w space (transformed["T1w"]), which is opt-in via
+        # --output-mrsi-t1w -- unlike the alignment figure above, which is
+        # always rendered via a separate, cheap report-only resampling
+        # (resample_ref_met_to_t1w). Without that flag there is simply no
+        # T1w-space signal to measure leakage against, so make that explicit
+        # rather than silently showing nothing next to the alignment image.
+        return (
+            "<h3>Signal-weighted leakage</h3>"
+            "<p>Not computed: T1w-space leakage requires the full T1w-space resampled metabolite maps "
+            "(<code>--output-mrsi-t1w</code>), which weren't requested for this run. The alignment image above "
+            "uses a separate, lightweight report-only resampling and doesn't imply this data is available.</p>"
+        )
+    return ""
+
+
+def build_t1w_alignment_sections(
     config,
     subject: str,
     session: str | None,
     raw_t1: Path,
     t1_ref_map_path: Path | None,
-    mni_ref_map_path: Path | None = None,
-    mni_resolution: int | None = None,
     orig_ref_map_path: Path | None = None,
     mrsi_to_t1_transforms: list[Path] | None = None,
-) -> Path:
-    import nibabel as nib
+) -> list[tuple[str, str]]:
+    """Returns the T1w-space alignment tab's (heading, body_html) sections."""
     import numpy as np
 
     out = qc_report_derivative(config.derivative_dir, subject, session, "registration")
-    out.parent.mkdir(parents=True, exist_ok=True)
-    figures_dir = out.parent / "figures"
+    figures_dir = coverage_report_dir(config.derivative_dir, subject, session) / "figures"
     figures_dir.mkdir(parents=True, exist_ok=True)
-
-    sections: list[tuple[str, str]] = []
 
     if (t1_ref_map_path is None or not Path(t1_ref_map_path).exists()) and orig_ref_map_path is not None and mrsi_to_t1_transforms:
         # Minimal, report-only resampling: written under --work-dir rather than
@@ -43,9 +70,27 @@ def write_registration_overview_report(
         ref_slices = triplanar_slices(ref_data)
         t1_png = figures_dir / f"{out.stem}_space-T1w.png"
         render_triplanar_png(t1_slices, t1_png, overlay_slices=ref_slices, mode="alpha", colorbar_label=config.ref_met)
-        sections.append(("T1w-space alignment", f"<p>Reference metabolite map (<code>{config.ref_met}</code>) overlaid on raw T1w.</p><img src='figures/{t1_png.name}'>"))
+        body = f"<p>Reference metabolite map (<code>{config.ref_met}</code>) overlaid on raw T1w.</p><img src='figures/{t1_png.name}'>"
     else:
-        sections.append(("T1w-space alignment", "<p>No T1w-space reference metabolite map available.</p>"))
+        body = "<p>No T1w-space reference metabolite map available.</p>"
+
+    return [("T1w-space alignment", body)]
+
+
+def build_mni_alignment_sections(
+    config,
+    subject: str,
+    session: str | None,
+    mni_ref_map_path: Path | None = None,
+    mni_resolution: int | None = None,
+) -> list[tuple[str, str]]:
+    """Returns the MNI-space alignment tab's (heading, body_html) sections."""
+    import nibabel as nib
+    import numpy as np
+
+    out = qc_report_derivative(config.derivative_dir, subject, session, "registration")
+    figures_dir = coverage_report_dir(config.derivative_dir, subject, session) / "figures"
+    figures_dir.mkdir(parents=True, exist_ok=True)
 
     if mni_ref_map_path is not None and Path(mni_ref_map_path).exists():
         template = _load_mni152_head_template(mni_resolution)
@@ -62,12 +107,14 @@ def write_registration_overview_report(
             overlay_cmap="hot",
             colorbar_label=config.ref_met,
         )
-        sections.append(("MNI-space alignment", f"<p>Reference metabolite map (<code>{config.ref_met}</code>) overlaid on the full-head MNI152 template, opaque so placement inside the brain can be verified post-alignment.</p><img src='figures/{mni_png.name}'>"))
+        body = (
+            f"<p>Reference metabolite map (<code>{config.ref_met}</code>) overlaid on the full-head MNI152 template, "
+            f"opaque so placement inside the brain can be verified post-alignment.</p><img src='figures/{mni_png.name}'>"
+        )
     else:
-        sections.append(("MNI-space alignment", "<p>MNI-space registration not available for this configuration.</p>"))
+        body = "<p>MNI-space registration not available for this configuration.</p>"
 
-    out.write_text(html_page(f"Registration QC: sub-{subject}" + (f" ses-{session}" if session else ""), sections), encoding="utf-8")
-    return out
+    return [("MNI-space alignment", body)]
 
 
 def _load_mni152_head_template(resolution: int | None):

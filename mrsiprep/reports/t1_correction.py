@@ -1,11 +1,11 @@
-"""T1 saturation correction before/after QC report."""
+"""T1 saturation correction before/after QC section (its own conditional tab)."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from mrsiprep.io.naming import qc_report_derivative
-from mrsiprep.reports.slices import html_page, load_canonical_data, render_triplanar_png, triplanar_slices
+from mrsiprep.io.naming import coverage_report_dir, qc_report_derivative
+from mrsiprep.reports.slices import load_canonical_data, render_triplanar_png, triplanar_slices
 
 METABOLITE_COLORMAPS = (
     "viridis", "plasma", "cividis", "cool", "spring", "summer",
@@ -13,20 +13,21 @@ METABOLITE_COLORMAPS = (
 )
 
 
-def write_t1_correction_qc_report(
+def build_t1_correction_qc_sections(
     config,
     subject: str,
     session: str | None,
     preproc_maps: dict[str, Path],
     corrected_maps: dict[str, Path],
     summary_rows: list[dict],
-) -> Path:
-    """Renders the per-metabolite factor table first, since the correction is
+) -> list[tuple[str, str]]:
+    """Returns the T1 correction tab's (heading, body_html) sections.
+
+    Renders the per-metabolite factor table first, since the correction is
     a uniform scalar multiply -- before/after slices mainly demonstrate scale
-    change, not spatial change, unlike the spike-filter QC report."""
+    change, not spatial change, unlike the spike-filter QC section."""
     out = qc_report_derivative(config.derivative_dir, subject, session, "t1-correction")
-    out.parent.mkdir(parents=True, exist_ok=True)
-    figures_dir = out.parent / "figures"
+    figures_dir = coverage_report_dir(config.derivative_dir, subject, session) / "figures"
     figures_dir.mkdir(parents=True, exist_ok=True)
 
     rows_by_met = {row["metabolite"]: row for row in summary_rows}
@@ -63,5 +64,4 @@ def write_t1_correction_qc_report(
             "</div>",
         ))
 
-    out.write_text(html_page(f"T1 saturation correction QC: sub-{subject}" + (f" ses-{session}" if session else ""), sections), encoding="utf-8")
-    return out
+    return sections

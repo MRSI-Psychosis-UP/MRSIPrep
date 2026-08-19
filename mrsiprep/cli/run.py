@@ -9,7 +9,7 @@ from mrsiprep.utils.banner import print_banner
 from mrsiprep.utils.debug import Debug
 from mrsiprep.utils.logging import setup_logging
 from mrsiprep.utils.provenance import check_external_software
-from mrsiprep.workflows.participant import run_participant_workflow, validate_participant_inputs
+from mrsiprep.workflows.participant import run_participant_workflow, run_reports_only_workflow, validate_participant_inputs
 
 
 def _recording_label(status) -> str:
@@ -35,6 +35,15 @@ def _run_participant(config, logger) -> int:
     statuses = run_participant_workflow(config)
     succeeded, failed = _split_by_status(statuses)
     logger.info("MRSIPrep finished: %d succeeded, %d failed", len(succeeded), len(failed))
+    for status in failed:
+        logger.error("FAILED %s: %s", _recording_label(status), status.error)
+    return 1 if failed and not succeeded else 0
+
+
+def _run_reports_only(config, logger) -> int:
+    statuses = run_reports_only_workflow(config)
+    succeeded, failed = _split_by_status(statuses)
+    logger.info("MRSIPrep reports-only finished: %d succeeded, %d failed", len(succeeded), len(failed))
     for status in failed:
         logger.error("FAILED %s: %s", _recording_label(status), status.error)
     return 1 if failed and not succeeded else 0
@@ -66,6 +75,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if ok else 1
     if config.validate_only:
         return _run_validate_only(config, logger)
+    if config.reports_only:
+        return _run_reports_only(config, logger)
     return _run_participant(config, logger)
 
 

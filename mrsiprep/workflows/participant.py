@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import time
+import traceback
 from dataclasses import dataclass, field
 
 from rich import box
@@ -23,12 +25,15 @@ from mrsiprep.parcellation.synthseg import run_synthseg_parcellation
 from mrsiprep.reports.parcel_qc import write_parcel_qc
 from mrsiprep.reports.parcel_figures import write_parcel_qc_figures
 from mrsiprep.reports.leakage_qc import write_signal_leakage_qc
-from mrsiprep.reports.qc_combine import combine_qc_reports
-from mrsiprep.reports.connectivity_overview import write_connectivity_qc_report
-from mrsiprep.reports.mrsi_preproc import write_mrsi_preproc_qc_report
-from mrsiprep.reports.t1_correction import write_t1_correction_qc_report
-from mrsiprep.reports.parcellation_overview import write_parcellation_qc_report
-from mrsiprep.reports.registration_overview import write_registration_overview_report
+from mrsiprep.reports.connectivity_overview import build_connectivity_qc_sections
+from mrsiprep.reports.mrsi_preproc import build_mrsi_preproc_qc_sections
+from mrsiprep.reports.mrsi_raw_overview import build_mrsi_raw_qc_sections
+from mrsiprep.reports.ventricle_overview import build_ventricle_qc_sections
+from mrsiprep.reports.t1_correction import build_t1_correction_qc_sections
+from mrsiprep.reports.parcellation_overview import build_parcellation_qc_sections
+from mrsiprep.reports.registration_overview import build_mni_alignment_sections, build_t1w_alignment_sections
+from mrsiprep.reports.tissue import build_tissue_qc_sections
+from mrsiprep.reports.preproc_overview import build_preproc_overview_sections
 from mrsiprep.tissue.synthseg_fast import (
     extract_t1_synthseg,
     segment_t1_synthseg_fast,
@@ -462,6 +467,108 @@ def validate_participant_inputs(config) -> list[RecordingStatus]:
     return statuses
 
 
+def run_reports_only_workflow(config) -> list[RecordingStatus]:
+    """Rerun only QC/report generation for already-processed recordings.
+
+    Same recording discovery/validation as :func:`run_participant_workflow`,
+    but executes each recording's step sequence directly in-process --
+    bypassing the Nipype DAG/node cache in
+    :mod:`mrsiprep.workflows.nipype_engine` entirely -- instead of building
+    and running a per-recording Nipype workflow. This is safe and correct
+    because every expensive step (tissue segmentation, registration,
+    parcellation, PVC, filtering) already self-skips via its own
+    ``if out.exists() and not config.overwrite*: return`` guard; Nipype's
+    own ``(step, config, subject, session)``-keyed node cache under
+    ``--work-dir`` is redundant with (and more fragile than) that file-level
+    gating, since it's invalidated by any config change or a cleared
+    ``--work-dir``. Report/QC writers themselves always unconditionally
+    re-render from whatever derivatives are on disk, so simply re-running
+    the full step sequence -- without Nipype -- yields "recompute nothing
+    that already exists, rewrite every report" for free, with no separate
+    derivative-reconstruction logic needed.
+
+    If a step's required upstream derivative is genuinely missing, that
+    step computes it for real (same as a normal run would) rather than
+    failing -- there is no separate pre-flight existence check, to avoid
+    duplicating each step's own gating logic (see
+    :mod:`mrsiprep.workflows.nipype_engine.nodes` for the source of truth).
+
+    :param config: Run-wide :class:`mrsiprep.config.settings.MRSIPrepConfig`.
+    :returns: One :class:`RecordingStatus` per recording matched by
+        ``config`` (empty list if none matched).
+    """
+    from mrsiprep.io.naming import prefix as name_prefix
+    from mrsiprep.io.naming import subject_session_dir
+    from mrsiprep.utils.debug import collect_timings, set_logbook, set_timing_sink
+    from mrsiprep.utils.runtime_metrics import write_runtime_metrics
+    from mrsiprep.workflows.nipype_engine.nodes import STEP_SEQUENCE
+
+    ensure_work_dirs(config)
+    init_derivative(config.derivative_dir)
+    debug = Debug(verbose=config.verbose)
+
+    recordings = collect_recordings(config)
+    if recordings:
+        summaries = [
+            _gather_input_availability(config, normalize_subject(rec.subject), normalize_session(rec.session))
+            for rec in recordings
+        ]
+        _render_preflight_table(config, summaries, debug)
+
+    ready: list[Recording] = []
+    statuses: list[RecordingStatus] = []
+    for recording in recordings:
+        subject = normalize_subject(recording.subject)
+        session = normalize_session(recording.session)
+        try:
+            validate_recording(config, subject, session)
+            _validate_backend_inputs(config, subject, session)
+            ready.append(Recording(subject, session))
+        except (ValidationError, FileNotFoundError) as exc:
+            msg = f"sub-{subject}" + (f" ses-{session}" if session else "")
+            debug.error("SKIP", msg, str(exc))
+            statuses.append(RecordingStatus(subject, session, "skipped", error=str(exc)))
+
+    if not ready:
+        return statuses
+
+    subject_templates: dict[str, object] = {}
+    if config.longitudinal:
+        subject_templates = _build_subject_templates(config, ready, debug)
+
+    for recording in ready:
+        subject, session = recording.subject, recording.session
+        tag = f"sub-{subject}" + (f" ses-{session}" if session else "")
+        logbook = subject_session_dir(config.derivative_dir, subject, session, "logs") / f"{name_prefix(subject, session)}_desc-mrsiprep_log.txt"
+        set_logbook(logbook)
+        set_timing_sink(True)
+        debug.always(f"[proc]START[/proc] {tag}")
+        start = time.monotonic()
+        try:
+            ctx: dict = {"subject_template": subject_templates.get(subject)}
+            for _name, step_fn in STEP_SEQUENCE:
+                ctx = step_fn(config, subject, session, ctx)
+            elapsed = time.monotonic() - start
+            debug.always(f"[success]FINISHED[/success] {tag} in {_format_elapsed(elapsed)}")
+            write_runtime_metrics(config, subject, session, collect_timings(), elapsed, status="success")
+            statuses.append(RecordingStatus(subject, session, "success", outputs=ctx.get("outputs", {})))
+        except Exception as exc:
+            elapsed = time.monotonic() - start
+            exc_summary = str(exc).splitlines()[0] if str(exc) else exc.__class__.__name__
+            debug.always(f"[failure]FAILED[/failure] {tag} after {_format_elapsed(elapsed)}: {exc_summary}")
+            debug.exception(f"FAILED {tag} after {_format_elapsed(elapsed)}: {exc}", traceback.format_exc())
+            write_runtime_metrics(config, subject, session, collect_timings(), elapsed, status="failed")
+            if config.stop_on_first_crash:
+                set_logbook(None)
+                set_timing_sink(False)
+                raise
+            statuses.append(RecordingStatus(subject, session, "failed", error=str(exc)))
+        finally:
+            set_logbook(None)
+            set_timing_sink(False)
+    return statuses
+
+
 def _validate_backend_inputs(config, subject: str, session: str | None) -> None:
     layout = BIDSLayout(config.bids_dir, filters=config.bids_filters)
     raw_t1 = layout.raw_t1(subject, session)
@@ -520,13 +627,15 @@ def _step_anatomical_prep(config, subject, session, t1_path, p3_override, brain_
 def _step_mrsi_preprocessing(config, subject, session, inputs, debug):
     with debug.step("MRSI preprocessing"):
         mrsi = run_mrsi_workflow(config, subject, session, inputs)
-        qc_report_mrsi_preproc = write_mrsi_preproc_qc_report(config, subject, session, mrsi.raw_maps, mrsi.preproc_maps)
-        qc_report_t1_correction = None
+        qc_sections_mrsi_raw = build_mrsi_raw_qc_sections(config, subject, session, mrsi.raw_maps, mrsi.preproc_maps)
+        qc_sections_mrsi_raw += build_ventricle_qc_sections(config, subject, session, mrsi.raw_maps)
+        qc_sections_mrsi_preproc = build_mrsi_preproc_qc_sections(config, subject, session, mrsi.raw_maps, mrsi.preproc_maps)
+        qc_sections_t1_correction = None
         if mrsi.t1_correction_provenance is not None:
-            qc_report_t1_correction = write_t1_correction_qc_report(
+            qc_sections_t1_correction = build_t1_correction_qc_sections(
                 config, subject, session, mrsi.preproc_maps, mrsi.corrected_maps, mrsi.t1_correction_provenance
             )
-    return mrsi, qc_report_mrsi_preproc, qc_report_t1_correction
+    return mrsi, qc_sections_mrsi_raw, qc_sections_mrsi_preproc, qc_sections_t1_correction
 
 
 def _step_registration(config, subject, session, mrsi, anat, debug, subject_template=None):
@@ -590,18 +699,23 @@ def _step_resampling(config, subject, session, anat, mrsi, registration, correct
             linewidth_map=mrsi.linewidth_map,
         )
         mni_resolution = resolve_mni_resolution(config.mni_resolution, anat.registration_t1w, mrsi.reference) if registration.t1_to_mni else None
-        qc_report_registration = write_registration_overview_report(
+        qc_sections_t1w_alignment = build_t1w_alignment_sections(
             config,
             subject,
             session,
             raw_t1,
             transformed.get("T1w", {}).get(config.ref_met),
-            transformed.get("MNI152NLin2009cAsym", {}).get(config.ref_met),
-            mni_resolution=mni_resolution,
             orig_ref_map_path=corrected_maps.get(config.ref_met),
             mrsi_to_t1_transforms=registration.mrsi_to_t1.forward,
         )
-    return transformed, qc_report_registration
+        qc_sections_mni_alignment = build_mni_alignment_sections(
+            config,
+            subject,
+            session,
+            transformed.get("MNI152NLin2009cAsym", {}).get(config.ref_met),
+            mni_resolution=mni_resolution,
+        )
+    return transformed, qc_sections_t1w_alignment, qc_sections_mni_alignment
 
 
 def _step_leakage_qc(config, subject, session, anat, transformed, debug):
@@ -630,9 +744,7 @@ def _step_synthseg_parcellation_qc(config, subject, session, raw_t1, mrsi, regis
             subject,
             session,
             preliminary_parcels,
-            raw_t1,
             mrsi.brainmask,
-            registration.mrsi_to_t1.forward,
             mrsi.crlb_maps,
             mrsi.qcmasks,
         )
@@ -642,6 +754,7 @@ def _step_synthseg_parcellation_qc(config, subject, session, raw_t1, mrsi, regis
             session,
             preliminary_parcels.atlas_t1,
             parcel_qc,
+            atlas_mrsi=preliminary_parcels.atlas_mrsi,
             t1_to_mni=registration.t1_to_mni.forward if registration.t1_to_mni else None,
             mrsi_reference=mrsi.reference,
         )
@@ -649,10 +762,10 @@ def _step_synthseg_parcellation_qc(config, subject, session, raw_t1, mrsi, regis
 
 
 def _step_parcellation(config, subject, session, raw_t1, mrsi, anat, registration, preliminary_parcels, debug):
-    """Returns (parcels, qc_report_parcellation). parcels defaults to the
+    """Returns (parcels, qc_sections_parcellation). parcels defaults to the
     preliminary SynthSeg parcellation outside parc-con mode."""
     parcels = preliminary_parcels
-    qc_report_parcellation = None
+    qc_sections_parcellation = None
     if config.processing_mode in {"parc-con", "midas"}:
         with debug.step("Parcellation"):
             parcels = run_parcellation_workflow(
@@ -664,8 +777,8 @@ def _step_parcellation(config, subject, session, raw_t1, mrsi, anat, registratio
                 raw_t1=raw_t1,
                 t1_reference=anat.registration_t1w,
             )
-            qc_report_parcellation = write_parcellation_qc_report(config, subject, session, raw_t1, parcels.atlas_t1, parcels.labels)
-    return parcels, qc_report_parcellation
+            qc_sections_parcellation = build_parcellation_qc_sections(config, subject, session, raw_t1, parcels.atlas_t1, parcels.labels)
+    return parcels, qc_sections_parcellation
 
 
 def _step_regional_extraction(config, subject, session, corrected_maps, parcels, mrsi, tissue, debug):
@@ -719,8 +832,8 @@ def _step_connectivity(config, subject, session, regional, parcels, corrected_ma
             mrsi.brainmask,
             gm_fraction_path=tissue.mrsi.get("GM") if tissue is not None else None,
         )
-        qc_report_connectivity = write_connectivity_qc_report(config, subject, session, connectivity.get("matrix_tsv"))
-    return connectivity, qc_report_connectivity
+        qc_sections_connectivity = build_connectivity_qc_sections(config, subject, session, connectivity.get("matrix_tsv"))
+    return connectivity, qc_sections_connectivity
 
 
 def _step_metprofiles(config, subject, session, corrected_maps, mrsi, parcels, regional, anat):
@@ -738,11 +851,8 @@ def _step_metprofiles(config, subject, session, corrected_maps, mrsi, parcels, r
     )
 
 
-def _step_reports(config, subject, session, outputs, debug):
+def _step_reports(config, subject, session, outputs, qc_sections, debug):
     with debug.step("Reports"):
-        report = run_reports_workflow(config, subject, session, outputs)
+        report = run_reports_workflow(config, subject, session, outputs, qc_sections)
         outputs["report"] = report
-        outputs["qc_report_combined"] = combine_qc_reports(config, subject, session)
-        for key in ("qc_report_tissue", "qc_report_mrsi_preproc", "qc_report_t1_correction", "qc_report_registration", "qc_report_parcellation", "qc_report_connectivity"):
-            outputs.pop(key, None)
     return outputs

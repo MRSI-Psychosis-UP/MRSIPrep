@@ -87,6 +87,10 @@ def provenance_derivative(root: Path, subject: str, session: str | None) -> Path
     return subject_session_dir(root, subject, session, "reports") / f"{prefix(subject, session)}_desc-provenance.json"
 
 
+def runtime_metrics_derivative(root: Path, subject: str, session: str | None) -> Path:
+    return subject_session_dir(root, subject, session, "reports") / f"{prefix(subject, session)}_desc-runtimemetrics.json"
+
+
 def resampling_work_path(work_dir: Path, subject: str, session: str | None, **entities) -> Path:
     """Scratch location (under --work-dir) for resampled maps needed only to
     render a report, not intended as a permanent BIDS derivative."""

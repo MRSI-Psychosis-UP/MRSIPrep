@@ -68,6 +68,8 @@ def render_triplanar_png(
     overlay_cmap: str = "magma",
     titles: dict[str, str] | None = None,
     colorbar_label: str | None = None,
+    vmin: float | None = None,
+    vmax: float | None = None,
 ) -> Path:
     import matplotlib.pyplot as plt
 
@@ -78,7 +80,7 @@ def render_triplanar_png(
     overlay_image = None
     background_image = None
     for ax, plane in zip(axes, planes):
-        background_image = ax.imshow(background_slices[plane], cmap=cmap)
+        background_image = ax.imshow(background_slices[plane], cmap=cmap, vmin=vmin, vmax=vmax)
         if overlay_slices is not None and mode == "outline":
             label_outline_overlay(ax, overlay_slices[plane])
         elif overlay_slices is not None and mode == "alpha":
