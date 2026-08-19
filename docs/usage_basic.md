@@ -101,6 +101,35 @@ FreeSurfer column (shown only in parc-con mode with Chimera parcellation,
 indicating whether a valid prior `recon-all` output already exists and will
 be reused), and the MRSI→T1/T1→MNI transform status.
 
+Rebuild just the QC tables, figures, and HTML report for already-processed
+recordings, without repeating any expensive step:
+
+```bash
+docker run --rm \
+  -v /path/to/bids:/data:ro \
+  -v /path/to/derivatives:/out \
+  mrsiup/mrsiprep:cpu \
+  /data /out participant \
+  --participant-label S001 \
+  --session-label V1 \
+  --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \
+  --ref-met CrPCr \
+  --reports-only
+```
+
+`--reports-only` reuses tissue segmentation, registration, parcellation, and
+every other already-completed step's output derivatives as-is, and only
+regenerates QC tables, figures, and `desc-report.html`. Useful after
+updating MRSIPrep to pick up report-only changes (a new QC panel, a fixed
+figure) without rerunning SynthSeg/ANTs/Chimera. It fails a recording with a
+clear error, rather than silently recomputing, if a required upstream
+derivative is missing -- so it is not a substitute for a normal run on data
+that hasn't been processed yet.
+
+A full example report, rendered end-to-end on the public SynthMRSI-Project
+subject above, is available to preview without running anything:
+[`docs/examples/sub-01_ses-01_desc-report_SynthMRSI-Project.pdf`](https://github.com/MRSI-Psychosis-UP/MRSIPrep/blob/main/docs/examples/sub-01_ses-01_desc-report_SynthMRSI-Project.pdf).
+
 ## The Nipype workflow engine
 
 Every processing run is orchestrated by a per-recording
