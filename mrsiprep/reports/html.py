@@ -130,7 +130,7 @@ def generate_subject_report(config, subject: str, session: str | None, outputs: 
 
     lines = [
         "<!doctype html>",
-        "<html><head><meta charset='utf-8'><title>MRSIPrep report</title>",
+        "<html><head><meta charset='utf-8'><title>MRSIPrep sub-" + subject + (f" ses-{session}" if session else "") + "</title>",
         "<style>body{font-family:Arial,sans-serif;margin:2rem;line-height:1.4}table{border-collapse:collapse}td,th{border:1px solid #ddd;padding:4px 8px}code{background:#f3f3f3;padding:2px 4px}"
         "img{max-width:100%;border:1px solid #ddd}.row{display:flex;gap:0.5rem;flex-wrap:wrap}.row>div{flex:1 1 240px}.col{display:flex;flex-direction:column;gap:1rem}"
         + _TAB_STYLE
