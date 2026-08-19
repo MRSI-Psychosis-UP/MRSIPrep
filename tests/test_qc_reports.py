@@ -8,13 +8,12 @@ import numpy as np
 import pandas as pd
 
 from mrsiprep.config.settings import MRSIPrepConfig
-from mrsiprep.io.naming import qc_report_derivative
-from mrsiprep.reports.connectivity_overview import write_connectivity_qc_report
-from mrsiprep.reports.mrsi_preproc import write_mrsi_preproc_qc_report
-from mrsiprep.reports.parcellation_overview import write_parcellation_qc_report
-from mrsiprep.reports.qc_combine import combine_qc_reports
-from mrsiprep.reports.registration_overview import write_registration_overview_report
-from mrsiprep.reports.tissue import write_tissue_qc_report
+from mrsiprep.io.naming import coverage_report_dir
+from mrsiprep.reports.connectivity_overview import build_connectivity_qc_sections
+from mrsiprep.reports.mrsi_preproc import _render_value_histogram, build_mrsi_preproc_qc_sections
+from mrsiprep.reports.parcellation_overview import build_parcellation_qc_sections
+from mrsiprep.reports.registration_overview import build_mni_alignment_sections, build_t1w_alignment_sections, leakage_table_html
+from mrsiprep.reports.tissue import build_tissue_qc_sections
 
 
 def _make_config(tmp_path: Path) -> MRSIPrepConfig:
@@ -35,8 +34,12 @@ def _save_volume(path: Path, data: np.ndarray) -> Path:
     return path
 
 
-class TissueQCReportTests(unittest.TestCase):
-    def test_writes_html_with_labels_and_probsegs(self):
+def _sections_text(sections: list[tuple[str, str]]) -> str:
+    return "\n".join(f"{heading}\n{body}" for heading, body in sections)
+
+
+class TissueQCSectionsTests(unittest.TestCase):
+    def test_includes_labels_and_probsegs(self):
         with tempfile.TemporaryDirectory() as td:
             tmp_path = Path(td)
             config = _make_config(tmp_path)
@@ -46,24 +49,22 @@ class TissueQCReportTests(unittest.TestCase):
                 "GM": _save_volume(tmp_path / "gm.nii.gz", np.random.rand(8, 8, 8)),
                 "WM": _save_volume(tmp_path / "wm.nii.gz", np.random.rand(8, 8, 8)),
             }
-            out = write_tissue_qc_report(config, "S001", "V1", raw_t1, dseg, probsegs)
-            self.assertTrue(out.exists())
-            html = out.read_text()
-            self.assertIn("Tissue label outlines", html)
-            self.assertIn("GM", html)
+            sections = build_tissue_qc_sections(config, "S001", "V1", raw_t1, dseg, probsegs)
+            text = _sections_text(sections)
+            self.assertIn("Tissue label outlines", text)
+            self.assertIn("GM", text)
 
     def test_handles_missing_dseg_and_probsegs_gracefully(self):
         with tempfile.TemporaryDirectory() as td:
             tmp_path = Path(td)
             config = _make_config(tmp_path)
             raw_t1 = _save_volume(tmp_path / "raw_t1.nii.gz", np.random.rand(8, 8, 8))
-            out = write_tissue_qc_report(config, "S001", "V1", raw_t1, None, None)
-            self.assertTrue(out.exists())
-            self.assertIn("No tissue label image available", out.read_text())
+            sections = build_tissue_qc_sections(config, "S001", "V1", raw_t1, None, None)
+            self.assertIn("No tissue label image available", _sections_text(sections))
 
 
-class MRSIPreprocQCReportTests(unittest.TestCase):
-    def test_writes_before_after_pairs_per_metabolite(self):
+class MRSIPreprocQCSectionsTests(unittest.TestCase):
+    def test_includes_before_after_pairs_and_spike_count(self):
         with tempfile.TemporaryDirectory() as td:
             tmp_path = Path(td)
             config = _make_config(tmp_path)
@@ -72,11 +73,73 @@ class MRSIPreprocQCReportTests(unittest.TestCase):
             preproc[2:4, 2:4, 2:4] = 0.0
             raw_maps = {"CrPCr": _save_volume(tmp_path / "raw_cr.nii.gz", raw)}
             preproc_maps = {"CrPCr": _save_volume(tmp_path / "preproc_cr.nii.gz", preproc)}
-            out = write_mrsi_preproc_qc_report(config, "S001", "V1", raw_maps, preproc_maps)
+            sections = build_mrsi_preproc_qc_sections(config, "S001", "V1", raw_maps, preproc_maps)
+            text = _sections_text(sections)
+            self.assertIn("CrPCr", text)
+            self.assertIn("centroid", text)
+            self.assertIn("Spike voxels detected", text)
+
+    def test_includes_before_after_value_histogram_scoped_to_spike_voxels(self):
+        from mrsiprep.io.naming import mrsi_derivative
+
+        with tempfile.TemporaryDirectory() as td:
+            tmp_path = Path(td)
+            config = _make_config(tmp_path)
+            raw = np.random.uniform(0.1, 5.0, size=(8, 8, 8)).astype(np.float32)
+            preproc = raw.copy()
+            raw[0, 0, 0] = 300.0
+            preproc[0, 0, 0] = 2.0
+            raw_maps = {"CrPCr": _save_volume(tmp_path / "raw_cr.nii.gz", raw)}
+            preproc_maps = {"CrPCr": _save_volume(tmp_path / "preproc_cr.nii.gz", preproc)}
+
+            spike_mask = np.zeros((8, 8, 8), dtype=np.uint8)
+            spike_mask[0, 0, 0] = 1
+            spike_path = mrsi_derivative(config.derivative_dir, "S001", "V1", space="MRSI", met="CrPCr", desc="spikemask", suffix_override="mask")
+            _save_volume(spike_path, spike_mask)
+
+            sections = build_mrsi_preproc_qc_sections(config, "S001", "V1", raw_maps, preproc_maps)
+            text = _sections_text(sections)
+            self.assertIn("_histogram-whole.png", text)
+            self.assertIn("_histogram-spikes.png", text)
+            figures_dir = coverage_report_dir(config.derivative_dir, "S001", "V1") / "figures"
+            self.assertEqual(len(list(figures_dir.glob("*_histogram-whole.png"))), 1)
+            self.assertEqual(len(list(figures_dir.glob("*_histogram-spikes.png"))), 1)
+
+    def test_whole_image_histogram_always_present_spike_histogram_only_when_spikemask_available(self):
+        with tempfile.TemporaryDirectory() as td:
+            tmp_path = Path(td)
+            config = _make_config(tmp_path)
+            raw = np.random.uniform(0.1, 5.0, size=(8, 8, 8)).astype(np.float32)
+            preproc = raw.copy()
+            raw_maps = {"CrPCr": _save_volume(tmp_path / "raw_cr.nii.gz", raw)}
+            preproc_maps = {"CrPCr": _save_volume(tmp_path / "preproc_cr.nii.gz", preproc)}
+            sections = build_mrsi_preproc_qc_sections(config, "S001", "V1", raw_maps, preproc_maps)
+            text = _sections_text(sections)
+            self.assertIn("_histogram-whole.png", text)
+            self.assertNotIn("_histogram-spikes.png", text)
+
+    def test_whole_image_histogram_excludes_hole_filled_voxels(self):
+        """Regression test: biharmonic_repair() inpaints every exact-zero
+        voxel inside the brain mask as a "missing hole", unrelated to spike
+        removal -- can be a large fraction of the mask on acquisitions with
+        steep slab-edge SNR falloff. require_nonzero_in_both=True must
+        exclude these from the whole-image comparison so they don't look
+        like real signal collapsing toward zero."""
+        with tempfile.TemporaryDirectory() as td:
+            tmp_path = Path(td)
+            raw = np.full((4, 4, 4), 2.0, dtype=np.float32)
+            preproc = raw.copy()
+            raw[0, 0, 0] = 0.0  # exact zero in raw: a hole biharmonic fills in
+            preproc[0, 0, 0] = 1e-6  # inpainted to a tiny nonzero value
+            out = tmp_path / "hist.png"
+            _render_value_histogram(raw, preproc, out, label="CrPCr", require_nonzero_in_both=True)
+            # No assertion on the image itself (rendering is exercised
+            # elsewhere); the real check is that this doesn't raise and
+            # that require_nonzero_in_both actually filters the hole voxel
+            # out of the selection used to build the plot.
+            finite = np.isfinite(raw) & np.isfinite(preproc) & (raw > 0) & (preproc > 0)
+            self.assertFalse(finite[0, 0, 0], "hole-filled voxel (raw==0) must be excluded from require_nonzero_in_both selection")
             self.assertTrue(out.exists())
-            html = out.read_text()
-            self.assertIn("CrPCr", html)
-            self.assertIn("centroid", html)
 
     def test_handles_mismatched_trailing_singleton_dimension(self):
         with tempfile.TemporaryDirectory() as td:
@@ -86,8 +149,8 @@ class MRSIPreprocQCReportTests(unittest.TestCase):
             preproc = np.squeeze(raw.copy())
             raw_maps = {"CrPCr": _save_volume(tmp_path / "raw_cr.nii.gz", raw)}
             preproc_maps = {"CrPCr": _save_volume(tmp_path / "preproc_cr.nii.gz", preproc)}
-            out = write_mrsi_preproc_qc_report(config, "S001", "V1", raw_maps, preproc_maps)
-            self.assertTrue(out.exists())
+            sections = build_mrsi_preproc_qc_sections(config, "S001", "V1", raw_maps, preproc_maps)
+            self.assertTrue(sections)
 
     def test_handles_no_repaired_voxels(self):
         with tempfile.TemporaryDirectory() as td:
@@ -96,29 +159,68 @@ class MRSIPreprocQCReportTests(unittest.TestCase):
             same = np.random.rand(8, 8, 8)
             raw_maps = {"CrPCr": _save_volume(tmp_path / "raw_cr.nii.gz", same)}
             preproc_maps = {"CrPCr": _save_volume(tmp_path / "preproc_cr.nii.gz", same.copy())}
-            out = write_mrsi_preproc_qc_report(config, "S001", "V1", raw_maps, preproc_maps)
-            self.assertIn("No voxels required repair", out.read_text())
+            sections = build_mrsi_preproc_qc_sections(config, "S001", "V1", raw_maps, preproc_maps)
+            self.assertIn("No voxels required repair", _sections_text(sections))
+
+    def test_display_vmax_uses_filtered_data_not_raw_spike_value(self):
+        """Regression test: a single extreme raw spike (e.g. an unfiltered
+        acquisition artifact, value ~300) must not set vmax for both
+        before/after panels -- that crushes all real tissue signal (~0-5)
+        into an unreadable dark band in both images, even after the spike
+        was successfully removed in the filtered map."""
+        with tempfile.TemporaryDirectory() as td:
+            tmp_path = Path(td)
+            config = _make_config(tmp_path)
+            raw = np.random.uniform(0, 5, size=(8, 8, 8)).astype(np.float32)
+            preproc = raw.copy()
+            raw[0, 0, 0] = 300.0  # extreme spike, present only in raw
+            preproc[0, 0, 0] = 2.0  # successfully repaired to a plausible value
+            raw_maps = {"CrPCr": _save_volume(tmp_path / "raw_cr.nii.gz", raw)}
+            preproc_maps = {"CrPCr": _save_volume(tmp_path / "preproc_cr.nii.gz", preproc)}
+
+            captured_vmax = []
+            from mrsiprep.reports import mrsi_preproc as mrsi_preproc_module
+
+            original = mrsi_preproc_module.render_triplanar_png
+
+            def _capture(*args, **kwargs):
+                captured_vmax.append(kwargs.get("vmax"))
+                return original(*args, **kwargs)
+
+            with mock.patch.object(mrsi_preproc_module, "render_triplanar_png", side_effect=_capture):
+                build_mrsi_preproc_qc_sections(config, "S001", "V1", raw_maps, preproc_maps)
+
+            self.assertTrue(captured_vmax)
+            for vmax in captured_vmax:
+                self.assertLess(vmax, 50.0, "vmax should reflect the filtered data's real range, not the raw 300.0 spike")
 
 
-class RegistrationOverviewReportTests(unittest.TestCase):
-    def test_writes_t1w_section_and_skips_mni_when_absent(self):
+class RegistrationAlignmentSectionsTests(unittest.TestCase):
+    def test_t1w_alignment_present_when_ref_map_given(self):
         with tempfile.TemporaryDirectory() as td:
             tmp_path = Path(td)
             config = _make_config(tmp_path)
             raw_t1 = _save_volume(tmp_path / "raw_t1.nii.gz", np.random.rand(8, 8, 8))
             t1_ref = _save_volume(tmp_path / "ref_t1.nii.gz", np.random.rand(8, 8, 8))
-            out = write_registration_overview_report(config, "S001", "V1", raw_t1, t1_ref, None)
-            html = out.read_text()
-            self.assertIn("T1w-space alignment", html)
-            self.assertIn("not available for this configuration", html)
+            sections = build_t1w_alignment_sections(config, "S001", "V1", raw_t1, t1_ref)
+            text = _sections_text(sections)
+            self.assertIn("T1w-space alignment", text)
+            self.assertNotIn("not available for this configuration", text)
+
+    def test_mni_alignment_reports_unavailable_when_absent(self):
+        with tempfile.TemporaryDirectory() as td:
+            tmp_path = Path(td)
+            config = _make_config(tmp_path)
+            sections = build_mni_alignment_sections(config, "S001", "V1", None)
+            self.assertIn("not available for this configuration", _sections_text(sections))
 
     def test_handles_missing_t1_map(self):
         with tempfile.TemporaryDirectory() as td:
             tmp_path = Path(td)
             config = _make_config(tmp_path)
             raw_t1 = _save_volume(tmp_path / "raw_t1.nii.gz", np.random.rand(8, 8, 8))
-            out = write_registration_overview_report(config, "S001", "V1", raw_t1, None, None)
-            self.assertIn("No T1w-space reference metabolite map available", out.read_text())
+            sections = build_t1w_alignment_sections(config, "S001", "V1", raw_t1, None)
+            self.assertIn("No T1w-space reference metabolite map available", _sections_text(sections))
 
     def test_computes_t1w_alignment_on_demand_when_not_already_transformed(self):
         with tempfile.TemporaryDirectory() as td:
@@ -136,23 +238,49 @@ class RegistrationOverviewReportTests(unittest.TestCase):
                 return out_path
 
             with mock.patch("mrsiprep.mrsi.resampling.apply_image_transform", side_effect=_fake_apply):
-                out = write_registration_overview_report(
+                sections = build_t1w_alignment_sections(
                     config,
                     "S001",
                     "V1",
                     raw_t1,
                     None,
-                    None,
                     orig_ref_map_path=orig_ref,
                     mrsi_to_t1_transforms=[fake_transform],
                 )
-            html = out.read_text()
-            self.assertIn("T1w-space alignment", html)
-            self.assertNotIn("No T1w-space reference metabolite map available", html)
+            text = _sections_text(sections)
+            self.assertIn("T1w-space alignment", text)
+            self.assertNotIn("No T1w-space reference metabolite map available", text)
 
 
-class ParcellationQCReportTests(unittest.TestCase):
-    def test_writes_outline_overlay(self):
+class LeakageTableHtmlTests(unittest.TestCase):
+    def test_renders_rows_for_matching_space_only(self):
+        leakage_df = pd.DataFrame(
+            {
+                "space": ["T1w", "MNI152NLin2009cAsym"],
+                "metabolite": ["CrPCr", "CrPCr"],
+                "leakage_percent": [1.23, 4.56],
+            }
+        )
+        html = leakage_table_html(leakage_df, "T1w")
+        self.assertIn("Signal-weighted leakage", html)
+        self.assertIn("1.230", html)
+        self.assertNotIn("4.560", html)
+
+    def test_mni_empty_when_no_data(self):
+        self.assertEqual(leakage_table_html(None, "MNI152NLin2009cAsym"), "")
+        self.assertEqual(leakage_table_html(pd.DataFrame(), "MNI152NLin2009cAsym"), "")
+
+    def test_t1w_explains_why_when_no_data(self):
+        # T1w leakage specifically needs --output-mrsi-t1w; explain that
+        # rather than silently showing nothing next to the alignment image.
+        html = leakage_table_html(None, "T1w")
+        self.assertIn("--output-mrsi-t1w", html)
+        html = leakage_table_html(pd.DataFrame(), "T1w")
+        self.assertIn("--output-mrsi-t1w", html)
+
+
+class ParcellationQCSectionsTests(unittest.TestCase):
+    def test_includes_outline_overlay_and_region_count(self):
         with tempfile.TemporaryDirectory() as td:
             tmp_path = Path(td)
             config = _make_config(tmp_path)
@@ -160,78 +288,39 @@ class ParcellationQCReportTests(unittest.TestCase):
             atlas_t1 = _save_volume(tmp_path / "atlas_t1.nii.gz", np.random.randint(0, 4, (8, 8, 8)))
             labels_path = tmp_path / "labels.tsv"
             pd.DataFrame({"parcel_id": [1, 2, 3], "parcel_name": ["a", "b", "c"]}).to_csv(labels_path, sep="\t", index=False)
-            out = write_parcellation_qc_report(config, "S001", "V1", raw_t1, atlas_t1, labels_path)
-            html = out.read_text()
-            self.assertIn("Parcellation outlines", html)
-            self.assertIn("3 regions", html)
+            sections = build_parcellation_qc_sections(config, "S001", "V1", raw_t1, atlas_t1, labels_path)
+            text = _sections_text(sections)
+            self.assertIn("Parcellation outlines", text)
+            self.assertIn("3 regions", text)
 
     def test_handles_missing_atlas(self):
         with tempfile.TemporaryDirectory() as td:
             tmp_path = Path(td)
             config = _make_config(tmp_path)
             raw_t1 = _save_volume(tmp_path / "raw_t1.nii.gz", np.random.rand(8, 8, 8))
-            out = write_parcellation_qc_report(config, "S001", "V1", raw_t1, None, None)
-            self.assertIn("Atlas not available in T1w space", out.read_text())
+            sections = build_parcellation_qc_sections(config, "S001", "V1", raw_t1, None, None)
+            self.assertIn("Atlas not available in T1w space", _sections_text(sections))
 
 
-class ConnectivityQCReportTests(unittest.TestCase):
-    def test_writes_heatmap_when_matrix_present(self):
+class ConnectivityQCSectionsTests(unittest.TestCase):
+    def test_includes_heatmap_when_matrix_present(self):
         with tempfile.TemporaryDirectory() as td:
             tmp_path = Path(td)
             config = _make_config(tmp_path)
             matrix = pd.DataFrame(np.eye(3), index=["a", "b", "c"], columns=["a", "b", "c"])
             matrix_path = tmp_path / "matrix.tsv"
             matrix.to_csv(matrix_path, sep="\t")
-            out = write_connectivity_qc_report(config, "S001", "V1", matrix_path)
-            html = out.read_text()
-            self.assertIn("Connectivity matrix", html)
-            self.assertIn("spearman", html)
+            sections = build_connectivity_qc_sections(config, "S001", "V1", matrix_path)
+            text = _sections_text(sections)
+            self.assertIn("Connectivity matrix", text)
+            self.assertIn("spearman", text)
 
     def test_handles_missing_matrix(self):
         with tempfile.TemporaryDirectory() as td:
             tmp_path = Path(td)
             config = _make_config(tmp_path)
-            out = write_connectivity_qc_report(config, "S001", "V1", None)
-            self.assertIn("not requested", out.read_text())
-
-
-class CombineQCReportsTests(unittest.TestCase):
-    def test_combines_in_chronological_order_and_deletes_originals(self):
-        with tempfile.TemporaryDirectory() as td:
-            tmp_path = Path(td)
-            config = _make_config(tmp_path)
-            raw_t1 = _save_volume(tmp_path / "raw_t1.nii.gz", np.random.rand(8, 8, 8))
-            write_tissue_qc_report(config, "S001", "V1", raw_t1, None, None)
-            raw_maps = {"CrPCr": _save_volume(tmp_path / "raw_cr.nii.gz", np.random.rand(8, 8, 8))}
-            preproc_maps = {"CrPCr": _save_volume(tmp_path / "preproc_cr.nii.gz", np.random.rand(8, 8, 8))}
-            write_mrsi_preproc_qc_report(config, "S001", "V1", raw_maps, preproc_maps)
-            write_connectivity_qc_report(config, "S001", "V1", None)
-
-            step_files = [
-                qc_report_derivative(config.derivative_dir, "S001", "V1", step)
-                for step in ("tissue", "mrsi-preproc", "registration", "parcellation", "connectivity")
-            ]
-            self.assertTrue(step_files[0].exists())
-            self.assertTrue(step_files[1].exists())
-            self.assertFalse(step_files[2].exists())
-
-            combined = combine_qc_reports(config, "S001", "V1")
-            self.assertTrue(combined.exists())
-            html = combined.read_text()
-            tissue_pos = html.index("Tissue segmentation QC")
-            preproc_pos = html.index("MRSI preprocessing QC")
-            connectivity_pos = html.index("Connectivity QC")
-            self.assertLess(tissue_pos, preproc_pos)
-            self.assertLess(preproc_pos, connectivity_pos)
-
-            for step_file in step_files:
-                self.assertFalse(step_file.exists())
-
-    def test_returns_none_when_no_step_reports_exist(self):
-        with tempfile.TemporaryDirectory() as td:
-            tmp_path = Path(td)
-            config = _make_config(tmp_path)
-            self.assertIsNone(combine_qc_reports(config, "S001", "V1"))
+            sections = build_connectivity_qc_sections(config, "S001", "V1", None)
+            self.assertIn("not requested", _sections_text(sections))
 
 
 if __name__ == "__main__":

@@ -66,6 +66,7 @@ class MRSIPrepConfig:
     filter_fwhm_mm: float | None = None
     spike_percentile: float = 99.0
     spike_max_cluster_voxels: int | None = None
+    spike_extreme_zscore: float | None = 4.0
     no_pvc: bool = False
     t1_correction: str = "none"
     t1_correction_water_status: str = "unknown"
@@ -83,6 +84,7 @@ class MRSIPrepConfig:
     work_dir: Path | None = None
     verbose: int = 1
     validate_only: bool = False
+    reports_only: bool = False
     skip_file_integrity_check: bool = False
     check_external_libs: bool = False
     stop_on_first_crash: bool = False

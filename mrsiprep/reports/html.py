@@ -1,4 +1,12 @@
-"""Minimal HTML reports."""
+"""Combined, tabbed HTML report: the single per-recording QC/report page.
+
+Assembles both the top-level coverage/QC summary tables and the per-stage
+QC sections (tissue segmentation, spike filtering, T1 correction,
+registration alignment, parcellation, connectivity) previously split across
+several standalone HTML pages under ``reports/qc-reports/`` -- see
+``build_*_qc_sections`` in each ``mrsiprep.reports.*`` module for how each
+stage's sections are produced.
+"""
 
 from __future__ import annotations
 
@@ -8,21 +16,51 @@ import pandas as pd
 
 from mrsiprep.io.mrsinmrs import load_mrsinmrs, resolve_mrsinmrs
 from mrsiprep.io.naming import coverage_report_html
+from mrsiprep.reports.preproc_overview import build_preproc_overview_sections
+from mrsiprep.reports.registration_overview import leakage_table_html
 
 _MRSINMRS_URL = "https://pubmed.ncbi.nlm.nih.gov/33559967/"
 
+_TAB_STYLE = (
+    ".tabs{display:flex;gap:0.25rem;border-bottom:2px solid #ddd;margin-bottom:1rem;flex-wrap:wrap}"
+    ".tab-button{padding:0.5rem 1rem;border:1px solid #ddd;border-bottom:none;background:#f3f3f3;"
+    "cursor:pointer;border-radius:4px 4px 0 0;font-size:0.95rem}"
+    ".tab-button.active{background:#fff;font-weight:bold;border-bottom:2px solid #fff;margin-bottom:-2px}"
+    ".tab-panel{display:none}"
+    ".tab-panel.active{display:block}"
+    ".dag-chain{font-family:monospace;line-height:2.2;word-spacing:0.3em}"
+    ".dag-node{background:#eef;border:1px solid #99c;border-radius:4px;padding:0.15rem 0.5rem}"
+)
 
-def generate_subject_report(config, subject: str, session: str | None, outputs: dict) -> Path:
+_TAB_SCRIPT = """
+<script>
+function showTab(id) {
+  document.querySelectorAll('.tab-panel').forEach(function (panel) {
+    panel.classList.toggle('active', panel.id === id);
+  });
+  document.querySelectorAll('.tab-button').forEach(function (button) {
+    button.classList.toggle('active', button.dataset.tab === id);
+  });
+}
+</script>
+"""
+
+
+def generate_subject_report(config, subject: str, session: str | None, outputs: dict, qc_sections: dict | None = None) -> Path:
+    qc_sections = qc_sections or {}
     out = coverage_report_html(config.derivative_dir, subject, session)
     out.parent.mkdir(parents=True, exist_ok=True)
+
     qc_html = ""
     qc_path = outputs.get("qc_summary")
     if qc_path and Path(qc_path).exists():
         qc_html = pd.read_csv(qc_path, sep="\t").to_html(index=False, border=0)
+
     regional_html = ""
     regional = outputs.get("regional_table")
     if regional and Path(regional).exists():
         regional_html = pd.read_csv(regional, sep="\t").head(50).to_html(index=False, border=0)
+
     parcel_qc_html = ""
     parcel_qc_summary = ""
     parcel_qc = outputs.get("parcel_qc")
@@ -43,51 +81,95 @@ def generate_subject_report(config, subject: str, session: str | None, outputs: 
             f"<p>Mean anatomical MRSI coverage: <strong>{overview['anatomical_coverage_percent'].mean():.1f}%</strong>; "
             f"mean parcel CRLB: <strong>{parcel_df['mean_crlb'].mean():.2f}</strong>.</p>"
         )
-    leakage_html = ""
+
+    leakage_df = None
     leakage_qc = outputs.get("leakage_qc")
     if leakage_qc and Path(leakage_qc).exists():
         leakage_df = pd.read_csv(leakage_qc, sep="\t")
-        leakage_html = (
-            "<p>Signal-weighted leakage: at each CRLB-passing voxel of a resampled metabolite map "
-            "(T1w and/or MNI152, whichever this run produced), the fraction of total signal "
-            "magnitude that falls outside the reference brain mask (same metric used to compare "
-            "registration backends; see <code>docs/benchmarks.md</code>).</p>"
-            + leakage_df.to_html(index=False, border=0, float_format=lambda value: f"{value:.3f}")
-        )
+
+    mrsi_qc_body = qc_html or "<p>No QC table available.</p>"
+    mrsi_raw_sections = qc_sections.get("mrsi_raw")
+    if mrsi_raw_sections:
+        mrsi_qc_body += "<h3>Raw metabolite maps (pre-pipeline)</h3>" + _sections_html(mrsi_raw_sections)
+
+    tabs: list[tuple[str, str, str]] = [
+        ("acquisition", "Acquisition", _mrsinmrs_html(config, subject, session)),
+        ("mrsi-qc", "MRSI QC", mrsi_qc_body),
+        ("preproc", "Preproc", _sections_html(build_preproc_overview_sections(config))),
+        ("anatomical", "Anatomical", _sections_html(qc_sections.get("tissue"))),
+        ("spike-filter", "Spike filter", _sections_html(qc_sections.get("mrsi_preproc"))),
+    ]
+
+    t1_correction_sections = qc_sections.get("t1_correction")
+    if t1_correction_sections is not None:
+        tabs.append(("t1-correction", "T1 correction", _sections_html(t1_correction_sections)))
+
+    tabs.append((
+        "t1w-alignment",
+        "T1w-space alignment",
+        _sections_html(qc_sections.get("t1w_alignment")) + leakage_table_html(leakage_df, "T1w"),
+    ))
+    tabs.append((
+        "coverage",
+        "Coverage &amp; Alignment",
+        parcel_qc_summary + _parcel_figures_html(out.parent) + (parcel_qc_html or "<p>No parcelwise QC table available.</p>"),
+    ))
+    tabs.append((
+        "mni-alignment",
+        "MNI-space alignment",
+        _sections_html(qc_sections.get("mni_alignment")) + leakage_table_html(leakage_df, "MNI152NLin2009cAsym"),
+    ))
+    tabs.append(("parcellation", "Parcellation", _sections_html(qc_sections.get("parcellation"))))
+
+    connectivity_sections = qc_sections.get("connectivity")
+    if connectivity_sections is not None:
+        tabs.append(("connectivity", "Connectivity", _sections_html(connectivity_sections)))
+
+    tabs.append(("runtime", "Runtime", _sections_html(qc_sections.get("runtime"))))
+    tabs.append(("outputs", "Outputs", _outputs_html(outputs)))
+
     lines = [
         "<!doctype html>",
         "<html><head><meta charset='utf-8'><title>MRSIPrep report</title>",
         "<style>body{font-family:Arial,sans-serif;margin:2rem;line-height:1.4}table{border-collapse:collapse}td,th{border:1px solid #ddd;padding:4px 8px}code{background:#f3f3f3;padding:2px 4px}"
-        "img{max-width:100%;border:1px solid #ddd}.row{display:flex;gap:0.5rem;flex-wrap:wrap}.row>div{flex:1 1 240px}</style>",
+        "img{max-width:100%;border:1px solid #ddd}.row{display:flex;gap:0.5rem;flex-wrap:wrap}.row>div{flex:1 1 240px}.col{display:flex;flex-direction:column;gap:1rem}"
+        + _TAB_STYLE
+        + "</style>",
         "</head><body>",
         f"<h1>MRSIPrep report: sub-{subject}" + (f" ses-{session}" if session else "") + "</h1>",
         "<h2>Inputs</h2>",
         f"<p>BIDS directory: <code>{config.bids_dir}</code></p>",
         f"<p>Output directory: <code>{config.derivative_dir}</code></p>",
         f"<p>Processing mode: <code>{config.processing_mode}</code></p>",
-        "<h2>MRSI Acquisition (MRSinMRS)</h2>",
-        _mrsinmrs_html(config, subject, session),
-        "<h2>MRSI QC</h2>",
-        qc_html or "<p>No QC table available.</p>",
-        "<h2>Parcelwise Coverage and CRLB</h2>",
-        parcel_qc_summary,
-        _parcel_figures_html(out.parent),
-        parcel_qc_html or "<p>No parcelwise QC table available.</p>",
-        "<h2>Signal Leakage</h2>",
-        leakage_html or "<p>No leakage QC table available (requires MNI-space output or T1w-space output with a T1w reference brain mask; not computed for <code>--registration-t1-target raw</code> with no MNI output).</p>",
-        "<h2>Regional Metabolites</h2>",
-        regional_html or "<p>No regional table available.</p>",
-        "<h2>Outputs</h2>",
-        "<ul>",
+        "<div class='tabs'>",
     ]
-    for key, value in sorted(outputs.items()):
-        lines.append(f"<li><strong>{key}</strong>: <code>{value}</code></li>")
-    lines.append("</ul>")
+    lines.extend(
+        f"<button class='tab-button{' active' if index == 0 else ''}' data-tab='{tab_id}' "
+        f"onclick=\"showTab('{tab_id}')\">{label}</button>"
+        for index, (tab_id, label, _) in enumerate(tabs)
+    )
+    lines.append("</div>")
+    lines.extend(
+        f"<div class='tab-panel{' active' if index == 0 else ''}' id='{tab_id}'><h2>{label}</h2>{body}</div>"
+        for index, (tab_id, label, body) in enumerate(tabs)
+    )
     lines.append("<h2>Citations</h2>")
     lines.append(_citations_html(config))
+    lines.append(_TAB_SCRIPT)
     lines.extend(["</body></html>"])
     out.write_text("\n".join(lines), encoding="utf-8")
     return out
+
+
+def _sections_html(sections: list[tuple[str, str]] | None) -> str:
+    if not sections:
+        return "<p>Not available for this configuration.</p>"
+    return "\n".join(f"<h3>{heading}</h3>{body}" for heading, body in sections)
+
+
+def _outputs_html(outputs: dict) -> str:
+    items = "".join(f"<li><strong>{key}</strong>: <code>{value}</code></li>" for key, value in sorted(outputs.items()))
+    return f"<ul>{items}</ul>"
 
 
 def _mrsinmrs_html(config, subject: str, session: str | None) -> str:

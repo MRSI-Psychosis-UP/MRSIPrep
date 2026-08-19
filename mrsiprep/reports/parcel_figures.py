@@ -1,8 +1,10 @@
 """Parcelwise MRSI figures: anatomical coverage and per-metabolite CRLB quality.
 
 Both are derived from the parcel-QC TSV written by
-:func:`mrsiprep.reports.parcel_qc.write_parcel_qc` plus the T1-space parcel
-atlas, and are saved into the subject/session ``reports/coverage/figures/``
+:func:`mrsiprep.reports.parcel_qc.write_parcel_qc`. The coverage montage uses
+the native-MRSI-space parcel atlas; the CRLB glass-brain figures use the
+T1w-space atlas resampled into MNI space (glass-brain projection requires
+MNI space). Saved into the subject/session ``reports/coverage/figures/``
 folder next to the HTML report so it can embed them with relative paths.
 """
 
@@ -36,16 +38,29 @@ def _value_volume(atlas: np.ndarray, parcel_to_value: dict[int, float]) -> np.nd
     return out
 
 
-def write_parcel_coverage_figure(config, subject: str, session: str | None, atlas_t1: Path, parcel_qc_tsv: Path) -> Path | None:
-    """Triplanar (coronal/axial/sagittal) heatmap of per-parcel MRSI anatomical coverage %."""
+def write_parcel_coverage_figure(config, subject: str, session: str | None, atlas_mrsi: Path, parcel_qc_tsv: Path) -> Path | None:
+    """Triplanar (coronal/axial/sagittal) heatmap of per-parcel MRSI anatomical coverage %.
+
+    Rendered on the native MRSI acquisition grid (``atlas_mrsi``, the T1w
+    atlas already warped into MRSI space for the coverage QC table) rather
+    than the T1w grid: the T1w grid is typically much larger than, and
+    asymmetrically padded around, the brain, which previously made the
+    geometric array midpoint (and thus the coronal/axial slice) land outside
+    the cerebrum even though most parcels had near-100% coverage.
+    """
     df = pd.read_csv(parcel_qc_tsv, sep="\t")
     if df.empty or "anatomical_coverage_percent" not in df:
         return None
     per_parcel = df.groupby("parcel_id")["anatomical_coverage_percent"].first().to_dict()
-    atlas = _atlas_canonical(atlas_t1)
+    atlas = _atlas_canonical(atlas_mrsi)
     coverage = _value_volume(atlas, per_parcel)
 
-    slices = triplanar_slices(coverage)
+    nonzero = coverage > 0.0
+    if nonzero.any():
+        center_ijk = tuple(int(round(coordinate)) for coordinate in np.argwhere(nonzero).mean(axis=0))
+    else:
+        center_ijk = None
+    slices = triplanar_slices(coverage, center_ijk)
     masked = {plane: np.ma.masked_less_equal(data, 0.0) for plane, data in slices.items()}
     out = coverage_figure_derivative(config.derivative_dir, subject, session, desc="parcelcoverage")
     return render_triplanar_png(
@@ -53,6 +68,13 @@ def write_parcel_coverage_figure(config, subject: str, session: str | None, atla
         out_path=out,
         cmap="viridis",
         colorbar_label="MRSI anatomical coverage (%)",
+        # Pin to the metric's real 0-100% range: coverage is often uniform
+        # (e.g. exactly 100% everywhere), and matplotlib's default
+        # autoscaling on a zero-variance field pads an arbitrary margin
+        # around it (e.g. 90-110%) instead of showing the true, meaningful
+        # scale, which reads as a bug ("over 100% coverage?") at a glance.
+        vmin=0.0,
+        vmax=100.0,
     )
 
 
@@ -133,12 +155,21 @@ def write_parcel_crlb_figures(config, subject: str, session: str | None, atlas_t
     return outputs
 
 
-def write_parcel_qc_figures(config, subject: str, session: str | None, atlas_t1: Path | None, parcel_qc_tsv: Path | None, t1_to_mni=None, mrsi_reference: Path | None = None) -> list[Path]:
+def write_parcel_qc_figures(
+    config,
+    subject: str,
+    session: str | None,
+    atlas_t1: Path | None,
+    parcel_qc_tsv: Path | None,
+    atlas_mrsi: Path | None = None,
+    t1_to_mni=None,
+    mrsi_reference: Path | None = None,
+) -> list[Path]:
     """Generate both parcelwise figures; returns the list of written paths."""
     if atlas_t1 is None or parcel_qc_tsv is None or not Path(parcel_qc_tsv).exists():
         return []
     figures: list[Path] = []
-    coverage = write_parcel_coverage_figure(config, subject, session, atlas_t1, parcel_qc_tsv)
+    coverage = write_parcel_coverage_figure(config, subject, session, atlas_mrsi or atlas_t1, parcel_qc_tsv)
     if coverage is not None:
         figures.append(coverage)
     figures.extend(write_parcel_crlb_figures(config, subject, session, atlas_t1, parcel_qc_tsv, t1_to_mni=t1_to_mni, mrsi_reference=mrsi_reference))
