@@ -149,22 +149,40 @@ def _best_slice_by_voxel_count(detected: np.ndarray, min_voxels: int = 3) -> int
     return int(np.argmax(counts))
 
 
-def _render_ventricle_slice(signal: np.ndarray, prior_roi: np.ndarray, detected: np.ndarray, z: int, out_path: Path, met: str) -> Path:
+MAX_MONTAGE_COLUMNS = 5
+
+
+def _render_ventricle_montage(panels: list[tuple[str, np.ndarray, np.ndarray, np.ndarray, int]], out_path: Path) -> Path:
+    """One combined figure, one subplot per metabolite, at most
+    ``MAX_MONTAGE_COLUMNS`` per row -- e.g. 9 metabolites lays out as 5
+    columns x 2 rows -- rather than a separate standalone image per
+    metabolite."""
+    import math
+
     import matplotlib
 
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    finite = signal[np.isfinite(signal) & (signal > 0)]
-    vmax = float(np.percentile(finite, 99)) if finite.size else float(np.nanmax(signal))
+    n = len(panels)
+    n_cols = min(n, MAX_MONTAGE_COLUMNS)
+    n_rows = math.ceil(n / MAX_MONTAGE_COLUMNS)
 
-    fig, ax = plt.subplots(figsize=(3.2, 3.2), constrained_layout=True)
-    ax.imshow(np.rot90(signal[:, :, z]), cmap="viridis", vmin=0, vmax=max(vmax, 1e-6))
-    ax.contour(np.rot90(prior_roi[:, :, z]), levels=[0.5], colors="white", linewidths=1.0, linestyles="dashed")
-    ax.contour(np.rot90(detected[:, :, z]), levels=[0.5], colors="red", linewidths=1.6)
-    ax.set_title(f"{met}  (z={z})", fontsize=9)
-    ax.axis("off")
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(2.6 * n_cols, 2.6 * n_rows), constrained_layout=True, squeeze=False)
+    for index, (met, signal, prior_roi, detected, z) in enumerate(panels):
+        ax = axes[index // n_cols][index % n_cols]
+        finite = signal[np.isfinite(signal) & (signal > 0)]
+        vmax = float(np.percentile(finite, 99)) if finite.size else float(np.nanmax(signal))
+        ax.imshow(np.rot90(signal[:, :, z]), cmap="viridis", vmin=0, vmax=max(vmax, 1e-6))
+        ax.contour(np.rot90(prior_roi[:, :, z]), levels=[0.5], colors="white", linewidths=1.0, linestyles="dashed")
+        ax.contour(np.rot90(detected[:, :, z]), levels=[0.5], colors="red", linewidths=1.6)
+        ax.set_title(f"{met}  (z={z})", fontsize=9)
+        ax.axis("off")
+
+    for index in range(n, n_rows * n_cols):
+        axes[index // n_cols][index % n_cols].axis("off")
+
     fig.savefig(out_path)
     plt.close(fig)
     return out_path
@@ -189,7 +207,7 @@ def build_ventricle_qc_sections(config, subject: str, session: str | None, raw_m
     out = qc_report_derivative(config.derivative_dir, subject, session, "mrsi-raw")
     figures_dir = coverage_report_dir(config.derivative_dir, subject, session) / "figures"
 
-    images: list[str] = []
+    panels: list[tuple[str, np.ndarray, np.ndarray, np.ndarray, int]] = []
     for met in sorted(raw_maps):
         signal, affine = _load_canonical(raw_maps[met])
         brainmask = np.isfinite(signal) & (signal > 0)
@@ -203,17 +221,17 @@ def build_ventricle_qc_sections(config, subject: str, session: str | None, raw_m
         best_z = _best_slice_by_voxel_count(detected)
         if best_z is None:
             continue
-        png_path = figures_dir / f"{out.stem}_met-{met}_ventricle-qc.png"
-        _render_ventricle_slice(signal, prior_roi, detected, best_z, png_path, met)
-        images.append(f"<div><img src='figures/{png_path.name}'></div>")
+        panels.append((met, signal, prior_roi, detected, best_z))
 
-    if not images:
+    if not panels:
         return []
+    png_path = figures_dir / f"{out.stem}_ventricle-qc.png"
+    _render_ventricle_montage(panels, png_path)
     body = (
         "<p>Native-MRSI-space ventricle visibility, before any T1w coregistration: a cheap MNI-prior "
         "placement (dashed white) and the resulting data-driven detection (red) on each metabolite's own "
         "best-contrast slice. A clean, anatomically plausible outline indicates well-resolved ventricles; "
         "a ragged, offset, or absent one is worth a closer look before trusting downstream registration.</p>"
-        "<div class='row'>" + "".join(images) + "</div>"
+        f"<img src='figures/{png_path.name}'>"
     )
     return [("Ventricle visibility (pre-coregistration)", body)]
