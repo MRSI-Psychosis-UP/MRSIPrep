@@ -2,6 +2,49 @@
 
 ## Unreleased
 
+- **Added `--reports-only`,** which reuses every already-completed step's
+  output derivatives as-is (tissue segmentation, registration,
+  parcellation, PVC, etc.) and only regenerates QC tables, figures, and
+  `desc-report.html`. Fails a recording with a clear error, rather than
+  silently recomputing, if a required upstream derivative is missing. Runs
+  the same per-recording step sequence directly, bypassing the Nipype
+  node cache entirely, so it isn't affected by cache staleness/hashing and
+  always produces a genuinely fresh report.
+
+- **Added a Runtime tab to the per-recording HTML report,** with real
+  per-step wall-clock timing (tissue segmentation, registration, PVC,
+  parcellation, connectivity, etc.) and the `nproc`/`nthreads` context for
+  the run. New output: `reports/coverage/*_desc-runtimeqc.json`
+  (`mrsiprep.io.naming.runtime_metrics_derivative`).
+
+- **Tightened spike-filter repair.** `get_spike_mask()` now restricts its
+  percentile threshold and resulting spike mask to brain-mask voxels only
+  (`--spike-mask`-equivalent behavior, matching the original
+  mrsitoolbox's `bnd_np` parameter, which this port had never exposed),
+  and gained a z-score safety net (`--spike-extreme-zscore`, default
+  `4.0`): a repaired cluster larger than `--spike-max-cluster-voxels` is
+  still repaired, rather than exempted as real focal signal, if its mean
+  intensity is an implausible outlier against the map's own inside-brain
+  mean/std. Large spike clusters are just as likely as small ones to be
+  extreme-intensity acquisition artifacts, so cluster size alone was
+  letting some genuinely broken clusters through unrepaired.
+
+- **Renamed report tabs**: "MRSI QC" is now "MRSI Raw QC" (raw
+  pre-pipeline metabolite maps and their QC, now including the ventricle
+  visibility panel below); "Acquisition" is now "MRSinMRS", its table
+  gained a Unit column, and the broken sequence-citation hyperlink was
+  removed.
+
+- **Fixed connectivity matrix export** to also write a labeled
+  `*_desc-connectivity_matrix.tsv` (parcel-name row/column headers)
+  alongside the existing `.npz`, which was previously the only matrix
+  output.
+
+- **Clarified T1w-space signal leakage reporting**: the T1w-space
+  alignment tab now explains explicitly when leakage wasn't computed
+  (T1w-space leakage requires `--output-mrsi-t1w`) instead of silently
+  omitting the section, so its absence isn't mistaken for a bug.
+
 - **Added a native-space ventricle visibility check to the MRSI Raw QC
   tab,** run before any T1w coregistration touches the data. A cheap,
   prior-only placement (translation + per-axis scale from brainmask
