@@ -11,6 +11,10 @@ pipeline end-to-end. 32 subjects, single session each:
   T1w (5 metabolites: `NAANAAG`, `GPCPCh`, `CrPCr`, `GluGln`, `Ins`).
 - **CRLB, SNR, FWHM** — real empirical acquisition-quality measures, copied
   directly from real MRSI acquisitions. Not synthetic.
+- **`mrsinmrs.json`** — dataset-level acquisition-parameter sidecar following
+  the MRSinMRS minimum reporting standard (Lin et al. 2021), matching the
+  Lausanne3T-ECCENTRIC acquisition this dataset's signal characteristics are
+  modeled on.
 
 This is **not real patient MRSI data**. It exists so that anyone can
 download a small, realistic-shaped dataset and run the full MRSIPrep
@@ -45,11 +49,17 @@ no regeneration support.
 ## Download
 
 ```bash
-curl -L -o SynthMRSI-Project.zip "https://zenodo.org/records/21477048/files/SynthMRSI-Project.zip"
+curl -L -o SynthMRSI-Project.zip "https://zenodo.org/records/22014466/files/SynthMRSI-Project.zip"
 unzip SynthMRSI-Project.zip
 ```
 
 This extracts a `SynthMRSI-Project/` directory in your current working directory (the zip's own top-level folder) -- don't pass `-d SynthMRSI-Project`, since that would double-nest it.
+
+The record id in that URL (`22014466`) is this specific version's id, since
+Zenodo's direct-file-download route needs one -- unlike the DOI below, it
+does **not** auto-resolve to the latest version and will need updating the
+next time this dataset is republished. If the download 404s, get the current
+one from the concept DOI page instead.
 
 DOI: [10.5281/zenodo.21477047](https://doi.org/10.5281/zenodo.21477047)
 (concept DOI — always resolves to the latest version; see the project's
