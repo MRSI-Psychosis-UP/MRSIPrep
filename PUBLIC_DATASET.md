@@ -102,10 +102,10 @@ subjects first.
 ## Expected output
 
 Per-subject outputs land under `derivatives/mrsiprep/sub-XX/ses-01/`:
-metabolite maps in T1w/MNI space (`mrsi/`), tissue segmentation (`anat/`),
-and QC reports (`reports/qc-reports/`). The QC HTML report is the fastest
-way to check a run succeeded — open
-`reports/qc-reports/sub-XX_ses-01_step-combined.html` in a browser.
+metabolite maps in T1w/MNI space (`mrsi/`), tissue segmentation
+(`anat/synthseg/`), and QC reports (`reports/coverage/`). The QC HTML
+report is the fastest way to check a run succeeded — open
+`reports/coverage/sub-XX_ses-01_desc-report.html` in a browser.
 
 ## Ground truth (optional)
 

@@ -321,8 +321,8 @@ and `--output-mrsi-t1w`, and
 <out>/mrsiprep/sub-*/ses-*/mrsi/t1w/           T1w-aligned MRSI signal maps only (opt-in, --output-mrsi-t1w)
 <out>/mrsiprep/sub-*/ses-*/mrsi/mni/           MNI-normalized MRSI signal maps only
 <out>/mrsiprep/sub-*/ses-*/mrsi/parcel/        parc-con mode metabolite profile NPZ files
-<out>/mrsiprep/sub-*/ses-*/anat/               raw T1w tissue files, brainCSF/registration inputs
-<out>/mrsiprep/sub-*/ses-*/anat/synthseg/      SynthSeg brain/dseg outputs and parcelwise QC tables
+<out>/mrsiprep/sub-*/ses-*/anat/synthseg/      SynthSeg brain/dseg outputs, brainCSF/registration inputs,
+                                                and parcelwise QC tables
 <out>/mrsiprep/sub-*/ses-*/confounds/          every quantity that encodes a preprocessing assumption
                                                 rather than signal itself, one file per space/metabolite
                                                 (space-* entity in the filename): CRLB, SNR, FWHM/linewidth,
@@ -330,9 +330,9 @@ and `--output-mrsi-t1w`, and
                                                 T1-correction summary (opt-in, --t1-correction literature),
                                                 per-metabolite signal leakage summary (desc-leakageqc)
 <out>/mrsiprep/sub-*/ses-*/transforms/         ANTs MRSI→T1w and T1w→MNI transforms
-<out>/mrsiprep/sub-*/ses-*/reports/coverage/   subject HTML report + parcelwise coverage/CRLB figures +
-                                                per-metabolite signal leakage table
-<out>/mrsiprep/sub-*/ses-*/reports/qc-reports/ per-step QC HTML reports and figures
+<out>/mrsiprep/sub-*/ses-*/reports/coverage/   combined subject HTML report (desc-report.html), all QC
+                                                figures (reports/coverage/figures/), parcelwise coverage/CRLB
+                                                figures, and per-metabolite signal leakage table
 <out>/mrsiprep/sub-*/ses-*/reports/            provenance JSON (config, software versions, pipeline_trace)
 <out>/mrsiprep/sub-*/ses-*/logs/                per-recording timestamped logbook
 <out>/mrsiprep/logs/                           full-detail timestamped run logs (independent of --verbose)
