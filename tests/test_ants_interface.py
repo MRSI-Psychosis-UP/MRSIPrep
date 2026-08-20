@@ -270,9 +270,14 @@ class ApplyTransformsCliTests(unittest.TestCase):
         return path
 
     def test_raises_when_no_transform_files_exist(self):
+        # Unlike FSL's apply_transforms(), ants.py's apply_transforms_cli()
+        # checks require_cli("antsApplyTransforms") before the transform-list
+        # check, so the CLI must be mocked as present for this path to be
+        # reached at all.
         missing = self.tmp / "does_not_exist.affine.mat"
-        with self.assertRaisesRegex(ANTsError, "No transform files exist"):
-            apply_transforms_cli(self.fixed, self.moving, [missing], self.out_path)
+        with patch("mrsiprep.interfaces.ants.require_cli", return_value="/usr/bin/antsApplyTransforms"):
+            with self.assertRaisesRegex(ANTsError, "No transform files exist"):
+                apply_transforms_cli(self.fixed, self.moving, [missing], self.out_path)
 
     def test_forward_affine_is_passed_without_inversion(self):
         affine = self._touch("mrsi_to_t1.affine.mat")
