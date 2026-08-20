@@ -42,7 +42,19 @@ T1w-native space into that dummy subject's MRSI-native space and on into
 `derivatives/mrsi-orig/`. `group=0` subjects (16 of 32) receive no
 injection. This lets `randomise`'s two-sample group contrast
 (`group1 > group0`) be checked against a known, exact ground truth,
-independent of registration backend.
+independent of registration backend. A dataset-level `mrsinmrs.json`
+sidecar (MRSinMRS minimum reporting standard, Lin et al. 2021) is
+included, matching the Lausanne3T-ECCENTRIC acquisition this dataset's
+signal characteristics are modeled on.
+
+Published on Zenodo:
+[10.5281/zenodo.21849051](https://doi.org/10.5281/zenodo.21849051)
+(CC0, concept DOI — always resolves to the latest version). Raw T1w
+anatomicals and raw/model-synthesized MRSI signal for all 32 subjects are
+included, together with the population-level ground-truth injection
+masks; per-subject, per-registration-backend processed derivatives are
+not, since they are fully regeneratable from these raw files with
+MRSIPrep itself.
 
 This report covers **CrPCr** (bilateral Precuneus) and **GluGln**
 (bilateral Thalamus) only. The other three injected metabolites
