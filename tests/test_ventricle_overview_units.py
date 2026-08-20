@@ -135,9 +135,9 @@ class RenderVentricleMontageTests(unittest.TestCase):
                 detected = np.zeros((4, 4, 3), dtype=bool)
                 panels.append((f"MET{i}", signal, prior_roi, detected, 1))
             result = _render_ventricle_montage(panels, out_path)
-        self.assertEqual(result, out_path)
-        self.assertTrue(out_path.exists())
-        self.assertGreater(out_path.stat().st_size, 0)
+            self.assertEqual(result, out_path)
+            self.assertTrue(out_path.exists())
+            self.assertGreater(out_path.stat().st_size, 0)
 
 
 class BuildVentricleQcSectionsTests(unittest.TestCase):
