@@ -105,7 +105,7 @@ class SynthMRSIProjectE2ETests(unittest.TestCase):
             subject_root = self.out_dir / "mrsiprep" / f"sub-{subject}" / "ses-01"
             self.assertTrue(subject_root.is_dir(), msg=f"no output directory for sub-{subject}: {subject_root}")
 
-            qc_reports = list((subject_root / "reports" / "qc-reports").glob(f"sub-{subject}_ses-01_step-combined.html"))
+            qc_reports = list((subject_root / "reports" / "coverage").glob(f"sub-{subject}_ses-01_desc-report.html"))
             self.assertTrue(qc_reports, msg=f"no combined QC report for sub-{subject} under {subject_root}")
             self.assertGreater(qc_reports[0].stat().st_size, 1024, msg=f"QC report for sub-{subject} looks too small to be real")
 
@@ -157,7 +157,7 @@ class SynthMRSIProjectE2ETests(unittest.TestCase):
             subject_root = self.out_dir / "mrsiprep" / f"sub-{subject}" / "ses-01"
             self.assertTrue(subject_root.is_dir(), msg=f"no output directory for sub-{subject}: {subject_root}")
 
-            qc_reports = list((subject_root / "reports" / "qc-reports").glob(f"sub-{subject}_ses-01_step-combined.html"))
+            qc_reports = list((subject_root / "reports" / "coverage").glob(f"sub-{subject}_ses-01_desc-report.html"))
             self.assertTrue(qc_reports, msg=f"no combined QC report for sub-{subject} under {subject_root}")
             self.assertGreater(qc_reports[0].stat().st_size, 1024, msg=f"QC report for sub-{subject} looks too small to be real")
 
