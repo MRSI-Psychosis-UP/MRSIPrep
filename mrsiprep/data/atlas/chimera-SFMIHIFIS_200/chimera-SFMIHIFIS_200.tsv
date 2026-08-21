@@ -1,0 +1,267 @@
+index	name	color
+1	7Networks_LH_Vis_1	#0f97a6
+2	7Networks_LH_Vis_2	#d9826a
+3	7Networks_LH_Vis_3	#883af5
+4	7Networks_LH_Vis_4	#187fe6
+5	7Networks_LH_Vis_5	#77626f
+6	7Networks_LH_Vis_6	#56e1ad
+7	7Networks_LH_Vis_7	#8ba7f9
+8	7Networks_LH_Vis_8	#6cd0e8
+9	7Networks_LH_Vis_9	#c17976
+10	7Networks_LH_Vis_10	#ace393
+11	7Networks_LH_Vis_11	#cf2b7c
+12	7Networks_LH_Vis_12	#63ca50
+13	7Networks_LH_Vis_13	#75e96c
+14	7Networks_LH_Vis_14	#0b3d5e
+15	7Networks_LH_SomMot_1	#4fd50b
+16	7Networks_LH_SomMot_2	#4c32b9
+17	7Networks_LH_SomMot_3	#e7e194
+18	7Networks_LH_SomMot_4	#83a55d
+19	7Networks_LH_SomMot_5	#826d1b
+20	7Networks_LH_SomMot_6	#97fa2d
+21	7Networks_LH_SomMot_7	#ac5565
+22	7Networks_LH_SomMot_8	#a49c1c
+23	7Networks_LH_SomMot_9	#474ba7
+24	7Networks_LH_SomMot_10	#cfa64c
+25	7Networks_LH_SomMot_11	#d7965c
+26	7Networks_LH_SomMot_12	#8f9cc5
+27	7Networks_LH_SomMot_13	#b370d1
+28	7Networks_LH_SomMot_14	#f25ba6
+29	7Networks_LH_SomMot_15	#4bc1be
+30	7Networks_LH_SomMot_16	#3b76cc
+31	7Networks_LH_DorsAttn_Post_1	#b41682
+32	7Networks_LH_DorsAttn_Post_2	#b70abc
+33	7Networks_LH_DorsAttn_Post_3	#adf0c4
+34	7Networks_LH_DorsAttn_Post_4	#e9c7e6
+35	7Networks_LH_DorsAttn_Post_5	#c22fce
+36	7Networks_LH_DorsAttn_Post_6	#0fd2fa
+37	7Networks_LH_DorsAttn_Post_7	#72f33a
+38	7Networks_LH_DorsAttn_Post_8	#0eb7d0
+39	7Networks_LH_DorsAttn_Post_9	#f66247
+40	7Networks_LH_DorsAttn_Post_10	#5a5cb9
+41	7Networks_LH_DorsAttn_FEF_1	#bd0bc7
+42	7Networks_LH_DorsAttn_FEF_2	#d81d1b
+43	7Networks_LH_DorsAttn_PrCv_1	#8e01ea
+44	7Networks_LH_SalVentAttn_ParOper_1	#3994a2
+45	7Networks_LH_SalVentAttn_ParOper_2	#9e0626
+46	7Networks_LH_SalVentAttn_ParOper_3	#ed395a
+47	7Networks_LH_SalVentAttn_FrOperIns_1	#dff73c
+48	7Networks_LH_SalVentAttn_FrOperIns_2	#fd963d
+49	7Networks_LH_SalVentAttn_FrOperIns_3	#1abb5d
+50	7Networks_LH_SalVentAttn_FrOperIns_4	#c0e078
+51	7Networks_LH_SalVentAttn_PFCl_1	#566ff7
+52	7Networks_LH_SalVentAttn_Med_1	#5992da
+53	7Networks_LH_SalVentAttn_Med_2	#e3c2e4
+54	7Networks_LH_SalVentAttn_Med_3	#782392
+55	7Networks_LH_Limbic_OFC_1	#ad8f72
+56	7Networks_LH_Limbic_OFC_2	#0ad2cc
+57	7Networks_LH_Limbic_TempPole_1	#171b2b
+58	7Networks_LH_Limbic_TempPole_2	#a275c7
+59	7Networks_LH_Limbic_TempPole_3	#80854f
+60	7Networks_LH_Limbic_TempPole_4	#36db33
+61	7Networks_LH_Cont_Par_1	#8d6f65
+62	7Networks_LH_Cont_Par_2	#707321
+63	7Networks_LH_Cont_Par_3	#b9fda3
+64	7Networks_LH_Cont_Temp_1	#fb3e0e
+65	7Networks_LH_Cont_OFC_1	#1dd968
+66	7Networks_LH_Cont_PFCl_1	#38b7ac
+67	7Networks_LH_Cont_PFCl_2	#1f6211
+68	7Networks_LH_Cont_PFCl_3	#bc08cf
+69	7Networks_LH_Cont_PFCl_4	#ddb045
+70	7Networks_LH_Cont_PFCl_5	#b24434
+71	7Networks_LH_Cont_pCun_1	#a0ca90
+72	7Networks_LH_Cont_Cing_1	#a9dea2
+73	7Networks_LH_Cont_Cing_2	#d253c0
+74	7Networks_LH_Default_Temp_1	#334e5f
+75	7Networks_LH_Default_Temp_2	#ba7aad
+76	7Networks_LH_Default_Temp_3	#bd4627
+77	7Networks_LH_Default_Temp_4	#ab2b86
+78	7Networks_LH_Default_Temp_5	#672206
+79	7Networks_LH_Default_Par_1	#ddf626
+80	7Networks_LH_Default_Par_2	#935459
+81	7Networks_LH_Default_Par_3	#7ee611
+82	7Networks_LH_Default_Par_4	#61cab5
+83	7Networks_LH_Default_PFC_1	#0da48b
+84	7Networks_LH_Default_PFC_2	#2d1ace
+85	7Networks_LH_Default_PFC_3	#0cdaad
+86	7Networks_LH_Default_PFC_4	#1a921e
+87	7Networks_LH_Default_PFC_5	#12bc50
+88	7Networks_LH_Default_PFC_6	#6bc45e
+89	7Networks_LH_Default_PFC_7	#975703
+90	7Networks_LH_Default_PFC_8	#6e2637
+91	7Networks_LH_Default_PFC_9	#bba2ce
+92	7Networks_LH_Default_PFC_10	#18751d
+93	7Networks_LH_Default_PFC_11	#e4c18e
+94	7Networks_LH_Default_PFC_12	#4a4539
+95	7Networks_LH_Default_PFC_13	#64e1f8
+96	7Networks_LH_Default_pCunPCC_1	#bfa80b
+97	7Networks_LH_Default_pCunPCC_2	#5564b1
+98	7Networks_LH_Default_pCunPCC_3	#acb874
+99	7Networks_LH_Default_pCunPCC_4	#662b84
+100	7Networks_LH_Default_PHC_1	#269151
+101	7Networks_RH_Vis_1	#fdee34
+102	7Networks_RH_Vis_2	#aed983
+103	7Networks_RH_Vis_3	#0d6ed9
+104	7Networks_RH_Vis_4	#82bd68
+105	7Networks_RH_Vis_5	#695602
+106	7Networks_RH_Vis_6	#23373e
+107	7Networks_RH_Vis_7	#5fd7f3
+108	7Networks_RH_Vis_8	#ae4173
+109	7Networks_RH_Vis_9	#7dcffd
+110	7Networks_RH_Vis_10	#d56be4
+111	7Networks_RH_Vis_11	#6bb76d
+112	7Networks_RH_Vis_12	#cdeda3
+113	7Networks_RH_Vis_13	#b72188
+114	7Networks_RH_Vis_14	#325828
+115	7Networks_RH_Vis_15	#6e9f2c
+116	7Networks_RH_SomMot_1	#08b688
+117	7Networks_RH_SomMot_2	#38d806
+118	7Networks_RH_SomMot_3	#e99119
+119	7Networks_RH_SomMot_4	#ec46ff
+120	7Networks_RH_SomMot_5	#1ac302
+121	7Networks_RH_SomMot_6	#699505
+122	7Networks_RH_SomMot_7	#f0a7c2
+123	7Networks_RH_SomMot_8	#184e03
+124	7Networks_RH_SomMot_9	#f468d3
+125	7Networks_RH_SomMot_10	#4b15e6
+126	7Networks_RH_SomMot_11	#74629a
+127	7Networks_RH_SomMot_12	#0a15a3
+128	7Networks_RH_SomMot_13	#71bd17
+129	7Networks_RH_SomMot_14	#8a406b
+130	7Networks_RH_SomMot_15	#5ca77f
+131	7Networks_RH_SomMot_16	#37155d
+132	7Networks_RH_SomMot_17	#93e09b
+133	7Networks_RH_SomMot_18	#dd9c3f
+134	7Networks_RH_SomMot_19	#214287
+135	7Networks_RH_DorsAttn_Post_1	#9f9db8
+136	7Networks_RH_DorsAttn_Post_2	#a7a29b
+137	7Networks_RH_DorsAttn_Post_3	#42c98c
+138	7Networks_RH_DorsAttn_Post_4	#c4c21e
+139	7Networks_RH_DorsAttn_Post_5	#50bc85
+140	7Networks_RH_DorsAttn_Post_6	#26e0c9
+141	7Networks_RH_DorsAttn_Post_7	#d43dfb
+142	7Networks_RH_DorsAttn_Post_8	#6f5b04
+143	7Networks_RH_DorsAttn_Post_9	#90410f
+144	7Networks_RH_DorsAttn_Post_10	#f2ea0e
+145	7Networks_RH_DorsAttn_FEF_1	#670b25
+146	7Networks_RH_DorsAttn_FEF_2	#1ea207
+147	7Networks_RH_DorsAttn_PrCv_1	#789dcd
+148	7Networks_RH_SalVentAttn_TempOccPar_1	#34cd2c
+149	7Networks_RH_SalVentAttn_TempOccPar_2	#cc6566
+150	7Networks_RH_SalVentAttn_TempOccPar_3	#5a6b6b
+151	7Networks_RH_SalVentAttn_PrC_1	#8690e9
+152	7Networks_RH_SalVentAttn_FrOperIns_1	#c0e2f4
+153	7Networks_RH_SalVentAttn_FrOperIns_2	#12118d
+154	7Networks_RH_SalVentAttn_FrOperIns_3	#699046
+155	7Networks_RH_SalVentAttn_FrOperIns_4	#678870
+156	7Networks_RH_SalVentAttn_Med_1	#1086f7
+157	7Networks_RH_SalVentAttn_Med_2	#018151
+158	7Networks_RH_SalVentAttn_Med_3	#7a847c
+159	7Networks_RH_Limbic_OFC_1	#03f098
+160	7Networks_RH_Limbic_OFC_2	#10f6f6
+161	7Networks_RH_Limbic_OFC_3	#f87e59
+162	7Networks_RH_Limbic_TempPole_1	#204f37
+163	7Networks_RH_Limbic_TempPole_2	#5d2363
+164	7Networks_RH_Limbic_TempPole_3	#071ba6
+165	7Networks_RH_Cont_Par_1	#f3daf6
+166	7Networks_RH_Cont_Par_2	#3c10ca
+167	7Networks_RH_Cont_Par_3	#189235
+168	7Networks_RH_Cont_Temp_1	#b9e081
+169	7Networks_RH_Cont_PFCv_1	#df23ec
+170	7Networks_RH_Cont_PFCl_1	#c35c1c
+171	7Networks_RH_Cont_PFCl_2	#ed6444
+172	7Networks_RH_Cont_PFCl_3	#bcd649
+173	7Networks_RH_Cont_PFCl_4	#ced9e2
+174	7Networks_RH_Cont_PFCl_5	#b8d082
+175	7Networks_RH_Cont_PFCl_6	#241263
+176	7Networks_RH_Cont_PFCl_7	#0c101f
+177	7Networks_RH_Cont_pCun_1	#a10b23
+178	7Networks_RH_Cont_Cing_1	#fb736d
+179	7Networks_RH_Cont_Cing_2	#2ac456
+180	7Networks_RH_Cont_PFCmp_1	#01d588
+181	7Networks_RH_Cont_PFCmp_2	#df8019
+182	7Networks_RH_Default_Par_1	#8e506e
+183	7Networks_RH_Default_Par_2	#30bc23
+184	7Networks_RH_Default_Par_3	#40b7ac
+185	7Networks_RH_Default_Temp_1	#c2be66
+186	7Networks_RH_Default_Temp_2	#796901
+187	7Networks_RH_Default_Temp_3	#db1b6e
+188	7Networks_RH_Default_Temp_4	#26153d
+189	7Networks_RH_Default_Temp_5	#bcc7b1
+190	7Networks_RH_Default_PFCv_1	#1ba334
+191	7Networks_RH_Default_PFCdPFCm_1	#98081a
+192	7Networks_RH_Default_PFCdPFCm_2	#005400
+193	7Networks_RH_Default_PFCdPFCm_3	#0e0fb5
+194	7Networks_RH_Default_PFCdPFCm_4	#9ef471
+195	7Networks_RH_Default_PFCdPFCm_5	#9266b9
+196	7Networks_RH_Default_PFCdPFCm_6	#8af945
+197	7Networks_RH_Default_PFCdPFCm_7	#a5c339
+198	7Networks_RH_Default_pCunPCC_1	#1d4d0c
+199	7Networks_RH_Default_pCunPCC_2	#404a02
+200	7Networks_RH_Default_pCunPCC_3	#22f55b
+201	subc-rh-caudate	#67e872
+202	subc-rh-putamen	#4a1e0e
+203	subc-rh-pallidum_accumbens	#5bcbd2
+204	thal-rh-pulvinar	#b03f6f
+205	thal-rh-ventral-anterior	#cc1e8a
+206	thal-rh-mediodorsal	#f309f5
+207	thal-rh-lateral-posterior-ventral-posterior-group	#73e9b1
+208	thal-rh-pulvinar-medial-centrolateral-group	#5e28e2
+209	thal-rh-ventrolateral	#84309d
+210	thal-rh-ventral-posterior-ventrolateral-group	#07eca4
+211	amygd-rh	#4362ef
+212	hipp-rh	#7eeaa1
+213	hypo-rh-anterior-inferior	#8a530a
+214	hypo-rh-anterior-superior	#a3e454
+215	hypo-rh-posterior	#b568a3
+216	hypo-rh-tubular-inferior	#d03aa4
+217	hypo-rh-tubular-superior	#165d54
+218	subc-lh-caudate	#564655
+219	subc-lh-putamen	#75bfae
+220	subc-lh-pallidum_accumbens	#6e15be
+221	thal-lh-pulvinar	#6f7fe1
+222	thal-lh-ventral-anterior	#28cf1b
+223	thal-lh-mediodorsal	#938679
+224	thal-lh-lateral-posterior-ventral-posterior-group	#ffe571
+225	thal-lh-pulvinar-medial-centrolateral-group	#8278b8
+226	thal-lh-ventrolateral	#ebb1ca
+227	thal-lh-ventral-posterior-ventrolateral-group	#d0f2e6
+228	amygd-lh	#558ce9
+229	hipp-lh	#1d11ce
+230	hypo-lh-anterior-inferior	#c38102
+231	hypo-lh-anterior-superior	#88aa2a
+232	hypo-lh-posterior	#c72a76
+233	hypo-lh-tubular-inferior	#f53394
+234	hypo-lh-tubular-superior	#1eadc7
+235	brain-stem-midbrain	#c01c0b
+236	brain-stem-pons	#de0924
+237	brain-stem-medulla	#1deb97
+238	brain-stem-scp	#417a28
+2001	cer-Left I-IV	#b9cf63
+2002	cer-Right I-IV	#06692c
+2003	cer-Left V	#4c32ea
+2004	cer-Right V	#099452
+2005	cer-Left VI	#664f64
+2006	cer-Vermis VI	#7abb38
+2007	cer-Right VI	#9699db
+2008	cer-Left Crus I	#e661c9
+2009	cer-Vermis Crus I	#86f635
+2010	cer-Right Crus I	#a93157
+2011	cer-Left Crus II	#944a6a
+2012	cer-Vermis Crus II	#86a243
+2013	cer-Right Crus II	#a52d8c
+2014	cer-Left VIIb	#57ce30
+2015	cer-Vermis VIIb	#9f053e
+2016	cer-Right VIIb	#7c0cdc
+2017	cer-Left VIIIa	#aaf1bc
+2018	cer-Vermis VIIIa	#1b60da
+2019	cer-Right VIIIa	#3661b1
+2020	cer-Left VIIIb	#463907
+2021	cer-Vermis VIIIb	#83c3f6
+2022	cer-Right VIIIb	#48aae5
+2023	cer-Left IX	#997e0d
+2024	cer-Vermis IX	#028702
+2025	cer-Right IX	#d5af1a
+2026	cer-Left X	#72b059
+2027	cer-Vermis X	#3813d4
+2028	cer-Right X	#f18857

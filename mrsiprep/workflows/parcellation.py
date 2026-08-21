@@ -32,10 +32,12 @@ def run_parcellation_workflow(config, subject, session, mrsi_reference, registra
         project atlas labels into MRSI space.
     :param raw_t1: Non-skull-stripped T1w, required for ``"synthseg"``.
     :param t1_reference: T1w-space reference image, required for ``"atlas"``.
-    :returns: Backend-specific parcellation result object (see
+    :returns: A **list** of backend-specific parcellation results (see
         :mod:`mrsiprep.parcellation.synthseg`,
         :mod:`mrsiprep.parcellation.chimera_native`, or
-        :mod:`mrsiprep.parcellation.mni_atlas`).
+        :mod:`mrsiprep.parcellation.mni_atlas`). ``"synthseg"`` always yields
+        exactly one; ``"chimera"``/``"atlas"`` yield one per comma-separated
+        scheme/scale/atlas requested, so every caller sees the same shape.
     :raises FileNotFoundError: If ``"synthseg"`` is selected without ``raw_t1``.
     :raises RuntimeError: If ``"atlas"`` is selected but T1w-to-MNI
         normalization wasn't run.
@@ -45,14 +47,16 @@ def run_parcellation_workflow(config, subject, session, mrsi_reference, registra
     if config.parcellation_mode == "synthseg":
         if raw_t1 is None:
             raise FileNotFoundError("SynthSeg parcellation requires a raw T1w image.")
-        return run_synthseg_parcellation(
-            config,
-            subject,
-            session,
-            raw_t1,
-            mrsi_reference,
-            registration_result.mrsi_to_t1.inverse,
-        )
+        return [
+            run_synthseg_parcellation(
+                config,
+                subject,
+                session,
+                raw_t1,
+                mrsi_reference,
+                registration_result.mrsi_to_t1.inverse,
+            )
+        ]
     if config.parcellation_mode == "chimera":
         return run_chimera_parcellation(config, subject, session, mrsi_reference, registration_result.mrsi_to_t1.inverse)
     if config.parcellation_mode == "atlas":

@@ -1,5 +1,38 @@
 # Changelog
 
+## Unreleased
+
+- **Several parcellations in one run.** `--chimera-scheme`,
+  `--chimera-scale`, `--chimera-grow`, and `--atlas` now each accept a
+  comma-separated list, the same syntax Chimera's own
+  `--parcodes`/`--scale`/`--growwm` use. The lists combine as a cross
+  product, so `--chimera-scheme A,B --chimera-scale 1,3` builds four
+  parcellations off a **single** preprocessing pass -- `recon-all` and
+  Chimera each run once for the whole set, with registration, PVC, and
+  resampling shared.
+
+  Every parcellation gets its own regional table, metabolite-profile NPZ,
+  profile estimation, and connectivity matrix, each keyed by atlas and
+  scale so they never collide. The QC report stays one file per
+  recording, gaining one Parcellation section per parcellation.
+
+  Notes:
+  - The cross product is a *request*, not a guarantee: `--chimera-scale`
+    only applies to multi-resolution (Lausanne `L` cortex) schemes, so a
+    non-multi-resolution scheme yields one parcellation however many
+    scales are listed. Combinations Chimera doesn't produce are logged
+    and skipped rather than failing the run.
+  - When several `--chimera-grow` values are requested, the growth
+    distance is added to the output names to keep the variants apart.
+    Single-value runs are unaffected and keep byte-identical paths.
+  - `provenance.json`'s `outputs` gains a `parcellations` list carrying
+    every parcellation's derivatives. The existing singular keys
+    (`regional_table`, `metprofiles`, `connectivity`, `atlas_mrsi`) still
+    point at the first parcellation, so existing consumers keep working.
+  - `--chimera-scale`/`--chimera-grow` are stored as given rather than
+    coerced to `int`, so configs and presets round-trip unchanged; both
+    bare integers (as in the shipped presets) and `scaleN` are accepted.
+
 ## 1.11.0
 
 - **Removed `--mode`/`--processing-mode`.** `parc-con` was never a

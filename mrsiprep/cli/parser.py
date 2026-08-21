@@ -306,21 +306,27 @@ def build_parser() -> argparse.ArgumentParser:
         "ganglia, thalamus, amygdala, hippocampus, hypothalamus, cerebellum, brainstem, gyral WM, WM. "
         "Default 'LFMIHIFIFF' = Lausanne cortex, FreeSurfer/Aseg subcortex/cerebellum/WM, MIALThalParc "
         "thalamus, FSAmygHippoParc amygdala, HBT hippocampus, FSHypoThalParc hypothalamus, FSBrainStemParc "
-        "brainstem. See the Chimera documentation for the full per-position letter set.",
+        "brainstem. See the Chimera documentation for the full per-position letter set. Accepts a "
+        "comma-separated list (e.g. 'LFMIHIFIFF,LFMIHIFIS') to build several parcellations in one run; "
+        "see --chimera-scale for how the lists combine.",
     )
     parcellation.add_argument(
         "--chimera-scale",
-        type=_parse_scale,
-        default=3,
+        default="3",
         help="Lausanne2018 cortical parcellation granularity (1-5; higher = more, finer parcels), used only "
-        "when --chimera-scheme's cortex position is 'L'. Accepts a bare integer or 'scaleN'.",
+        "when --chimera-scheme's cortex position is 'L'. Accepts a bare integer or 'scaleN'. Also accepts a "
+        "comma-separated list (e.g. '1,3'), which is combined with --chimera-scheme and --chimera-grow as a "
+        "cross product -- '--chimera-scheme A,B --chimera-scale 1,3' builds four parcellations. Every "
+        "parcellation gets its own regional table, metabolite profiles, and connectivity outputs, all off a "
+        "single shared preprocessing pass. Schemes whose cortex position isn't 'L' aren't multi-resolution, "
+        "so they yield one parcellation regardless of how many scales are listed.",
     )
     parcellation.add_argument(
         "--chimera-grow",
-        type=int,
-        default=2,
+        default="2",
         help="Distance (mm) to grow cortical/subcortical gray-matter parcel labels into adjacent white "
-        "matter when building the gyral-WM parcellation. Set to 0 to disable growing.",
+        "matter when building the gyral-WM parcellation. Set to 0 to disable growing. Accepts a "
+        "comma-separated list, combined as a cross product with --chimera-scheme/--chimera-scale.",
     )
     parcellation.add_argument(
         "--atlas",
@@ -329,7 +335,7 @@ def build_parser() -> argparse.ArgumentParser:
         "mrsiprep.parcellation.atlas_registry.available_bundled_atlases(), e.g. 'chimera-LFMIHIFIS_scale3'); "
         "'custom' (requires --custom-atlas and --custom-atlas-lut); 'schaefer<N>' for the Schaefer 2018 "
         "N-parcel cortical atlas (e.g. 'schaefer400'); or 'mist197'/'mist-197' for the BASC multiscale "
-        "atlas at scale 197.",
+        "atlas at scale 197. Accepts a comma-separated list to project several atlases in one run.",
     )
     parcellation.add_argument(
         "--custom-atlas",
@@ -709,10 +715,3 @@ def parse_args(argv: list[str] | None = None) -> MRSIPrepConfig:
 
 def _parse_comma_list(value: str) -> list[str]:
     return [item.strip() for item in str(value).split(",") if item.strip()]
-
-
-def _parse_scale(value) -> int:
-    text = str(value)
-    if text.startswith("scale"):
-        text = text[len("scale") :]
-    return int(text)

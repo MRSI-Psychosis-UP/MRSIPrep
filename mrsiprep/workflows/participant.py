@@ -742,47 +742,67 @@ def _step_synthseg_parcellation_qc(config, subject, session, raw_t1, mrsi, regis
 
 
 def _step_parcellation(config, subject, session, raw_t1, mrsi, anat, registration, preliminary_parcels, debug):
-    """Returns (parcels, qc_sections_parcellation). parcels defaults to the
-    preliminary SynthSeg parcellation when parcellation_mode is synthseg."""
-    parcels = preliminary_parcels
-    qc_sections_parcellation = None
-    if config.parcellation_mode != "synthseg":
-        with debug.step("Parcellation"):
-            parcels = run_parcellation_workflow(
-                config,
-                subject,
-                session,
-                mrsi.reference,
-                registration,
-                raw_t1=raw_t1,
-                t1_reference=anat.registration_t1w,
-            )
-            qc_sections_parcellation = build_parcellation_qc_sections(config, subject, session, raw_t1, parcels.atlas_t1, parcels.labels)
-    return parcels, qc_sections_parcellation
+    """Returns (parcels_list, qc_sections_parcellation).
 
-
-def _step_regional_extraction(config, subject, session, corrected_maps, parcels, mrsi, tissue, debug):
-    with debug.step("Regional metabolite extraction"):
-        regional = extract_regional_metabolites(
+    Always a list: synthseg mode contributes the preliminary SynthSeg
+    parcellation as its single entry, while chimera/atlas modes contribute one
+    entry per comma-separated scheme/scale/atlas requested. QC sections for
+    every parcellation are concatenated into one Parcellation tab, each headed
+    by its parcellation id.
+    """
+    if config.parcellation_mode == "synthseg":
+        return [preliminary_parcels], None
+    with debug.step("Parcellation"):
+        parcels_list = run_parcellation_workflow(
             config,
             subject,
             session,
-            corrected_maps,
-            parcels,
-            mrsi.qcmasks,
-            mrsi.snr_map,
-            mrsi.linewidth_map,
-            mrsi.crlb_maps,
-            tissue.mrsi if tissue is not None else {},
+            mrsi.reference,
+            registration,
+            raw_t1=raw_t1,
+            t1_reference=anat.registration_t1w,
         )
+        qc_sections_parcellation = []
+        multiple = len(parcels_list) > 1
+        for parcels in parcels_list:
+            sections = build_parcellation_qc_sections(config, subject, session, raw_t1, parcels.atlas_t1, parcels.labels)
+            if multiple:
+                sections = [(f"{parcels.parcellation_id}: {heading}", body) for heading, body in sections]
+            qc_sections_parcellation.extend(sections)
+    return parcels_list, qc_sections_parcellation
+
+
+def _step_regional_extraction(config, subject, session, corrected_maps, parcels_list, mrsi, tissue, debug):
+    """Returns {parcellation_id: regional_table_path}, one entry per parcellation."""
+    regional = {}
+    for parcels in parcels_list:
+        label = "Regional metabolite extraction"
+        if len(parcels_list) > 1:
+            label += f" ({parcels.parcellation_id})"
+        with debug.step(label):
+            regional[parcels.parcellation_id] = extract_regional_metabolites(
+                config,
+                subject,
+                session,
+                corrected_maps,
+                parcels,
+                mrsi.qcmasks,
+                mrsi.snr_map,
+                mrsi.linewidth_map,
+                mrsi.crlb_maps,
+                tissue.mrsi if tissue is not None else {},
+            )
     return regional
 
 
-def _step_connectivity(config, subject, session, regional, parcels, corrected_maps, mrsi, tissue, debug):
+def _step_connectivity(config, subject, session, regional, parcels_list, corrected_maps, mrsi, tissue, debug):
     """Regional metabolic profile estimation (CRLB-scaled Monte Carlo
     uncertainty propagation) always runs, for every recording; the metabolic
     connectivity matrix is the optional add-on gated on
     ``--write-connectivity`` (see ``run_connectivity_workflow``).
+
+    Runs once per parcellation, returning
+    ``({parcellation_id: outputs}, qc_sections)``.
 
     Metabolites with no CRLB map (e.g. a dataset whose quantification
     pipeline never exported per-metabolite CRLB) still get a profile --
@@ -791,33 +811,49 @@ def _step_connectivity(config, subject, session, regional, parcels, corrected_ma
     that function's docstring for the ``n_perturbations`` degeneracy this
     implies when no metabolite has real CRLB at all.
     """
-    with debug.step("Regional metabolic profiles" + (" and connectivity" if config.write_connectivity else ""), live=False):
-        connectivity = run_connectivity_workflow(
+    connectivity = {}
+    qc_sections_connectivity = []
+    multiple = len(parcels_list) > 1
+    for parcels in parcels_list:
+        pid = parcels.parcellation_id
+        label = "Regional metabolic profiles" + (" and connectivity" if config.write_connectivity else "")
+        if multiple:
+            label += f" ({pid})"
+        with debug.step(label, live=False):
+            connectivity[pid] = run_connectivity_workflow(
+                config,
+                subject,
+                session,
+                regional[pid],
+                parcels,
+                corrected_maps,
+                mrsi.crlb_maps,
+                mrsi.brainmask,
+                gm_fraction_path=tissue.mrsi.get("GM") if tissue is not None else None,
+            )
+            sections = build_connectivity_qc_sections(config, subject, session, connectivity[pid].get("matrix_tsv"))
+            if sections and multiple:
+                sections = [(f"{pid}: {heading}", body) for heading, body in sections]
+            if sections:
+                qc_sections_connectivity.extend(sections)
+    return connectivity, (qc_sections_connectivity or None)
+
+
+def _step_metprofiles(config, subject, session, corrected_maps, mrsi, parcels_list, regional, anat):
+    """Returns {parcellation_id: metprofile_npz_path}, one entry per parcellation."""
+    return {
+        parcels.parcellation_id: export_metprofile_npz(
             config,
             subject,
             session,
-            regional,
-            parcels,
             corrected_maps,
-            mrsi.crlb_maps,
-            mrsi.brainmask,
-            gm_fraction_path=tissue.mrsi.get("GM") if tissue is not None else None,
+            mrsi.water_map,
+            parcels,
+            regional[parcels.parcellation_id],
+            anat.registration_mask,
         )
-        qc_sections_connectivity = build_connectivity_qc_sections(config, subject, session, connectivity.get("matrix_tsv"))
-    return connectivity, qc_sections_connectivity
-
-
-def _step_metprofiles(config, subject, session, corrected_maps, mrsi, parcels, regional, anat):
-    return export_metprofile_npz(
-        config,
-        subject,
-        session,
-        corrected_maps,
-        mrsi.water_map,
-        parcels,
-        regional,
-        anat.registration_mask,
-    )
+        for parcels in parcels_list
+    }
 
 
 def _step_reports(config, subject, session, outputs, qc_sections, debug):

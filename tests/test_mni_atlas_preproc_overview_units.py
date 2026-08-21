@@ -17,8 +17,11 @@ def _config(root: Path, **overrides):
         overwrite=False,
         nthreads=4,
     )
+    base.setdefault("atlas", "schaefer400")
     base.update(overrides)
-    return SimpleNamespace(**base)
+    config = SimpleNamespace(**base)
+    config.atlases = lambda: [item.strip() for item in str(config.atlas).split(",") if item.strip()]
+    return config
 
 
 def _touch(path):
@@ -48,7 +51,7 @@ class RunMniParcellationTests(unittest.TestCase):
             load_p, apply_p, copy_p = self._patches(root)
 
             with load_p, apply_p as apply_mock, copy_p:
-                result = run_mni_parcellation(
+                results = run_mni_parcellation(
                     _config(root), "S001", "V1", "MRSI_REF", "T1_REF", ["MNI2T1"], ["T12MRSI"]
                 )
 
@@ -58,7 +61,7 @@ class RunMniParcellationTests(unittest.TestCase):
             self.assertEqual(first.args[2], ["MNI2T1"])
             # Step 2: the T1w result -> MRSI, chained off step 1's output.
             self.assertEqual(second.args[0], "MRSI_REF")
-            self.assertEqual(second.args[1], result.atlas_t1)
+            self.assertEqual(second.args[1], results[0].atlas_t1)
             self.assertEqual(second.args[2], ["T12MRSI"])
 
     def test_both_warps_use_nearest_label_interpolation(self):
@@ -89,14 +92,14 @@ class RunMniParcellationTests(unittest.TestCase):
             load_p, apply_p, copy_p = self._patches(root, atlas_name="mist197")
 
             with load_p, apply_p, copy_p:
-                result = run_mni_parcellation(_config(root), "S001", "V1", "MRSI_REF", "T1_REF", [], [])
+                results = run_mni_parcellation(_config(root), "S001", "V1", "MRSI_REF", "T1_REF", [], [])
 
-            self.assertEqual(result.mode, "atlas")
-            self.assertEqual(result.atlas_name, "mist197")
-            self.assertTrue(result.atlas_mni.exists())
-            self.assertTrue(result.atlas_t1.exists())
-            self.assertTrue(result.atlas_mrsi.exists())
-            self.assertTrue(result.labels.exists())
+            self.assertEqual(results[0].mode, "atlas")
+            self.assertEqual(results[0].atlas_name, "mist197")
+            self.assertTrue(results[0].atlas_mni.exists())
+            self.assertTrue(results[0].atlas_t1.exists())
+            self.assertTrue(results[0].atlas_mrsi.exists())
+            self.assertTrue(results[0].labels.exists())
 
     def test_atlas_is_fetched_into_the_work_dir(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -154,6 +157,27 @@ class RunMniParcellationTests(unittest.TestCase):
                 run_mni_parcellation(config, "S001", "V1", "MRSI_REF", "T1_REF", [], [])
 
             copy_mock.assert_called_once()
+
+    def test_comma_separated_atlases_each_produce_their_own_parcellation(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            atlas_path = _touch(root / "atlas.nii.gz")
+            labels_path = _touch(root / "atlas.tsv")
+
+            def fake_load(_config, _work_dir, name=None):
+                return atlas_path, labels_path, name
+
+            with patch(f"{MODULE}.load_mni_atlas", side_effect=fake_load) as load_mock, patch(
+                f"{MODULE}.apply_image_transform", side_effect=_fake_apply
+            ), patch(f"{MODULE}.copy_labels", side_effect=lambda src, dst: _touch(dst)):
+                results = run_mni_parcellation(
+                    _config(root, atlas="schaefer400,mist197"), "S001", "V1", "MRSI_REF", "T1_REF", [], []
+                )
+
+            self.assertEqual([r.atlas_name for r in results], ["schaefer400", "mist197"])
+            # Each atlas resolves independently rather than reusing config.atlas.
+            self.assertEqual([call.args[2] for call in load_mock.call_args_list], ["schaefer400", "mist197"])
+            self.assertEqual(len({r.atlas_mrsi for r in results}), 2)
 
 
 class BuildPreprocOverviewSectionsTests(unittest.TestCase):

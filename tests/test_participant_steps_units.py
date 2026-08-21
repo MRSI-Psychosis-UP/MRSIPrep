@@ -14,6 +14,7 @@ from unittest.mock import MagicMock, patch
 
 from mrsiprep.cli.parser import parse_args as _parse_args
 from mrsiprep.io.bids import Recording
+from mrsiprep.parcellation.base import ParcellationResult
 from mrsiprep.workflows import participant as P
 
 _REQUIRED_ARGS = ["--metabolites", "CrPCr", "--ref-met", "CrPCr"]
@@ -307,8 +308,16 @@ class StepSynthsegParcellationQcTests(unittest.TestCase):
         self.assertIsNone(figures.call_args.kwargs["t1_to_mni"])
 
 
+def _parcels(atlas_name="atlasA", scale=None, grow=None):
+    """Minimal stand-in exposing the fields _step_* reads."""
+    return ParcellationResult(
+        atlas_mrsi=Path("atlas_mrsi"), labels="labels", atlas_t1="final",
+        atlas_name=atlas_name, scale=scale, grow=grow,
+    )
+
+
 class StepParcellationTests(unittest.TestCase):
-    def test_synthseg_returns_preliminary_parcels_unchanged(self):
+    def test_synthseg_returns_preliminary_parcels_as_a_single_entry_list(self):
         config = SimpleNamespace(parcellation_mode="synthseg")
         preliminary = SimpleNamespace(atlas_t1="preliminary")
         with patch("mrsiprep.workflows.participant.run_parcellation_workflow") as run_fn, patch(
@@ -317,24 +326,40 @@ class StepParcellationTests(unittest.TestCase):
             parcels, qc = P._step_parcellation(config, "01", "01", Path("raw_t1"), SimpleNamespace(reference="ref"), SimpleNamespace(registration_t1w="t1"), object(), preliminary, _debug())
         run_fn.assert_not_called()
         qc_fn.assert_not_called()
-        self.assertIs(parcels, preliminary)
+        # Always a list, so every downstream step sees one shape.
+        self.assertEqual(parcels, [preliminary])
         self.assertIsNone(qc)
 
     def test_chimera_and_atlas_run_full_parcellation(self):
         for parcellation_mode in ("chimera", "atlas"):
             config = SimpleNamespace(parcellation_mode=parcellation_mode)
             preliminary = SimpleNamespace(atlas_t1="preliminary")
-            final = SimpleNamespace(atlas_t1="final", labels="labels")
-            with patch("mrsiprep.workflows.participant.run_parcellation_workflow", return_value=final) as run_fn, patch(
-                "mrsiprep.workflows.participant.build_parcellation_qc_sections", return_value=["qc"]
+            final = _parcels()
+            with patch("mrsiprep.workflows.participant.run_parcellation_workflow", return_value=[final]) as run_fn, patch(
+                "mrsiprep.workflows.participant.build_parcellation_qc_sections", return_value=[("qc", "body")]
             ) as qc_fn:
                 parcels, qc = P._step_parcellation(
                     config, "01", "01", Path("raw_t1"), SimpleNamespace(reference="ref"), SimpleNamespace(registration_t1w="t1"), "registration", preliminary, _debug()
                 )
             run_fn.assert_called_once_with(config, "01", "01", "ref", "registration", raw_t1=Path("raw_t1"), t1_reference="t1")
             qc_fn.assert_called_once_with(config, "01", "01", Path("raw_t1"), "final", "labels")
-            self.assertIs(parcels, final, msg=parcellation_mode)
-            self.assertEqual(qc, ["qc"], msg=parcellation_mode)
+            self.assertEqual(parcels, [final], msg=parcellation_mode)
+            # Single parcellation: headings are left untouched.
+            self.assertEqual(qc, [("qc", "body")], msg=parcellation_mode)
+
+    def test_multiple_parcellations_prefix_their_qc_headings(self):
+        config = SimpleNamespace(parcellation_mode="chimera")
+        first, second = _parcels("chimeraA", "scale1"), _parcels("chimeraB", "scale3")
+        with patch("mrsiprep.workflows.participant.run_parcellation_workflow", return_value=[first, second]), patch(
+            "mrsiprep.workflows.participant.build_parcellation_qc_sections", return_value=[("Overview", "body")]
+        ):
+            _, qc = P._step_parcellation(
+                config, "01", "01", Path("raw_t1"), SimpleNamespace(reference="ref"), SimpleNamespace(registration_t1w="t1"), "registration", SimpleNamespace(), _debug()
+            )
+        self.assertEqual(
+            [heading for heading, _ in qc],
+            ["chimeraA-scale1: Overview", "chimeraB-scale3: Overview"],
+        )
 
 
 class StepRegionalExtractionTests(unittest.TestCase):
@@ -345,15 +370,25 @@ class StepRegionalExtractionTests(unittest.TestCase):
         config = SimpleNamespace()
         tissue = SimpleNamespace(mrsi={"GM": Path("gm")})
         with patch("mrsiprep.workflows.participant.extract_regional_metabolites", return_value="regional") as extract:
-            regional = P._step_regional_extraction(config, "01", "01", {}, "parcels", self._mrsi(), tissue, _debug())
+            regional = P._step_regional_extraction(config, "01", "01", {}, [_parcels()], self._mrsi(), tissue, _debug())
         self.assertEqual(extract.call_args.args[-1], {"GM": Path("gm")})
-        self.assertEqual(regional, "regional")
+        self.assertEqual(regional, {"atlasA": "regional"})
 
     def test_without_tissue_passes_empty_dict(self):
         config = SimpleNamespace()
         with patch("mrsiprep.workflows.participant.extract_regional_metabolites", return_value="regional") as extract:
-            P._step_regional_extraction(config, "01", "01", {}, "parcels", self._mrsi(), None, _debug())
+            P._step_regional_extraction(config, "01", "01", {}, [_parcels()], self._mrsi(), None, _debug())
         self.assertEqual(extract.call_args.args[-1], {})
+
+    def test_runs_once_per_parcellation_keyed_by_id(self):
+        config = SimpleNamespace()
+        parcels = [_parcels("chimeraA", "scale1"), _parcels("chimeraB", "scale3")]
+        with patch(
+            "mrsiprep.workflows.participant.extract_regional_metabolites", side_effect=["first", "second"]
+        ) as extract:
+            regional = P._step_regional_extraction(config, "01", "01", {}, parcels, self._mrsi(), None, _debug())
+        self.assertEqual(extract.call_count, 2)
+        self.assertEqual(regional, {"chimeraA-scale1": "first", "chimeraB-scale3": "second"})
 
 
 class StepConnectivityTests(unittest.TestCase):
@@ -366,10 +401,12 @@ class StepConnectivityTests(unittest.TestCase):
         with patch("mrsiprep.workflows.participant.run_connectivity_workflow", return_value={}) as run_fn, patch(
             "mrsiprep.workflows.participant.build_connectivity_qc_sections", return_value=["conn-qc"]
         ) as qc_fn:
-            connectivity, qc = P._step_connectivity(config, "01", "01", "regional", "parcels", {}, mrsi, None, _debug())
+            connectivity, qc = P._step_connectivity(
+                config, "01", "01", {"atlasA": "regional"}, [_parcels()], {}, mrsi, None, _debug()
+            )
         run_fn.assert_called_once()
         qc_fn.assert_called_once()
-        self.assertEqual(connectivity, {})
+        self.assertEqual(connectivity, {"atlasA": {}})
         self.assertEqual(qc, ["conn-qc"])
 
     def test_with_tissue_passes_gm_fraction_path(self):
@@ -379,10 +416,12 @@ class StepConnectivityTests(unittest.TestCase):
         with patch(
             "mrsiprep.workflows.participant.run_connectivity_workflow", return_value={"matrix_tsv": Path("matrix.tsv")}
         ) as run_fn, patch("mrsiprep.workflows.participant.build_connectivity_qc_sections", return_value=["conn-qc"]) as qc_fn:
-            connectivity, qc = P._step_connectivity(config, "01", "01", "regional", "parcels", {}, mrsi, tissue, _debug())
+            connectivity, qc = P._step_connectivity(
+                config, "01", "01", {"atlasA": "regional"}, [_parcels()], {}, mrsi, tissue, _debug()
+            )
         self.assertEqual(run_fn.call_args.kwargs["gm_fraction_path"], Path("gm"))
         qc_fn.assert_called_once_with(config, "01", "01", Path("matrix.tsv"))
-        self.assertEqual(connectivity, {"matrix_tsv": Path("matrix.tsv")})
+        self.assertEqual(connectivity, {"atlasA": {"matrix_tsv": Path("matrix.tsv")}})
         self.assertEqual(qc, ["conn-qc"])
 
     def test_without_tissue_passes_none_gm_fraction_path(self):
@@ -391,8 +430,21 @@ class StepConnectivityTests(unittest.TestCase):
         with patch("mrsiprep.workflows.participant.run_connectivity_workflow", return_value={}) as run_fn, patch(
             "mrsiprep.workflows.participant.build_connectivity_qc_sections"
         ):
-            P._step_connectivity(config, "01", "01", "regional", "parcels", {}, mrsi, None, _debug())
+            P._step_connectivity(config, "01", "01", {"atlasA": "regional"}, [_parcels()], {}, mrsi, None, _debug())
         self.assertIsNone(run_fn.call_args.kwargs["gm_fraction_path"])
+
+    def test_each_parcellation_gets_its_own_profiles_and_regional_table(self):
+        config = SimpleNamespace(write_connectivity=False)
+        mrsi = SimpleNamespace(crlb_maps={}, brainmask=Path("mask"))
+        parcels = [_parcels("chimeraA", "scale1"), _parcels("chimeraB", "scale3")]
+        regional = {"chimeraA-scale1": "tableA", "chimeraB-scale3": "tableB"}
+        with patch(
+            "mrsiprep.workflows.participant.run_connectivity_workflow", side_effect=[{"profiles": "a"}, {"profiles": "b"}]
+        ) as run_fn, patch("mrsiprep.workflows.participant.build_connectivity_qc_sections", return_value=[]):
+            connectivity, _ = P._step_connectivity(config, "01", "01", regional, parcels, {}, mrsi, None, _debug())
+        self.assertEqual(connectivity, {"chimeraA-scale1": {"profiles": "a"}, "chimeraB-scale3": {"profiles": "b"}})
+        # Each call receives that parcellation's own regional table.
+        self.assertEqual([call.args[3] for call in run_fn.call_args_list], ["tableA", "tableB"])
 
 
 class StepMetprofilesTests(unittest.TestCase):
@@ -400,10 +452,24 @@ class StepMetprofilesTests(unittest.TestCase):
         config = SimpleNamespace()
         mrsi = SimpleNamespace(water_map=Path("water"))
         anat = SimpleNamespace(registration_mask=Path("mask"))
+        parcels = _parcels()
         with patch("mrsiprep.workflows.participant.export_metprofile_npz", return_value="npz-path") as fn:
-            result = P._step_metprofiles(config, "01", "01", {"corrected": 1}, mrsi, "parcels", "regional", anat)
-        fn.assert_called_once_with(config, "01", "01", {"corrected": 1}, Path("water"), "parcels", "regional", Path("mask"))
-        self.assertEqual(result, "npz-path")
+            result = P._step_metprofiles(
+                config, "01", "01", {"corrected": 1}, mrsi, [parcels], {"atlasA": "regional"}, anat
+            )
+        fn.assert_called_once_with(config, "01", "01", {"corrected": 1}, Path("water"), parcels, "regional", Path("mask"))
+        self.assertEqual(result, {"atlasA": "npz-path"})
+
+    def test_exports_one_npz_per_parcellation(self):
+        config = SimpleNamespace()
+        mrsi = SimpleNamespace(water_map=Path("water"))
+        anat = SimpleNamespace(registration_mask=Path("mask"))
+        parcels = [_parcels("chimeraA", "scale1"), _parcels("chimeraB", "scale3")]
+        regional = {"chimeraA-scale1": "tableA", "chimeraB-scale3": "tableB"}
+        with patch("mrsiprep.workflows.participant.export_metprofile_npz", side_effect=["a", "b"]) as fn:
+            result = P._step_metprofiles(config, "01", "01", {}, mrsi, parcels, regional, anat)
+        self.assertEqual(fn.call_count, 2)
+        self.assertEqual(result, {"chimeraA-scale1": "a", "chimeraB-scale3": "b"})
 
 
 class StepReportsTests(unittest.TestCase):

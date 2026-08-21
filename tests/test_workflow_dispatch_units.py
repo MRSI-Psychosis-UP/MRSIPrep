@@ -27,7 +27,8 @@ class RunParcellationWorkflowTests(unittest.TestCase):
                 config, "S001", "V1", "REF", _registration(), raw_t1="RAWT1"
             )
 
-        self.assertEqual(result, "SYNTH")
+        # Always a list, even for the single synthseg parcellation.
+        self.assertEqual(result, ["SYNTH"])
         self.assertEqual(run.call_args.args[3], "RAWT1")
         self.assertEqual(run.call_args.args[5], "MRSI_INV")
 
@@ -46,7 +47,7 @@ class RunParcellationWorkflowTests(unittest.TestCase):
         with patch("mrsiprep.workflows.parcellation.run_chimera_parcellation", return_value="CHIM") as run:
             result = run_parcellation_workflow(config, "S001", "V1", "REF", _registration())
 
-        self.assertEqual(result, "CHIM")
+        self.assertEqual(result, "CHIM")   # backend already returns a list
         self.assertEqual(run.call_args.args[4], "MRSI_INV")
 
     def test_chimera_does_not_require_raw_t1_at_this_layer(self):
