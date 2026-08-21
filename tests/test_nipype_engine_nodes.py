@@ -219,12 +219,11 @@ class StepParcellationTests(unittest.TestCase):
 class StepRegionalTests(unittest.TestCase):
     def test_wires_ctx_in_and_out(self):
         ctx = {"corrected_maps": "corrected", "parcels": "parcels_obj", "mrsi": "mrsi_obj", "tissue": "tissue_obj"}
-        with patch("mrsiprep.workflows.participant._step_regional_extraction", return_value=("regional", "regression")) as step:
+        with patch("mrsiprep.workflows.participant._step_regional_extraction", return_value="regional") as step:
             result = N.step_regional(_fake_config(), _SUBJECT, _SESSION, ctx)
 
         step.assert_called_once_with(unittest.mock.ANY, _SUBJECT, _SESSION, "corrected", "parcels_obj", "mrsi_obj", "tissue_obj", unittest.mock.ANY)
         self.assertEqual(result["regional"], "regional")
-        self.assertEqual(result["regional_regression"], "regression")
 
 
 class StepConnectivityTests(unittest.TestCase):
@@ -265,7 +264,6 @@ class StepReportsTests(unittest.TestCase):
             "tissue_4d": "tissue_4d_obj",
             "preliminary_parcels": preliminary_parcels,
             "regional": "regional_obj",
-            "regional_regression": "regression_obj",
             "metprofiles": "metprofiles_obj",
             "connectivity": "connectivity_obj",
             "transformed": "transformed_obj",
