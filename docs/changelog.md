@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.10.0
 
 - **Added `--reports-only`,** which reuses every already-completed step's
   output derivatives as-is (tissue segmentation, registration,
