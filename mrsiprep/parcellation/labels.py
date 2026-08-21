@@ -30,6 +30,11 @@ def write_labels(indices, labels, out_path: str | Path) -> Path:
 def normalize_label_table(path: str | Path, out_path: str | Path | None = None) -> Path:
     path = Path(path)
     df = pd.read_csv(path, sep="\t")
+    # Compare against what was actually on disk, not the renamed frame below:
+    # checking the post-rename columns would always look "already normalized"
+    # and skip the write, leaving legacy index/name tables unconverted (and
+    # silently hemisphere-less) for every caller.
+    original_columns = list(df.columns)
     if "index" in df.columns and "parcel_id" not in df.columns:
         df = df.rename(columns={"index": "parcel_id"})
     if "name" in df.columns and "parcel_name" not in df.columns:
@@ -39,7 +44,7 @@ def normalize_label_table(path: str | Path, out_path: str | Path | None = None) 
     if "hemisphere" not in df.columns:
         df["hemisphere"] = df["parcel_name"].map(infer_hemisphere)
     out_path = Path(out_path) if out_path else path
-    if out_path == path and {"parcel_id", "parcel_name"}.issubset(df.columns):
+    if out_path == path and list(df.columns) == original_columns:
         return path
     out_path.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(out_path, sep="\t", index=False)
