@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.10.1
+
+- **Fixed the SynthMRSI-Project quickstart's `unzip` instructions**
+  (`usage_basic.md`, `PUBLIC_DATASET.md`). The published zip has no
+  top-level wrapper folder -- its contents sit flat at the archive root
+  -- so the previously documented plain `unzip SynthMRSI-Project.zip`
+  scattered files into the current directory instead of a
+  `SynthMRSI-Project/` directory, breaking the demo's `docker run`
+  mounts. Now uses `unzip SynthMRSI-Project.zip -d SynthMRSI-Project`.
+
 ## 1.10.0
 
 - **Added `--reports-only`,** which reuses every already-completed step's
