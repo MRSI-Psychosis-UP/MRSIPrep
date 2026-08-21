@@ -2,24 +2,27 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import nibabel as nib
 import numpy as np
 
 from mrsiprep.interfaces.ants import (
     ANTsError,
+    Registration,
     _as_image_path,
     _cli_interpolation,
     _cli_transform_code,
     _copy_required,
     _itk_thread_env,
+    _load_ants_image,
     _resolve_type_of_transform,
     apply_transforms,
     apply_transforms_cli,
     register,
     register_cli,
     require_cli,
+    run_cli,
     save_all_transforms,
 )
 
@@ -340,6 +343,239 @@ class RegisterFallsBackToCliTests(unittest.TestCase):
         with patch("mrsiprep.interfaces.ants._import_ants", side_effect=ANTsError("no antspyx")):
             with self.assertRaisesRegex(ANTsError, "requires an output path"):
                 apply_transforms("fixed.nii.gz", "moving.nii.gz", ["a.mat"], out_path=None)
+
+
+class LoadAntsImageTests(unittest.TestCase):
+    def test_existing_path_is_read_via_ants(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "t1w.nii.gz"
+            path.touch()
+            fake_ants = MagicMock()
+            fake_ants.image_read.return_value = "loaded-image"
+            with patch("mrsiprep.interfaces.ants._import_ants", return_value=fake_ants):
+                result = _load_ants_image(path)
+        fake_ants.image_read.assert_called_once_with(str(path))
+        self.assertEqual(result, "loaded-image")
+
+    def test_missing_path_raises(self):
+        with patch("mrsiprep.interfaces.ants._import_ants", return_value=MagicMock()):
+            with self.assertRaisesRegex(ANTsError, "does not exist"):
+                _load_ants_image("/no/such/file.nii.gz")
+
+    def test_nibabel_image_is_saved_to_a_cleaned_up_temp_file(self):
+        image = nib.Nifti1Image(np.ones((2, 2, 2), dtype=np.float32), np.eye(4))
+        fake_ants = MagicMock()
+        fake_ants.image_read.return_value = "loaded-image"
+        with patch("mrsiprep.interfaces.ants._import_ants", return_value=fake_ants):
+            result = _load_ants_image(image)
+        temp_path_str = fake_ants.image_read.call_args[0][0]
+        self.assertTrue(temp_path_str.endswith(".nii.gz"))
+        self.assertFalse(Path(temp_path_str).exists())  # cleaned up in the finally block
+        self.assertEqual(result, "loaded-image")
+
+    def test_antsimage_instance_passes_through_unchanged(self):
+        fake_image = type("ANTsImage", (), {})()
+        fake_ants = MagicMock()
+        with patch("mrsiprep.interfaces.ants._import_ants", return_value=fake_ants):
+            result = _load_ants_image(fake_image)
+        self.assertIs(result, fake_image)
+        fake_ants.image_read.assert_not_called()
+
+    def test_unsupported_type_raises(self):
+        with patch("mrsiprep.interfaces.ants._import_ants", return_value=MagicMock()):
+            with self.assertRaisesRegex(ANTsError, "path, nibabel image, or ANTsImage"):
+                _load_ants_image(12345)
+
+
+class RegisterAntspyxSuccessTests(unittest.TestCase):
+    """antspyx isn't installed in CI, so these mock _import_ants() to
+    *succeed* -- covering register()'s try-block, which is otherwise never
+    exercised (RegisterFallsBackToCliTests only covers _import_ants failing)."""
+
+    def test_success_path_calls_antspyx_and_skips_cli(self):
+        fake_ants = MagicMock()
+        fake_ants.registration.return_value = {"fwdtransforms": ["x"], "invtransforms": ["y"]}
+        with patch("mrsiprep.interfaces.ants._import_ants", return_value=fake_ants), patch(
+            "mrsiprep.interfaces.ants._load_ants_image", side_effect=lambda img: f"loaded:{img}"
+        ), patch("mrsiprep.interfaces.ants.save_all_transforms", return_value={"forward": [], "inverse": []}) as save_fn, patch(
+            "mrsiprep.interfaces.ants.register_cli"
+        ) as register_cli_mock:
+            result = register("fixed.nii.gz", "moving.nii.gz", "out_prefix", transform="sr")
+
+        register_cli_mock.assert_not_called()
+        kwargs = fake_ants.registration.call_args.kwargs
+        self.assertEqual(kwargs["fixed"], "loaded:fixed.nii.gz")
+        self.assertEqual(kwargs["moving"], "loaded:moving.nii.gz")
+        self.assertIsNone(kwargs["fixed_mask"])
+        self.assertIsNone(kwargs["moving_mask"])
+        self.assertEqual(kwargs["type_of_transform"], "antsRegistrationSyN[sr]")
+        save_fn.assert_called_once_with({"fwdtransforms": ["x"], "invtransforms": ["y"]}, "out_prefix")
+        self.assertEqual(result, {"forward": [], "inverse": []})
+
+    def test_full_preset_transform_name_passed_verbatim(self):
+        fake_ants = MagicMock()
+        fake_ants.registration.return_value = {}
+        with patch("mrsiprep.interfaces.ants._import_ants", return_value=fake_ants), patch(
+            "mrsiprep.interfaces.ants._load_ants_image", side_effect=lambda img: img
+        ), patch("mrsiprep.interfaces.ants.save_all_transforms", return_value={}):
+            register("fixed.nii.gz", "moving.nii.gz", "out_prefix", transform="SyN")
+        self.assertEqual(fake_ants.registration.call_args.kwargs["type_of_transform"], "SyN")
+
+    def test_masks_are_loaded_when_provided(self):
+        fake_ants = MagicMock()
+        fake_ants.registration.return_value = {}
+        with patch("mrsiprep.interfaces.ants._import_ants", return_value=fake_ants), patch(
+            "mrsiprep.interfaces.ants._load_ants_image", side_effect=lambda img: f"loaded:{img}"
+        ), patch("mrsiprep.interfaces.ants.save_all_transforms", return_value={}):
+            register("fixed.nii.gz", "moving.nii.gz", "out_prefix", fixed_mask="fmask.nii.gz", moving_mask="mmask.nii.gz")
+        kwargs = fake_ants.registration.call_args.kwargs
+        self.assertEqual(kwargs["fixed_mask"], "loaded:fmask.nii.gz")
+        self.assertEqual(kwargs["moving_mask"], "loaded:mmask.nii.gz")
+
+    def test_non_antserror_exception_propagates_without_cli_fallback(self):
+        fake_ants = MagicMock()
+        fake_ants.registration.side_effect = RuntimeError("antspyx internal crash")
+        with patch("mrsiprep.interfaces.ants._import_ants", return_value=fake_ants), patch(
+            "mrsiprep.interfaces.ants._load_ants_image", side_effect=lambda img: img
+        ), patch("mrsiprep.interfaces.ants.register_cli") as register_cli_mock:
+            with self.assertRaisesRegex(RuntimeError, "antspyx internal crash"):
+                register("fixed.nii.gz", "moving.nii.gz", "out_prefix")
+        register_cli_mock.assert_not_called()
+
+    def test_antserror_raised_mid_pipeline_still_falls_back_to_cli(self):
+        """The except clause wraps the whole antspyx pipeline, not just
+        _import_ants() -- an ANTsError from anywhere inside it also triggers
+        the CLI fallback, not just antspyx being absent."""
+        fake_ants = MagicMock()
+        fake_ants.registration.side_effect = ANTsError("registration blew up")
+        with patch("mrsiprep.interfaces.ants._import_ants", return_value=fake_ants), patch(
+            "mrsiprep.interfaces.ants._load_ants_image", side_effect=lambda img: img
+        ), patch("mrsiprep.interfaces.ants.register_cli", return_value={"forward": [], "inverse": []}) as register_cli_mock:
+            result = register("fixed.nii.gz", "moving.nii.gz", "out_prefix")
+        register_cli_mock.assert_called_once()
+        self.assertEqual(result, {"forward": [], "inverse": []})
+
+
+class ApplyTransformsAntspyxSuccessTests(unittest.TestCase):
+    def setUp(self):
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._tmpdir.name)
+        self.transform = self.tmp / "mrsi_to_t1.affine.mat"
+        self.transform.touch()
+
+    def tearDown(self):
+        self._tmpdir.cleanup()
+
+    def test_returns_warped_image_directly_when_no_out_path(self):
+        fake_ants = MagicMock()
+        fake_ants.apply_transforms.return_value = "warped-image"
+        with patch("mrsiprep.interfaces.ants._import_ants", return_value=fake_ants), patch(
+            "mrsiprep.interfaces.ants._load_ants_image", side_effect=lambda img: f"loaded:{img}"
+        ):
+            result = apply_transforms("fixed.nii.gz", "moving.nii.gz", [self.transform], out_path=None)
+        self.assertEqual(result, "warped-image")
+        fake_ants.image_write.assert_not_called()
+        kwargs = fake_ants.apply_transforms.call_args.kwargs
+        self.assertEqual(kwargs["transformlist"], [str(self.transform)])
+        self.assertEqual(kwargs["interpolator"], "linear")
+
+    def test_writes_and_returns_out_path_when_given(self):
+        out_path = self.tmp / "out" / "warped.nii.gz"
+        fake_ants = MagicMock()
+        fake_ants.apply_transforms.return_value = "warped-image"
+        with patch("mrsiprep.interfaces.ants._import_ants", return_value=fake_ants), patch(
+            "mrsiprep.interfaces.ants._load_ants_image", side_effect=lambda img: img
+        ):
+            result = apply_transforms("fixed.nii.gz", "moving.nii.gz", [self.transform], out_path=out_path)
+        self.assertEqual(result, out_path)
+        fake_ants.image_write.assert_called_once_with("warped-image", str(out_path))
+
+    def test_missing_transforms_with_out_path_falls_back_to_cli(self):
+        """A transform list that resolves to no existing files raises
+        ANTsError internally, which this function's own except-clause then
+        catches -- since out_path is given, it retries via the CLI backend
+        instead of propagating the "No transform files exist" error."""
+        missing = self.tmp / "does_not_exist.affine.mat"
+        out_path = self.tmp / "warped.nii.gz"
+        with patch("mrsiprep.interfaces.ants._import_ants", return_value=MagicMock()), patch(
+            "mrsiprep.interfaces.ants.apply_transforms_cli", return_value=out_path
+        ) as apply_cli_mock:
+            result = apply_transforms("fixed.nii.gz", "moving.nii.gz", [missing], out_path=out_path)
+        apply_cli_mock.assert_called_once()
+        self.assertEqual(result, out_path)
+
+    def test_missing_transforms_without_out_path_raises_output_path_message(self):
+        """The original "No transform files exist" ANTsError is swallowed by
+        this function's own except-clause; with no out_path to retry the CLI
+        against, it re-raises a different, output-path-specific message."""
+        missing = self.tmp / "does_not_exist.affine.mat"
+        with patch("mrsiprep.interfaces.ants._import_ants", return_value=MagicMock()):
+            with self.assertRaisesRegex(ANTsError, "requires an output path"):
+                apply_transforms("fixed.nii.gz", "moving.nii.gz", [missing], out_path=None)
+
+
+class RegistrationFacadeTests(unittest.TestCase):
+    """The Registration class is a facade "matching the mrsitoolbox workflow
+    API" -- not used anywhere in the pipeline itself (only the module-level
+    register()/apply_transforms() are), but still real, reachable code."""
+
+    def test_register_wraps_transform_verbatim_even_for_full_presets(self):
+        """Unlike the module-level register()/_resolve_type_of_transform(),
+        this facade always wraps transform in antsRegistrationSyN[...], even
+        for full preset names like "SyN" -- and has no try/except, so an
+        antspyx-missing failure propagates instead of falling back to CLI."""
+        fake_ants = MagicMock()
+        fake_ants.registration.return_value = "tx-result"
+        with patch("mrsiprep.interfaces.ants._import_ants", return_value=fake_ants), patch(
+            "mrsiprep.interfaces.ants._load_ants_image", side_effect=lambda img: f"loaded:{img}"
+        ):
+            tx, elapsed = Registration().register("fixed.nii.gz", "moving.nii.gz", transform="SyN")
+        self.assertEqual(fake_ants.registration.call_args.kwargs["type_of_transform"], "antsRegistrationSyN[SyN]")
+        self.assertEqual(tx, "tx-result")
+        self.assertIsInstance(elapsed, float)
+
+    def test_register_propagates_when_antspyx_missing(self):
+        with patch("mrsiprep.interfaces.ants._import_ants", side_effect=ANTsError("no antspyx")):
+            with self.assertRaises(ANTsError):
+                Registration().register("fixed.nii.gz", "moving.nii.gz")
+
+    def test_transform_delegates_to_antspyx_apply_transforms(self):
+        fake_ants = MagicMock()
+        fake_ants.apply_transforms.return_value = "warped"
+        with patch("mrsiprep.interfaces.ants._import_ants", return_value=fake_ants), patch(
+            "mrsiprep.interfaces.ants._load_ants_image", side_effect=lambda img: img
+        ):
+            result = Registration().transform("fixed.nii.gz", "moving.nii.gz", [Path("a.mat"), Path("b.mat")])
+        self.assertEqual(result, "warped")
+        kwargs = fake_ants.apply_transforms.call_args.kwargs
+        self.assertEqual(kwargs["transformlist"], ["a.mat", "b.mat"])
+        self.assertEqual(kwargs["interpolator"], "linear")
+
+    def test_save_all_transforms_delegates_to_module_level_function(self):
+        with patch("mrsiprep.interfaces.ants.save_all_transforms", return_value="saved") as save_fn:
+            result = Registration().save_all_transforms({"fwdtransforms": []}, "prefix")
+        save_fn.assert_called_once_with({"fwdtransforms": []}, "prefix")
+        self.assertEqual(result, "saved")
+
+
+class RunCliTests(unittest.TestCase):
+    def test_no_threads_passes_env_none(self):
+        with patch("mrsiprep.interfaces.ants.run_checked") as run_checked_mock:
+            run_cli(["antsRegistrationSyN.sh", "-d", "3"])
+        run_checked_mock.assert_called_once_with(
+            ["antsRegistrationSyN.sh", "-d", "3"], verbose=False, env=None, error_cls=ANTsError, error_prefix="antsRegistrationSyN.sh"
+        )
+
+    def test_threads_sets_itk_env_var_in_a_copy_of_os_environ(self):
+        os.environ.pop("ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS", None)
+        with patch.dict(os.environ, {"SOME_OTHER_VAR": "keep-me"}, clear=False), patch(
+            "mrsiprep.interfaces.ants.run_checked"
+        ) as run_checked_mock:
+            run_cli(["antsApplyTransforms"], threads=4)
+        env = run_checked_mock.call_args.kwargs["env"]
+        self.assertEqual(env["ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS"], "4")
+        self.assertEqual(env["SOME_OTHER_VAR"], "keep-me")
+        self.assertNotIn("ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS", os.environ)
 
 
 if __name__ == "__main__":
