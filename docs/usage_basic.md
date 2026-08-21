@@ -44,7 +44,7 @@ MRSI signal, CC0) and run MRSIPrep against it directly:
 # 1. Download and extract the public test dataset (~300-400MB)
 curl -L -o SynthMRSI-Project.zip \
   "https://zenodo.org/records/22014466/files/SynthMRSI-Project.zip"
-unzip SynthMRSI-Project.zip
+unzip SynthMRSI-Project.zip -d SynthMRSI-Project
 
 # 2. Pull the CPU image
 docker pull mrsiup/mrsiprep:cpu
