@@ -6,7 +6,6 @@ from unittest.mock import MagicMock, patch
 
 from mrsiprep.cli.parser import parse_args as _parse_args
 from mrsiprep.io.bids import Recording
-from mrsiprep.utils.debug import Debug
 from mrsiprep.workflows import participant as P
 
 _REQUIRED_ARGS = ["--metabolites", "CrPCr", "--ref-met", "CrPCr"]

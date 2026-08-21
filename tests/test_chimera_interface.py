@@ -118,7 +118,7 @@ class ForceRerunTests(RunChimeraFixture):
 
     def test_force_only_deletes_matching_scheme_and_scale(self):
         other_scheme = self._touch_output("01", "01", "SFMIHIFIS", 2)
-        expected = self.derivatives_dir / "chimera" / f"sub-01_ses-01_atlas-chimeraLFMIHIFIFF_scale-3_dseg.nii.gz"
+        expected = self.derivatives_dir / "chimera" / "sub-01_ses-01_atlas-chimeraLFMIHIFIFF_scale-3_dseg.nii.gz"
 
         def fake_run_checked(cmd, **_kwargs):
             self.assertTrue(other_scheme.exists(), "a different scheme/scale output must not be touched by --force cleanup")
