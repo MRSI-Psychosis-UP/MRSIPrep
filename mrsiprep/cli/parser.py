@@ -118,14 +118,6 @@ def build_parser() -> argparse.ArgumentParser:
 
     processing = parser.add_argument_group("Options for performing only a subset of the workflow")
     processing.add_argument(
-        "--mode",
-        "--processing-mode",
-        dest="processing_mode",
-        choices=["mni-norm", "parc-con"],
-        default="mni-norm",
-        help="Processing mode.",
-    )
-    processing.add_argument(
         "--tissue-backend",
         choices=["synthseg-fast", "existing", "none"],
         default="synthseg-fast",
@@ -256,10 +248,10 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["brain-csf", "brain", "raw"],
         default=None,
         help="Which T1w image registration targets. 'brain' registers directly to the skull-stripped T1w "
-        "(default for --mode mni-norm). 'brain-csf' re-adds the CSF compartment to the skull-stripped "
-        "image before registering, so CSF-adjacent MRSI signal isn't clipped at the brain-only boundary "
-        "(default for --mode parc-con; requires a CAT12 p3 CSF map). 'raw' registers to the original, "
-        "non-skull-stripped T1w with no fixed mask.",
+        "(default when --parcellation-mode synthseg). 'brain-csf' re-adds the CSF compartment to the "
+        "skull-stripped image before registering, so CSF-adjacent MRSI signal isn't clipped at the "
+        "brain-only boundary (default when --parcellation-mode chimera or mni; requires a CAT12 p3 CSF "
+        "map). 'raw' registers to the original, non-skull-stripped T1w with no fixed mask.",
     )
     registration.add_argument(
         "--csf-pv-threshold",
@@ -287,12 +279,17 @@ def build_parser() -> argparse.ArgumentParser:
     parcellation.add_argument(
         "--parcellation-mode",
         choices=["synthseg", "chimera", "mni"],
-        default=None,
-        help="Parcellation scheme. 'synthseg' uses SynthSeg's own cortical/subcortical labels (default for "
-        "--mode mni-norm; the only mode compatible with mni-norm). 'chimera' runs the Chimera "
-        "multi-atlas fusion tool live, combining several region-specific atlases per --chimera-scheme "
-        "(default for --mode parc-con; requires FreeSurfer recon-all and FS_LICENSE). 'mni' warps a "
-        "pre-bundled or custom MNI-space atlas (see --atlas) into subject space instead of running Chimera.",
+        default="synthseg",
+        help="Parcellation scheme, and the primary switch for how much of the pipeline runs. 'synthseg' "
+        "(default) uses SynthSeg's own cortical/subcortical labels for parcellation, needs no FreeSurfer "
+        "recon-all, and is the lighter-weight default (see --registration-t1-target). 'chimera' runs the "
+        "Chimera multi-atlas fusion tool live, combining several region-specific atlases per "
+        "--chimera-scheme (requires FreeSurfer recon-all and FS_LICENSE). 'mni' warps a pre-bundled or "
+        "custom MNI-space atlas (see --atlas) into subject space instead of running Chimera. Regional "
+        "metabolite extraction, per-parcel metabolite-profile export, and CRLB-scaled Monte Carlo profile "
+        "estimation all run unconditionally regardless of this flag's value -- 'chimera'/'mni' "
+        "additionally run that parcellation step itself on top of SynthSeg's own parcellation, which "
+        "always runs for QC. See --write-connectivity for the optional connectivity matrix.",
     )
     parcellation.add_argument(
         "--synthseg-mode",
@@ -362,8 +359,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--write-connectivity",
         action="store_true",
         help="Build and write a regional metabolic connectivity (similarity) matrix on top of the "
-        "regional metabolic profiles that parc-con mode already computes unconditionally, using "
-        "CRLB-scaled noise perturbations to estimate edge similarity between parcels' metabolite profiles.",
+        "regional metabolic profiles that mrsiprep already computes unconditionally for every recording, "
+        "using CRLB-scaled noise perturbations to estimate edge similarity between parcels' metabolite profiles.",
     )
     connectivity.add_argument(
         "--connectivity-method",
@@ -404,7 +401,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     processing_control = parser.add_argument_group("Workflow configuration")
     processing_control.add_argument("--transform", default="", help="Legacy output transform override; prefer --output-spaces.")
-    processing_control.add_argument("--no-filter", action="store_true", help="Disable biharmonic spike filtering (enabled by default in every processing mode).")
+    processing_control.add_argument("--no-filter", action="store_true", help="Disable biharmonic spike filtering (enabled by default).")
     processing_control.add_argument(
         "--filter-fwhm-mm",
         type=float,
@@ -447,9 +444,8 @@ def build_parser() -> argparse.ArgumentParser:
     processing_control.add_argument(
         "--no-pvc",
         action="store_true",
-        help="Skip partial-volume correction (PETPVC) entirely, even in --mode parc-con. Equivalent to "
-        "--tissue-backend none, except tissue segmentation itself still runs (its maps are just not used "
-        "for PVC).",
+        help="Skip partial-volume correction (PETPVC) entirely. Equivalent to --tissue-backend none, "
+        "except tissue segmentation itself still runs (its maps are just not used for PVC).",
     )
     processing_control.add_argument(
         "--longitudinal",
@@ -641,7 +637,6 @@ def parse_args(argv: list[str] | None = None) -> MRSIPrepConfig:
         snr_min=args.snr_min,
         linewidth_max=args.linewidth_max,
         crlb_max=args.crlb_max,
-        processing_mode=args.processing_mode,
         tissue_backend=args.tissue_backend,
         registration_backend=args.registration_backend,
         ants_mrsi_to_t1_transform=args.ants_mrsi_to_t1_transform,
