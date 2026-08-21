@@ -86,7 +86,6 @@ def export_metprofile_npz(
     metadata = {
         "sub": subject,
         "ses": session,
-        "mode": config.processing_mode,
         "parcellation_mode": parcels.mode,
         "regional_summary": value_column,
     }

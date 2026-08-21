@@ -72,10 +72,9 @@ def export_metabolic_profiles(
 ):
     """Perturbation-augmented regional metabolic profiles (uncertainty
     propagation via ``--connectivity-n-perturbations`` CRLB-scaled draws per
-    metabolite). Runs unconditionally whenever parcellation is available
-    (``parc-con`` mode), independently of ``--write-connectivity`` -- the
-    profile is the shared representation any downstream analysis (including,
-    optionally, connectivity) builds on.
+    metabolite). Runs unconditionally for every recording, independently of
+    ``--write-connectivity`` -- the profile is the shared representation any
+    downstream analysis (including, optionally, connectivity) builds on.
 
     Returns ``(MetabolicProfileResult, profile_npz_path)``.
     """
