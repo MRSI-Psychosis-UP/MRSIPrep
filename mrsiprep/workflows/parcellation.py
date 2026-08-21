@@ -17,10 +17,10 @@ def run_parcellation_workflow(config, subject, session, mrsi_reference, registra
       Requires ``raw_t1``.
     - ``"chimera"`` -- Chimera multi-atlas fusion, same inverse-transform
       projection.
-    - ``"mni"`` -- the bundled MNI-space atlas, projected via both the
-      inverse T1w→MNI and inverse MRSI→T1w transforms. Requires
-      ``registration_result.t1_to_mni`` to be set (i.e. MNI normalization
-      ran) and a ``t1_reference`` image.
+    - ``"atlas"`` -- a bundled or custom standardized MNI-space atlas,
+      projected via both the inverse T1w→MNI and inverse MRSI→T1w
+      transforms. Requires ``registration_result.t1_to_mni`` to be set
+      (i.e. MNI normalization ran) and a ``t1_reference`` image.
 
     :param config: Run-wide :class:`mrsiprep.config.settings.MRSIPrepConfig`.
     :param subject: BIDS subject label, without the ``sub-`` prefix.
@@ -31,15 +31,15 @@ def run_parcellation_workflow(config, subject, session, mrsi_reference, registra
         for this recording, supplying the inverse transforms used to
         project atlas labels into MRSI space.
     :param raw_t1: Non-skull-stripped T1w, required for ``"synthseg"``.
-    :param t1_reference: T1w-space reference image, required for ``"mni"``.
+    :param t1_reference: T1w-space reference image, required for ``"atlas"``.
     :returns: Backend-specific parcellation result object (see
         :mod:`mrsiprep.parcellation.synthseg`,
         :mod:`mrsiprep.parcellation.chimera_native`, or
         :mod:`mrsiprep.parcellation.mni_atlas`).
     :raises FileNotFoundError: If ``"synthseg"`` is selected without ``raw_t1``.
-    :raises RuntimeError: If ``"mni"`` is selected but T1w-to-MNI
+    :raises RuntimeError: If ``"atlas"`` is selected but T1w-to-MNI
         normalization wasn't run.
-    :raises ValueError: If ``"mni"`` is selected without ``t1_reference``,
+    :raises ValueError: If ``"atlas"`` is selected without ``t1_reference``,
         or ``config.parcellation_mode`` isn't a supported value.
     """
     if config.parcellation_mode == "synthseg":
@@ -55,11 +55,11 @@ def run_parcellation_workflow(config, subject, session, mrsi_reference, registra
         )
     if config.parcellation_mode == "chimera":
         return run_chimera_parcellation(config, subject, session, mrsi_reference, registration_result.mrsi_to_t1.inverse)
-    if config.parcellation_mode == "mni":
+    if config.parcellation_mode == "atlas":
         if registration_result.t1_to_mni is None:
-            raise RuntimeError("MNI parcellation requires T1-to-MNI normalization.")
+            raise RuntimeError("Atlas parcellation requires T1-to-MNI normalization.")
         if t1_reference is None:
-            raise ValueError("MNI parcellation requires a T1 reference image.")
+            raise ValueError("Atlas parcellation requires a T1 reference image.")
         return run_mni_parcellation(
             config,
             subject,

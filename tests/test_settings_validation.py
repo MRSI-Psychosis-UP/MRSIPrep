@@ -25,24 +25,32 @@ class RequiredFieldTests(unittest.TestCase):
             _config(ref_met=None)
 
 
-class ModeParcellationCombinationTests(unittest.TestCase):
-    def test_parc_con_rejects_synthseg_parcellation(self):
-        with self.assertRaisesRegex(ValueError, "parc-con requires Chimera or MNI"):
-            _config(processing_mode="parc-con", parcellation_mode="synthseg")
+class DerivedDefaultsTests(unittest.TestCase):
+    def test_parcellation_mode_defaults_to_synthseg(self):
+        self.assertEqual(_config().parcellation_mode, "synthseg")
 
-    def test_mni_norm_rejects_non_synthseg_parcellation(self):
-        with self.assertRaisesRegex(ValueError, "mni-norm only supports SynthSeg"):
-            _config(processing_mode="mni-norm", parcellation_mode="chimera")
+    def test_synthseg_parcellation_defaults_registration_target_to_brain(self):
+        cfg = _config(parcellation_mode="synthseg")
+        self.assertEqual(cfg.registration_t1_target, "brain")
 
-    def test_parc_con_defaults_to_chimera(self):
-        cfg = _config(processing_mode="parc-con")
-        self.assertEqual(cfg.parcellation_mode, "chimera")
+    def test_chimera_parcellation_defaults_registration_target_to_brain_csf(self):
+        cfg = _config(parcellation_mode="chimera")
         self.assertEqual(cfg.registration_t1_target, "brain-csf")
 
-    def test_mni_norm_defaults_to_synthseg(self):
-        cfg = _config(processing_mode="mni-norm")
-        self.assertEqual(cfg.parcellation_mode, "synthseg")
-        self.assertEqual(cfg.registration_t1_target, "brain")
+    def test_atlas_parcellation_defaults_registration_target_to_brain_csf(self):
+        cfg = _config(parcellation_mode="atlas")
+        self.assertEqual(cfg.registration_t1_target, "brain-csf")
+
+    def test_explicit_registration_target_is_not_overridden(self):
+        cfg = _config(parcellation_mode="synthseg", registration_t1_target="raw")
+        self.assertEqual(cfg.registration_t1_target, "raw")
+
+    def test_tissue_backend_none_forces_no_pvc(self):
+        self.assertTrue(_config(tissue_backend="none").no_pvc)
+
+    def test_unsupported_registration_t1_target_raises(self):
+        with self.assertRaisesRegex(ValueError, "Unsupported registration target"):
+            _config(registration_t1_target="bogus")
 
 
 class RegistrationBackendTests(unittest.TestCase):
@@ -73,9 +81,9 @@ class RegistrationBackendTests(unittest.TestCase):
 
 
 class EnumChoiceTests(unittest.TestCase):
-    def test_unsupported_processing_mode_raises(self):
-        with self.assertRaisesRegex(ValueError, "Unsupported processing mode"):
-            _config(processing_mode="bogus")
+    def test_unsupported_parcellation_mode_raises(self):
+        with self.assertRaisesRegex(ValueError, "Unsupported parcellation mode"):
+            _config(parcellation_mode="bogus")
 
     def test_unsupported_synthseg_mode_raises(self):
         with self.assertRaisesRegex(ValueError, "Unsupported SynthSeg mode"):

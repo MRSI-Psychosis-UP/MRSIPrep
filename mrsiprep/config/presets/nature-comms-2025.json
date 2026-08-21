@@ -5,7 +5,6 @@
     "doi": "10.1038/s41467-025-66124-w",
     "url": "https://doi.org/10.1038/s41467-025-66124-w"
   },
-  "processing_mode": "parc-con",
   "metabolites": ["CrPCr", "GluGln", "GPCPCh", "NAANAAG", "Ins"],
   "quality_metrics": ["snr", "linewidth"],
   "snr_min": 4.0,

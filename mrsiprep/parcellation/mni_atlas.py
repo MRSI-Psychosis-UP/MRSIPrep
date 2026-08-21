@@ -29,4 +29,4 @@ def run_mni_parcellation(
     if not mrsi_out.exists() or config.overwrite:
         apply_image_transform(mrsi_reference, t1_out, t1_to_mrsi, mrsi_out, interpolation="genericLabel", threads=config.nthreads)
     copy_labels(labels_path, labels_out)
-    return ParcellationResult(atlas_mni=atlas_path, atlas_t1=t1_out, atlas_mrsi=mrsi_out, labels=labels_out, mode="mni", atlas_name=atlas_name)
+    return ParcellationResult(atlas_mni=atlas_path, atlas_t1=t1_out, atlas_mrsi=mrsi_out, labels=labels_out, mode="atlas", atlas_name=atlas_name)

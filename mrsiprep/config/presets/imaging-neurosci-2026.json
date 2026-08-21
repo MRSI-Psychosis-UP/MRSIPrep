@@ -5,7 +5,6 @@
     "doi": "10.1162/imag.a.1276",
     "url": "https://doi.org/10.1162/imag.a.1276"
   },
-  "processing_mode": "mni-norm",
   "metabolites": ["CrPCr", "GluGln", "GPCPCh", "NAANAAG", "Ins"],
   "quality_metrics": ["snr", "linewidth"],
   "snr_min": 4.0,
