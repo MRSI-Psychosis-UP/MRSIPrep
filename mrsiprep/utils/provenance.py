@@ -100,7 +100,7 @@ def pipeline_trace(config) -> list[dict]:
     functions -- no state needs to be threaded through them to build this.
     """
     full_parcellation = config.parcellation_mode != "synthseg"
-    parcellation_reason = f"parcellation_mode={config.parcellation_mode}, requires chimera or mni"
+    parcellation_reason = f"parcellation_mode={config.parcellation_mode}, requires chimera or atlas"
     pvc_ran = not config.no_pvc
     pvc_reason = "" if pvc_ran else "--no-pvc"
     t1corr_ran = config.t1_correction == "literature"
@@ -114,7 +114,7 @@ def pipeline_trace(config) -> list[dict]:
         {"step": "Partial volume correction", "ran": pvc_ran, "reason": pvc_reason},
         {"step": "Resampling MRSI maps to T1w/MNI space", "ran": True, "reason": ""},
         {"step": "SynthSeg parcellation and QC", "ran": True, "reason": ""},
-        {"step": "Parcellation (chimera/mni atlas)", "ran": full_parcellation, "reason": "" if full_parcellation else parcellation_reason},
+        {"step": "Parcellation (chimera/atlas)", "ran": full_parcellation, "reason": "" if full_parcellation else parcellation_reason},
         {"step": "Regional metabolite extraction", "ran": True, "reason": ""},
         {"step": "Regional metabolic profile estimation", "ran": True, "reason": ""},
         {"step": "Connectivity matrix", "ran": bool(config.write_connectivity), "reason": "" if config.write_connectivity else "--write-connectivity not set"},

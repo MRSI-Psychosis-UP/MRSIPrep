@@ -111,7 +111,7 @@ class MRSIPrepConfig:
             self.fs_subjects_dir = Path(self.fs_subjects_dir).resolve()
 
     def _validate_enum_choices(self) -> None:
-        if self.parcellation_mode not in {"synthseg", "chimera", "mni"}:
+        if self.parcellation_mode not in {"synthseg", "chimera", "atlas"}:
             raise ValueError(f"Unsupported parcellation mode: {self.parcellation_mode}")
         if self.synthseg_mode not in {"fast", "standard", "robust"}:
             raise ValueError(f"Unsupported SynthSeg mode: {self.synthseg_mode}")

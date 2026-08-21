@@ -320,8 +320,8 @@ class StepParcellationTests(unittest.TestCase):
         self.assertIs(parcels, preliminary)
         self.assertIsNone(qc)
 
-    def test_chimera_and_mni_run_full_parcellation(self):
-        for parcellation_mode in ("chimera", "mni"):
+    def test_chimera_and_atlas_run_full_parcellation(self):
+        for parcellation_mode in ("chimera", "atlas"):
             config = SimpleNamespace(parcellation_mode=parcellation_mode)
             preliminary = SimpleNamespace(atlas_t1="preliminary")
             final = SimpleNamespace(atlas_t1="final", labels="labels")

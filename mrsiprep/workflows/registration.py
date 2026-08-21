@@ -56,7 +56,7 @@ def run_registration_workflow(
     """
     mrsi_to_t1 = run_mrsi_to_t1(config, subject, session, mrsi_reference, registration_t1, fixed_mask=registration_mask, moving_mask=mrsi_mask)
     t1_to_mni = None
-    if "MNI152NLin2009cAsym" in config.output_spaces or config.parcellation_mode == "mni" or "mni" in config.transform:
+    if "MNI152NLin2009cAsym" in config.output_spaces or config.parcellation_mode == "atlas" or "mni" in config.transform:
         if subject_template is not None and session is not None:
             t1_to_mni = compose_longitudinal_t1_to_mni(config, subject, session, subject_template, registration_t1, mrsi_reference=mrsi_reference)
         else:

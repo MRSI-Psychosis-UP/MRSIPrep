@@ -5,9 +5,9 @@
 - **Removed `--mode`/`--processing-mode`.** `parc-con` was never a
   fundamentally different pipeline from `mni-norm` -- it ran everything
   `mni-norm` ran, plus a few optional extras. `--parcellation-mode`
-  (`synthseg`/`chimera`/`mni`) is now the sole switch for how much of
+  (`synthseg`/`chimera`/`atlas`) is now the sole switch for how much of
   the pipeline runs: `synthseg` (the new default) is the lighter-weight
-  path; `chimera`/`mni` additionally run full parcellation. Every other
+  path; `chimera`/`atlas` additionally run full parcellation. Every other
   behavior (tissue backend, PVC, connectivity matrix, metabolite
   profiles) is controlled independently by its own already-existing
   flag, as it always should have been. `--mode`/`--processing-mode` is
