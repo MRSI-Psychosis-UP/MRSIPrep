@@ -140,38 +140,6 @@ def segment_t1_synthseg_fast(config, subject: str, session: str | None, t1_path:
     return outputs
 
 
-def extract_t1_synthseg(config, subject: str, session: str | None, t1_path: Path) -> tuple[Path, Path]:
-    """Create a SynthSeg-masked T1w and binary mask without running FAST.
-
-    Used by ``--mode midas``, which needs SynthSeg brain extraction as an
-    input to its own fuzzy c-means tissue segmentation
-    (:func:`mrsiprep.tissue.fuzzy_cmeans.fuzzy_cmeans_segment`) instead of FAST.
-
-    :param config: Run-wide :class:`mrsiprep.config.settings.MRSIPrepConfig`.
-    :param subject: BIDS subject label, without the ``sub-`` prefix.
-    :param session: BIDS session label without the ``ses-`` prefix, or
-        ``None`` for session-less datasets.
-    :param t1_path: Raw (non-skull-stripped) T1w image to segment.
-    :returns: ``(brain_path, mask_path)`` -- the skull-stripped T1w and its
-        binary brain mask. Recordings already extracted are skipped
-        (returned as-is) unless ``config.overwrite_seg``/``config.overwrite``
-        is set.
-    """
-
-    t1_path = Path(t1_path)
-    work_dir = synthseg_work_dir(config, subject, session)
-    work_dir.mkdir(parents=True, exist_ok=True)
-    brain_out = synthseg_fast_brain_path(config, subject, session)
-    mask_out = synthseg_fast_brain_mask_path(config, subject, session)
-    if brain_out.exists() and mask_out.exists() and not (config.overwrite_seg or config.overwrite):
-        return brain_out, mask_out
-
-    t1_img = nib.load(str(t1_path))
-    labels = _run_or_load_synthseg(config, t1_path, work_dir, subject, session)
-    _write_synthseg_brain(config, t1_img, labels, brain_out, mask_out)
-    return brain_out, mask_out
-
-
 def _run_or_load_synthseg(config, t1_path: Path, work_dir: Path, subject: str, session: str | None) -> np.ndarray:
     mode = getattr(config, "synthseg_mode", "fast")
     native_labels = synthseg_native_labels_path(config, subject, session)

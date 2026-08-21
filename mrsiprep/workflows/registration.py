@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from mrsiprep.registration.mrsi_to_t1 import MRSIToT1Result, run_mrsi_to_t1, run_mrsi_to_t1_rigid_mi
+from mrsiprep.registration.mrsi_to_t1 import MRSIToT1Result, run_mrsi_to_t1
 from mrsiprep.registration.t1_to_mni import T1ToMNIResult, compose_longitudinal_t1_to_mni, run_t1_to_mni
 
 
@@ -29,12 +29,9 @@ def run_registration_workflow(
 ) -> RegistrationResult:
     """Register one recording's MRSI reference to T1w, and T1w to MNI if requested.
 
-    MRSI→T1w always runs, via :func:`mrsiprep.registration.mrsi_to_t1.run_mrsi_to_t1`
-    (or the MIDAS-faithful rigid+mutual-information variant,
-    :func:`~mrsiprep.registration.mrsi_to_t1.run_mrsi_to_t1_rigid_mi`, when
-    ``config.processing_mode == "midas"``). T1w→MNI only runs when MNI
-    output space, MNI parcellation, or an MNI transform is actually
-    requested by ``config``.
+    MRSI→T1w always runs, via :func:`mrsiprep.registration.mrsi_to_t1.run_mrsi_to_t1`.
+    T1w→MNI only runs when MNI output space, MNI parcellation, or an MNI
+    transform is actually requested by ``config``.
 
     :param config: Run-wide :class:`mrsiprep.config.settings.MRSIPrepConfig`.
     :param subject: BIDS subject label, without the ``sub-`` prefix.
@@ -57,10 +54,7 @@ def run_registration_workflow(
     :returns: :class:`RegistrationResult` with the MRSI→T1w transforms
         always set, and T1w→MNI transforms set only when that stage ran.
     """
-    if config.processing_mode == "midas":
-        mrsi_to_t1 = run_mrsi_to_t1_rigid_mi(config, subject, session, mrsi_reference, registration_t1, fixed_mask=registration_mask)
-    else:
-        mrsi_to_t1 = run_mrsi_to_t1(config, subject, session, mrsi_reference, registration_t1, fixed_mask=registration_mask, moving_mask=mrsi_mask)
+    mrsi_to_t1 = run_mrsi_to_t1(config, subject, session, mrsi_reference, registration_t1, fixed_mask=registration_mask, moving_mask=mrsi_mask)
     t1_to_mni = None
     if "MNI152NLin2009cAsym" in config.output_spaces or config.parcellation_mode == "mni" or "mni" in config.transform:
         if subject_template is not None and session is not None:
