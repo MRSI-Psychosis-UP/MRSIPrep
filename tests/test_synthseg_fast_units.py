@@ -124,6 +124,7 @@ class RunOrLoadSynthsegFixture(unittest.TestCase):
         self.work_dir.mkdir()
         self.config = SimpleNamespace(
             derivative_dir=self.tmp / "derivatives",
+            work_dir=self.work_dir,
             synthseg_mode="fast",
             overwrite_seg=False,
             overwrite=False,
