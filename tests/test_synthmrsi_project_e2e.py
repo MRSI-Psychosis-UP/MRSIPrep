@@ -56,7 +56,7 @@ class SynthMRSIProjectE2ETests(unittest.TestCase):
         self.out_dir = Path(tempfile.mkdtemp(prefix="mrsiprep_e2e_out_"))
         self.addCleanup(shutil.rmtree, self.out_dir, ignore_errors=True)
 
-    def test_two_subjects_run_end_to_end_mni_norm(self):
+    def test_two_subjects_run_end_to_end_synthseg_parcellation(self):
         cmd = [
             "docker", "run", "--rm",
             "-v", f"{self.data_dir}:/data:ro",
@@ -67,7 +67,7 @@ class SynthMRSIProjectE2ETests(unittest.TestCase):
             "/data", "/out", "participant",
             "--participant-label", "01", "05",
             "--session-label", "01",
-            "--mode", "mni-norm",
+            "--parcellation-mode", "synthseg",
             "--t1", "acq-mprage_T1w",
             "--metabolites", "NAANAAG,GPCPCh,CrPCr,GluGln,Ins",
             "--ref-met", "CrPCr",
@@ -112,7 +112,7 @@ class SynthMRSIProjectE2ETests(unittest.TestCase):
             mni_maps = list((subject_root / "mrsi" / "mni").glob("*.nii.gz"))
             self.assertTrue(mni_maps, msg=f"no MNI-space metabolite maps for sub-{subject} under {subject_root}")
 
-    def test_two_subjects_run_end_to_end_parc_con(self):
+    def test_two_subjects_run_end_to_end_chimera_parcellation(self):
         cmd = [
             "docker", "run", "--rm",
             "-v", f"{self.data_dir}:/data:ro",
@@ -123,19 +123,19 @@ class SynthMRSIProjectE2ETests(unittest.TestCase):
             "/data", "/out", "participant",
             "--participant-label", "01", "05",
             "--session-label", "01",
-            "--mode", "parc-con",
+            "--parcellation-mode", "chimera",
             "--t1", "acq-mprage_T1w",
             "--metabolites", "NAANAAG,GPCPCh,CrPCr,GluGln,Ins",
             "--ref-met", "CrPCr",
-            # Same rationale as the mni-norm test: keep SynthSeg-fast rather
-            # than the memory-hungry default "robust" mode.
+            # Same rationale as the synthseg-parcellation test: keep
+            # SynthSeg-fast rather than the memory-hungry default "robust" mode.
             "--synthseg-mode", "fast",
             # Self-managed 64-thread/128GB larger runner (mrsiprep_runner) --
-            # 32 threads x 2 parallel subjects uses the full runner. Unlike
-            # mni-norm, parc-con's default parcellation-mode is "chimera",
-            # which runs FreeSurfer recon-all (documented 1-3h/subject) and
-            # Chimera (10-20+min/subject) -- run in parallel across the 2
-            # subjects, so wall time is bounded by one subject's worst case.
+            # 32 threads x 2 parallel subjects uses the full runner.
+            # --parcellation-mode chimera runs FreeSurfer recon-all
+            # (documented 1-3h/subject) and Chimera (10-20+min/subject) --
+            # run in parallel across the 2 subjects, so wall time is bounded
+            # by one subject's worst case.
             "--nthreads", "32", "--nproc", "2", "--verbose", "1",
         ]
         lines: list[str] = []
@@ -161,12 +161,12 @@ class SynthMRSIProjectE2ETests(unittest.TestCase):
             self.assertTrue(qc_reports, msg=f"no combined QC report for sub-{subject} under {subject_root}")
             self.assertGreater(qc_reports[0].stat().st_size, 1024, msg=f"QC report for sub-{subject} looks too small to be real")
 
-            # parc-con is a documented superset of mni-norm's outputs.
+            # chimera parcellation is a superset of synthseg parcellation's outputs.
             mni_maps = list((subject_root / "mrsi" / "mni").glob("*.nii.gz"))
             self.assertTrue(mni_maps, msg=f"no MNI-space metabolite maps for sub-{subject} under {subject_root}")
 
-            # parc-con-specific: proves Chimera/FreeSurfer recon-all and PVC
-            # actually ran, not just the mni-norm steps.
+            # chimera-specific: proves Chimera/FreeSurfer recon-all and PVC
+            # actually ran, not just the always-on steps.
             parcel_profiles = list((subject_root / "mrsi" / "parcel").glob("*.npz"))
             self.assertTrue(parcel_profiles, msg=f"no parcel profile archive for sub-{subject} under {subject_root}")
 

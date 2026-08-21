@@ -123,21 +123,21 @@ class PreflightTransformStatusTests(unittest.TestCase):
 
 
 class PreflightFreesurferStatusTests(unittest.TestCase):
-    def test_none_when_not_parc_con_chimera(self):
+    def test_none_when_not_chimera_parcellation(self):
         layout = MagicMock()
-        config = SimpleNamespace(processing_mode="mni-norm", parcellation_mode="synthseg")
+        config = SimpleNamespace(parcellation_mode="synthseg")
         self.assertIsNone(P._preflight_freesurfer_status(layout, "01", "01", config))
 
     def test_false_when_no_raw_t1(self):
         layout = MagicMock()
         layout.raw_t1.return_value = None
-        config = SimpleNamespace(processing_mode="parc-con", parcellation_mode="chimera")
+        config = SimpleNamespace(parcellation_mode="chimera")
         self.assertFalse(P._preflight_freesurfer_status(layout, "01", "01", config))
 
     def test_delegates_to_subject_dir_valid_when_raw_t1_present(self):
         layout = MagicMock()
         layout.raw_t1.return_value = Path("/tmp/sub-01_T1w.nii.gz")
-        config = SimpleNamespace(processing_mode="parc-con", parcellation_mode="chimera", freesurfer_dir=Path("/tmp/fs"))
+        config = SimpleNamespace(parcellation_mode="chimera", freesurfer_dir=Path("/tmp/fs"))
         with patch("mrsiprep.workflows.participant.freesurfer_subject_id", return_value="sub-01"), patch(
             "mrsiprep.workflows.participant.subject_dir_valid", return_value=True
         ) as valid:
@@ -213,7 +213,7 @@ class PreflightMissingItemsTests(unittest.TestCase):
         return row
 
     def _config(self, **overrides):
-        cfg = SimpleNamespace(quality_metrics=["snr", "linewidth", "crlb"], processing_mode="mni-norm", tissue_backend="synthseg-fast")
+        cfg = SimpleNamespace(quality_metrics=["snr", "linewidth", "crlb"], tissue_backend="synthseg-fast")
         for key, value in overrides.items():
             setattr(cfg, key, value)
         return cfg
@@ -234,10 +234,12 @@ class PreflightMissingItemsTests(unittest.TestCase):
         self.assertIn("FWHM", P._preflight_missing_items(row, self._config()))
         self.assertNotIn("FWHM", P._preflight_missing_items(row, self._config(quality_metrics=["snr"])))
 
-    def test_missing_tissue_only_for_parc_con_existing_backend(self):
+    def test_missing_tissue_only_for_existing_backend(self):
+        # No longer depends on parcellation_mode at all -- flagged for any
+        # config using --tissue-backend existing.
         row = self._row(tissue="[red]p3[/red]")
-        self.assertIn("Tissue", P._preflight_missing_items(row, self._config(processing_mode="parc-con", tissue_backend="existing")))
-        self.assertNotIn("Tissue", P._preflight_missing_items(row, self._config(processing_mode="mni-norm")))
+        self.assertIn("Tissue", P._preflight_missing_items(row, self._config(tissue_backend="existing")))
+        self.assertNotIn("Tissue", P._preflight_missing_items(row, self._config(tissue_backend="synthseg-fast")))
 
     def test_corrupt_items_reported(self):
         row = self._row(corrupt_items=["T1w", "SNR"])
@@ -280,15 +282,10 @@ class CollectRecordingsTests(unittest.TestCase):
 
 
 class ValidateBackendInputsTests(unittest.TestCase):
-    def test_mni_norm_requires_raw_t1(self):
-        config = make_config(["/tmp/bids", "/tmp/out", "participant"])
-        with patch("mrsiprep.workflows.participant.BIDSLayout") as layout_cls:
-            layout_cls.return_value.raw_t1.return_value = None
-            with self.assertRaisesRegex(FileNotFoundError, "light-mode SynthSeg"):
-                P._validate_backend_inputs(config, "01", "01")
-
     def test_synthseg_fast_backend_requires_raw_t1(self):
-        config = make_config(["/tmp/bids", "/tmp/out", "participant", "--mode", "parc-con"], tissue_backend="synthseg-fast")
+        # synthseg-fast is the default tissue_backend, so a default config
+        # already exercises this without any explicit override.
+        config = make_config(["/tmp/bids", "/tmp/out", "participant"])
         with patch("mrsiprep.workflows.participant.BIDSLayout") as layout_cls:
             layout_cls.return_value.raw_t1.return_value = None
             with self.assertRaisesRegex(FileNotFoundError, "synthseg-fast"):
@@ -296,7 +293,7 @@ class ValidateBackendInputsTests(unittest.TestCase):
 
     def test_custom_atlas_requires_both_files(self):
         config = make_config(
-            ["/tmp/bids", "/tmp/out", "participant", "--mode", "parc-con", "--parcellation-mode", "mni", "--atlas", "custom"],
+            ["/tmp/bids", "/tmp/out", "participant", "--parcellation-mode", "mni", "--atlas", "custom"],
             custom_atlas=None,
             custom_atlas_lut=None,
         )
@@ -310,7 +307,7 @@ class ValidateBackendInputsTests(unittest.TestCase):
             custom_atlas = Path(tmpdir) / "atlas.nii.gz"
             custom_atlas.touch()
             config = make_config(
-                ["/tmp/bids", "/tmp/out", "participant", "--mode", "parc-con", "--parcellation-mode", "mni", "--atlas", "custom"],
+                ["/tmp/bids", "/tmp/out", "participant", "--parcellation-mode", "mni", "--atlas", "custom"],
                 custom_atlas=custom_atlas,
                 custom_atlas_lut=None,
             )

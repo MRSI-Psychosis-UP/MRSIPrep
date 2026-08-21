@@ -27,7 +27,8 @@ class GenerateSubjectReportFixture(unittest.TestCase):
         self.config = SimpleNamespace(
             derivative_dir=self.tmp / "derivatives",
             bids_dir=self.tmp / "bids",  # no mrsinmrs.json here -> the "not found" branch
-            processing_mode="parc-con",
+            parcellation_mode="chimera",
+            tissue_backend="synthseg-fast",
         )
         patcher = patch(
             "mrsiprep.reports.html.build_preproc_overview_sections",
