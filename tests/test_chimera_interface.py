@@ -54,7 +54,8 @@ class SuccessfulRunTests(RunChimeraFixture):
                 self.bids_dir, self.derivatives_dir, self.fs_subjects_dir, self.t1_path, "01", "01", "LFMIHIFIFF", 3, 2,
             )
 
-        self.assertEqual(result, expected)
+        # run_chimera now reports every (scheme, scale, grow, path) it built.
+        self.assertEqual(result, [("LFMIHIFIFF", 3, 2, expected)])
         cmd = run_checked.call_args[0][0]
         self.assertEqual(cmd[0], "chimera")
         # Regression: chimera's own --nthreads silently drops unfinished
@@ -71,7 +72,7 @@ class SuccessfulRunTests(RunChimeraFixture):
                 self.bids_dir, self.derivatives_dir, self.fs_subjects_dir, self.t1_path, "01", None, "LFMIHIFIFF", 3, 2,
             )
 
-        self.assertEqual(result, expected)
+        self.assertEqual(result, [("LFMIHIFIFF", 3, 2, expected)])
 
     def test_ids_file_is_written_and_cleaned_up(self):
         self._touch_output("01", "01", "LFMIHIFIFF", 3)
@@ -114,7 +115,7 @@ class ForceRerunTests(RunChimeraFixture):
                 self.bids_dir, self.derivatives_dir, self.fs_subjects_dir, self.t1_path, "01", "01", "LFMIHIFIFF", 3, 2, force=True,
             )
 
-        self.assertEqual(result, fresh)
+        self.assertEqual(result, [("LFMIHIFIFF", 3, 2, fresh)])
 
     def test_force_only_deletes_matching_scheme_and_scale(self):
         other_scheme = self._touch_output("01", "01", "SFMIHIFIS", 2)
@@ -159,6 +160,103 @@ class DebugHookTests(RunChimeraFixture):
 
         debug.info.assert_called()
         debug.debug.assert_called()
+
+
+class MultiCombinationTests(RunChimeraFixture):
+    """Comma lists are passed through to chimera in one invocation."""
+
+    def _touch_named(self, name: str) -> Path:
+        out = self.derivatives_dir / "chimera" / name
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.touch()
+        return out
+
+    def _run(self, scheme, scale, grow, **kwargs):
+        with patch("mrsiprep.interfaces.chimera.run_checked") as run_checked:
+            run_checked.return_value = MagicMock(stdout="")
+            result = run_chimera(
+                self.bids_dir, self.derivatives_dir, self.fs_subjects_dir, self.t1_path,
+                "01", "01", scheme, scale, grow, **kwargs,
+            )
+        return result, run_checked.call_args[0][0]
+
+    def test_lists_are_comma_joined_into_a_single_invocation(self):
+        self._touch_output("01", "01", "AAAAAAAAAA", 1)
+        self._touch_output("01", "01", "BBBBBBBBBB", 3)
+
+        _, cmd = self._run(["AAAAAAAAAA", "BBBBBBBBBB"], [1, 3], [2])
+
+        self.assertEqual(cmd[cmd.index("-p") + 1], "AAAAAAAAAA,BBBBBBBBBB")
+        self.assertEqual(cmd[cmd.index("-s") + 1], "1,3")
+        self.assertEqual(cmd[cmd.index("-g") + 1], "2")
+
+    def test_every_produced_combination_is_reported(self):
+        expected = {
+            ("AAAAAAAAAA", 1): self._touch_output("01", "01", "AAAAAAAAAA", 1),
+            ("AAAAAAAAAA", 3): self._touch_output("01", "01", "AAAAAAAAAA", 3),
+        }
+
+        result, _ = self._run("AAAAAAAAAA", [1, 3], [2])
+
+        self.assertEqual({(s, sc): path for s, sc, _, path in result}, expected)
+
+    def test_chimeras_own_desc_scale_grow_naming_is_recognized(self):
+        # Real chimera writes desc-scale3grow2mm rather than scale-3; both
+        # spellings must resolve to the same combination.
+        expected = self._touch_named("sub-01_ses-01_atlas-chimeraAAAAAAAAAA_desc-scale3grow2mm_dseg.nii.gz")
+
+        result, _ = self._run("AAAAAAAAAA", [3], [2])
+
+        self.assertEqual(result, [("AAAAAAAAAA", 3, 2, expected)])
+
+    def test_grow_variants_are_kept_apart(self):
+        grow2 = self._touch_named("sub-01_ses-01_atlas-chimeraAAAAAAAAAA_desc-scale3grow2mm_dseg.nii.gz")
+        grow4 = self._touch_named("sub-01_ses-01_atlas-chimeraAAAAAAAAAA_desc-scale3grow4mm_dseg.nii.gz")
+
+        result, _ = self._run("AAAAAAAAAA", [3], [2, 4])
+
+        self.assertEqual(result, [("AAAAAAAAAA", 3, 2, grow2), ("AAAAAAAAAA", 3, 4, grow4)])
+
+    def test_scale_token_does_not_match_a_longer_number(self):
+        # scale3 must not also claim scale30's output.
+        self._touch_named("sub-01_ses-01_atlas-chimeraAAAAAAAAAA_desc-scale30grow2mm_dseg.nii.gz")
+        expected = self._touch_named("sub-01_ses-01_atlas-chimeraAAAAAAAAAA_desc-scale3grow2mm_dseg.nii.gz")
+
+        result, _ = self._run("AAAAAAAAAA", [3], [2])
+
+        self.assertEqual(result, [("AAAAAAAAAA", 3, 2, expected)])
+
+    def test_scheme_without_a_scale_token_is_still_returned(self):
+        # A non-multi-resolution scheme yields one scale-less output; it must
+        # be attributed to the first requested scale, not dropped.
+        expected = self._touch_named("sub-01_ses-01_atlas-chimeraBBBBBBBBBB_desc-grow2mm_dseg.nii.gz")
+
+        result, _ = self._run("BBBBBBBBBB", [1, 3], [2])
+
+        self.assertEqual(result, [("BBBBBBBBBB", 1, 2, expected)])
+
+    def test_force_deletes_stale_output_for_every_combination(self):
+        stale = [
+            self._touch_output("01", "01", "AAAAAAAAAA", 1),
+            self._touch_output("01", "01", "AAAAAAAAAA", 3),
+        ]
+
+        with patch("mrsiprep.interfaces.chimera.run_checked") as run_checked:
+            def fake(_cmd, **_kwargs):
+                for path in stale:
+                    self.assertFalse(path.exists(), f"{path.name} should be deleted before chimera runs")
+                    path.touch()
+                return MagicMock(stdout="")
+
+            run_checked.side_effect = fake
+            run_chimera(
+                self.bids_dir, self.derivatives_dir, self.fs_subjects_dir, self.t1_path,
+                "01", "01", "AAAAAAAAAA", [1, 3], [2], force=True,
+            )
+
+    def test_no_output_at_all_still_raises(self):
+        with self.assertRaises(ChimeraError):
+            self._run("AAAAAAAAAA", [1, 3], [2])
 
 
 if __name__ == "__main__":

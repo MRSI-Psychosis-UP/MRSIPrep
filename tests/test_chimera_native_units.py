@@ -22,13 +22,24 @@ def _config(root: Path, **overrides):
         overwrite=False,
         overwrite_chimera=False,
         chimera_scheme="LFMIHIFIF",
-        chimera_scale=3,
-        chimera_grow=2,
+        chimera_scale="3",
+        chimera_grow="2",
         nthreads=4,
         verbose=1,
     )
     base.update(overrides)
-    return SimpleNamespace(**base)
+    config = SimpleNamespace(**base)
+    # Mirror MRSIPrepConfig's comma-list accessors, which the workflow reads.
+    config.chimera_schemes = lambda: _split(config.chimera_scheme)
+    config.chimera_scales = lambda: [int(str(v).replace("scale", "")) for v in _split(config.chimera_scale)]
+    config.chimera_grows = lambda: [int(v) for v in _split(config.chimera_grow)]
+    return config
+
+
+def _split(value):
+    if isinstance(value, (list, tuple)):
+        return [str(item) for item in value]
+    return [item.strip() for item in str(value).split(",") if item.strip()]
 
 
 def _save(path: Path, values, shape=(2, 2, 2)):
@@ -52,14 +63,18 @@ def _fake_apply(*args, **_kwargs):
 class _Harness:
     """Patches every external dependency of run_chimera_parcellation."""
 
-    def __init__(self, root, *, source_atlas=None, raw_t1=None, dir_valid=True):
+    def __init__(self, root, *, source_atlas=None, raw_t1=None, dir_valid=True, produced=None):
         self.root = root
         self.layout = SimpleNamespace(
             chimera_atlas=lambda *a, **k: source_atlas,
             raw_t1=lambda *a, **k: raw_t1,
         )
         self.dir_valid = dir_valid
-        self.produced = source_atlas
+        # run_chimera returns [(scheme, scale, grow, path), ...]; default to a
+        # single combination matching the default config fixture.
+        if produced is None:
+            produced = [("LFMIHIFIF", 3, 2, source_atlas)] if source_atlas is not None else []
+        self.produced = produced
 
     def __enter__(self):
         self.patches = [
@@ -132,11 +147,12 @@ class RunChimeraParcellationTests(unittest.TestCase):
             source = _save(root / "source.nii.gz", [1] * 8)
 
             with _Harness(root, source_atlas=source) as mocks:
-                result = run_chimera_parcellation(_config(root), "S001", "V1", root / "ref.nii.gz", [])
+                results = run_chimera_parcellation(_config(root), "S001", "V1", root / "ref.nii.gz", [])
 
             mocks.run_recon_all.assert_not_called()
             mocks.run_chimera.assert_not_called()
-            self.assertTrue(result.atlas_t1.exists())
+            self.assertEqual(len(results), 1)
+            self.assertTrue(results[0].atlas_t1.exists())
 
     def test_missing_atlas_runs_chimera(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -145,7 +161,7 @@ class RunChimeraParcellationTests(unittest.TestCase):
             raw_t1 = _save(root / "t1.nii.gz", [1] * 8)
 
             harness = _Harness(root, source_atlas=None, raw_t1=raw_t1)
-            harness.produced = produced
+            harness.produced = [("LFMIHIFIF", 3, 2, produced)]
             with harness as mocks:
                 run_chimera_parcellation(_config(root), "S001", "V1", root / "ref.nii.gz", [])
 
@@ -159,7 +175,7 @@ class RunChimeraParcellationTests(unittest.TestCase):
 
             for dir_valid, expected in ((True, 0), (False, 1)):
                 harness = _Harness(root, source_atlas=None, raw_t1=raw_t1, dir_valid=dir_valid)
-                harness.produced = produced
+                harness.produced = [("LFMIHIFIF", 3, 2, produced)]
                 with harness as mocks:
                     run_chimera_parcellation(
                         _config(root, output_dir=root / f"out-{dir_valid}"), "S001", "V1", root / "ref.nii.gz", []
@@ -186,7 +202,7 @@ class RunChimeraParcellationTests(unittest.TestCase):
             for flag in ("overwrite", "overwrite_chimera"):
                 cached = _save(root / f"cached-{flag}.nii.gz", [1] * 8)
                 harness = _Harness(root, source_atlas=cached, raw_t1=raw_t1)
-                harness.produced = produced
+                harness.produced = [("LFMIHIFIF", 3, 2, produced)]
                 with harness as mocks:
                     run_chimera_parcellation(
                         _config(root, output_dir=root / f"out-{flag}", **{flag: True}),
@@ -203,13 +219,16 @@ class RunChimeraParcellationTests(unittest.TestCase):
             source = _save(root / "source.nii.gz", [1] * 8)
 
             with _Harness(root, source_atlas=source):
-                result = run_chimera_parcellation(
-                    _config(root, chimera_scheme="LFMIHIFIS", chimera_scale=1), "S001", "V1", root / "ref.nii.gz", []
+                results = run_chimera_parcellation(
+                    _config(root, chimera_scheme="LFMIHIFIS", chimera_scale="1"), "S001", "V1", root / "ref.nii.gz", []
                 )
 
-            self.assertEqual(result.mode, "chimera")
-            self.assertEqual(result.atlas_name, "chimeraLFMIHIFIS")
-            self.assertEqual(result.scale, "scale1")
+            self.assertEqual(len(results), 1)
+            self.assertEqual(results[0].mode, "chimera")
+            self.assertEqual(results[0].atlas_name, "chimeraLFMIHIFIS")
+            self.assertEqual(results[0].scale, "scale1")
+            # Single grow requested -> not tagged, so paths stay as before.
+            self.assertIsNone(results[0].grow)
 
     def test_atlas_is_resampled_into_mrsi_space_with_label_interpolation(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -218,12 +237,12 @@ class RunChimeraParcellationTests(unittest.TestCase):
             transforms = [root / "xfm.mat"]
 
             with _Harness(root, source_atlas=source) as mocks:
-                result = run_chimera_parcellation(_config(root), "S001", "V1", root / "ref.nii.gz", transforms)
+                results = run_chimera_parcellation(_config(root), "S001", "V1", root / "ref.nii.gz", transforms)
 
             # A parcellation is categorical: nearest-label, never linear.
             self.assertEqual(mocks.apply_image_transform.call_args.kwargs["interpolation"], "genericLabel")
             self.assertEqual(mocks.apply_image_transform.call_args.args[2], transforms)
-            self.assertTrue(result.atlas_mrsi.exists())
+            self.assertTrue(results[0].atlas_mrsi.exists())
 
     def test_sidecar_labels_are_copied_when_they_exist(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -242,10 +261,10 @@ class RunChimeraParcellationTests(unittest.TestCase):
             source = _save(root / "source.nii.gz", [0, 1, 1, 2, 2, 2, 0, 0])
 
             with _Harness(root, source_atlas=source) as mocks:
-                result = run_chimera_parcellation(_config(root), "S001", "V1", root / "ref.nii.gz", [])
+                results = run_chimera_parcellation(_config(root), "S001", "V1", root / "ref.nii.gz", [])
 
             mocks.copy_labels.assert_not_called()
-            with open(result.labels, newline="", encoding="utf-8") as handle:
+            with open(results[0].labels, newline="", encoding="utf-8") as handle:
                 rows = list(csv.DictReader(handle, delimiter="\t"))
             self.assertEqual([r["parcel_id"] for r in rows], ["1", "2"])
 
@@ -276,6 +295,132 @@ class RunChimeraParcellationTests(unittest.TestCase):
                 run_chimera_parcellation(config, "S001", "V1", root / "ref.nii.gz", [])
 
             mocks.apply_image_transform.assert_not_called()
+
+
+class MultiParcellationTests(unittest.TestCase):
+    """Comma-separated schemes/scales/grows build several parcellations."""
+
+    def _produced(self, root, combos):
+        return [
+            (scheme, scale, grow, _save(root / f"{scheme}-{scale}-{grow}.nii.gz", [1] * 8))
+            for scheme, scale, grow in combos
+        ]
+
+    def test_cross_product_of_schemes_and_scales(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            raw_t1 = _save(root / "t1.nii.gz", [1] * 8)
+            combos = [(s, sc, 2) for s in ("LFMIHIFIF", "LFMIHIFIS") for sc in (1, 3)]
+
+            harness = _Harness(root, source_atlas=None, raw_t1=raw_t1, produced=self._produced(root, combos))
+            with harness:
+                results = run_chimera_parcellation(
+                    _config(root, chimera_scheme="LFMIHIFIF,LFMIHIFIS", chimera_scale="1,3"),
+                    "S001", "V1", root / "ref.nii.gz", [],
+                )
+
+            self.assertEqual(len(results), 4)
+            self.assertEqual(
+                [r.parcellation_id for r in results],
+                ["chimeraLFMIHIFIF-scale1", "chimeraLFMIHIFIF-scale3",
+                 "chimeraLFMIHIFIS-scale1", "chimeraLFMIHIFIS-scale3"],
+            )
+
+    def test_every_parcellation_writes_to_a_distinct_path(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            raw_t1 = _save(root / "t1.nii.gz", [1] * 8)
+            combos = [(s, sc, 2) for s in ("LFMIHIFIF", "LFMIHIFIS") for sc in (1, 3)]
+
+            harness = _Harness(root, source_atlas=None, raw_t1=raw_t1, produced=self._produced(root, combos))
+            with harness:
+                results = run_chimera_parcellation(
+                    _config(root, chimera_scheme="LFMIHIFIF,LFMIHIFIS", chimera_scale="1,3"),
+                    "S001", "V1", root / "ref.nii.gz", [],
+                )
+
+            for attr in ("atlas_t1", "atlas_mrsi", "labels"):
+                paths = [getattr(r, attr) for r in results]
+                self.assertEqual(len(set(paths)), len(paths), msg=attr)
+
+    def test_chimera_is_invoked_once_for_the_whole_set(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            raw_t1 = _save(root / "t1.nii.gz", [1] * 8)
+            combos = [(s, sc, 2) for s in ("LFMIHIFIF", "LFMIHIFIS") for sc in (1, 3)]
+
+            # dir_valid=False so recon-all is actually reached -- the point is
+            # that it runs once for the whole set, not once per parcellation.
+            harness = _Harness(
+                root, source_atlas=None, raw_t1=raw_t1, dir_valid=False, produced=self._produced(root, combos)
+            )
+            with harness as mocks:
+                run_chimera_parcellation(
+                    _config(root, chimera_scheme="LFMIHIFIF,LFMIHIFIS", chimera_scale="1,3"),
+                    "S001", "V1", root / "ref.nii.gz", [],
+                )
+
+            # One invocation (and so one recon-all) for all four, not four.
+            mocks.run_chimera.assert_called_once()
+            mocks.run_recon_all.assert_called_once()
+            self.assertEqual(mocks.run_chimera.call_args.args[6], ["LFMIHIFIF", "LFMIHIFIS"])
+            self.assertEqual(mocks.run_chimera.call_args.args[7], [1, 3])
+
+    def test_partial_output_yields_only_what_chimera_produced(self):
+        # A non-multi-resolution scheme yields one result however many scales
+        # were requested; the nominal cross product is a request, not a promise.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            raw_t1 = _save(root / "t1.nii.gz", [1] * 8)
+            produced = self._produced(root, [("LFMIHIFIF", 1, 2), ("LFMIHIFIF", 3, 2), ("HFMIHIFIF", 1, 2)])
+
+            harness = _Harness(root, source_atlas=None, raw_t1=raw_t1, produced=produced)
+            with harness:
+                results = run_chimera_parcellation(
+                    _config(root, chimera_scheme="LFMIHIFIF,HFMIHIFIF", chimera_scale="1,3"),
+                    "S001", "V1", root / "ref.nii.gz", [],
+                )
+
+            self.assertEqual(len(results), 3)
+            self.assertNotIn("chimeraHFMIHIFIF-scale3", [r.parcellation_id for r in results])
+
+    def test_multiple_grows_are_tagged_and_kept_distinct(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            raw_t1 = _save(root / "t1.nii.gz", [1] * 8)
+            produced = self._produced(root, [("LFMIHIFIF", 3, 2), ("LFMIHIFIF", 3, 4)])
+
+            harness = _Harness(root, source_atlas=None, raw_t1=raw_t1, produced=produced)
+            with harness:
+                results = run_chimera_parcellation(
+                    _config(root, chimera_grow="2,4"), "S001", "V1", root / "ref.nii.gz", []
+                )
+
+            # Same scheme and scale, so only grow distinguishes them -- without
+            # the tag these would collide on one path and silently overwrite.
+            self.assertEqual([r.grow for r in results], [2, 4])
+            self.assertEqual(len({r.atlas_mrsi for r in results}), 2)
+            self.assertEqual(
+                [r.parcellation_id for r in results],
+                ["chimeraLFMIHIFIF-scale3-grow2mm", "chimeraLFMIHIFIF-scale3-grow4mm"],
+            )
+
+    def test_partially_cached_set_only_recomputes_what_is_missing(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            raw_t1 = _save(root / "t1.nii.gz", [1] * 8)
+            cached = _save(root / "cached.nii.gz", [1] * 8)
+            produced = self._produced(root, [("LFMIHIFIF", 3, 2)])
+
+            # chimera_atlas() answers for every combination, so nothing is pending.
+            harness = _Harness(root, source_atlas=cached, raw_t1=raw_t1, produced=produced)
+            with harness as mocks:
+                results = run_chimera_parcellation(
+                    _config(root, chimera_scale="1,3"), "S001", "V1", root / "ref.nii.gz", []
+                )
+
+            mocks.run_chimera.assert_not_called()
+            self.assertEqual(len(results), 2)
 
 
 if __name__ == "__main__":

@@ -101,5 +101,79 @@ class NumericClampingTests(unittest.TestCase):
         self.assertEqual(cfg.nthreads, 1)
 
 
+class ParcellationListAccessorTests(unittest.TestCase):
+    """Comma-separated parcellation options, matching Chimera's own syntax."""
+
+    def test_single_values_still_yield_one_element_lists(self):
+        cfg = _config(parcellation_mode="chimera", chimera_scheme="LFMIHIFIF", chimera_scale="3", chimera_grow="2")
+        self.assertEqual(cfg.chimera_schemes(), ["LFMIHIFIF"])
+        self.assertEqual(cfg.chimera_scales(), [3])
+        self.assertEqual(cfg.chimera_grows(), [2])
+
+    def test_comma_lists_are_split_in_order(self):
+        cfg = _config(
+            parcellation_mode="chimera", chimera_scheme="LFMIHIFIF,LFMIHIFIS", chimera_scale="1,3", chimera_grow="0,2"
+        )
+        self.assertEqual(cfg.chimera_schemes(), ["LFMIHIFIF", "LFMIHIFIS"])
+        self.assertEqual(cfg.chimera_scales(), [1, 3])
+        self.assertEqual(cfg.chimera_grows(), [0, 2])
+
+    def test_whitespace_and_stray_commas_are_tolerated(self):
+        # Mirrors chimera's own `[x for x in ... if x]` filtering.
+        cfg = _config(parcellation_mode="chimera", chimera_scheme=" A , B ,", chimera_scale="1, 3,")
+        self.assertEqual(cfg.chimera_schemes(), ["A", "B"])
+        self.assertEqual(cfg.chimera_scales(), [1, 3])
+
+    def test_int_values_from_a_preset_json_are_accepted(self):
+        # Presets ship chimera_scale as a bare int; it must not need quoting.
+        cfg = _config(parcellation_mode="chimera", chimera_scale=3, chimera_grow=2)
+        self.assertEqual(cfg.chimera_scales(), [3])
+        self.assertEqual(cfg.chimera_grows(), [2])
+
+    def test_scale_accepts_the_scaleN_spelling(self):
+        cfg = _config(parcellation_mode="chimera", chimera_scale="scale1,scale3")
+        self.assertEqual(cfg.chimera_scales(), [1, 3])
+
+    def test_raw_fields_round_trip_unchanged_for_provenance(self):
+        cfg = _config(parcellation_mode="chimera", chimera_scheme="A,B", chimera_scale="1,3")
+        self.assertEqual(cfg.to_dict()["chimera_scheme"], "A,B")
+        self.assertEqual(cfg.to_dict()["chimera_scale"], "1,3")
+
+    def test_atlas_list_is_split(self):
+        cfg = _config(parcellation_mode="atlas", atlas="schaefer400,mist197")
+        self.assertEqual(cfg.atlases(), ["schaefer400", "mist197"])
+
+    def test_out_of_range_scale_raises(self):
+        with self.assertRaisesRegex(ValueError, "--chimera-scale must be between 1 and 5"):
+            _config(parcellation_mode="chimera", chimera_scale="1,9")
+
+    def test_non_numeric_scale_raises_with_a_useful_message(self):
+        with self.assertRaisesRegex(ValueError, "--chimera-scale must be integers"):
+            _config(parcellation_mode="chimera", chimera_scale="1,abc")
+
+    def test_negative_grow_raises(self):
+        with self.assertRaisesRegex(ValueError, "--chimera-grow must not be negative"):
+            _config(parcellation_mode="chimera", chimera_grow="2,-1")
+
+    def test_empty_scheme_list_raises(self):
+        with self.assertRaisesRegex(ValueError, "--chimera-scheme must name at least one"):
+            _config(parcellation_mode="chimera", chimera_scheme=",")
+
+    def test_empty_atlas_list_raises(self):
+        with self.assertRaisesRegex(ValueError, "--atlas must name at least one"):
+            _config(parcellation_mode="atlas", atlas=" ")
+
+    def test_chimera_values_are_not_validated_when_that_mode_is_not_selected(self):
+        # A synthseg run shouldn't be rejected for a chimera value it never reads.
+        cfg = _config(parcellation_mode="synthseg", chimera_scale="99")
+        self.assertEqual(cfg.parcellation_mode, "synthseg")
+
+    def test_nine_character_schemes_are_accepted(self):
+        # mrsiprep's own default (LFMIHIFIS) is 9 characters, so code length
+        # is left to chimera rather than rejected here.
+        cfg = _config(parcellation_mode="chimera", chimera_scheme="LFMIHIFIS")
+        self.assertEqual(cfg.chimera_schemes(), ["LFMIHIFIS"])
+
+
 if __name__ == "__main__":
     unittest.main()
