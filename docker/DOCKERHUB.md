@@ -3,7 +3,7 @@
 BIDS App for preprocessing already-quantified whole-brain MRSI maps:
 biharmonic spike repair, MRSI↔T1w registration, tissue segmentation
 (SynthSeg/FAST), partial-volume correction, T1w↔MNI normalization, and
-Chimera/MNI-atlas regional profile extraction.
+Chimera/atlas regional profile extraction.
 
 Full documentation, CLI options, and output layout:
 https://github.com/MRSI-Psychosis-UP/mrsiprep
@@ -31,7 +31,6 @@ docker run --rm \
   /data /out participant \
   --participant-label S001 \
   --session-label V1 \
-  --mode mni-norm \
   --nthreads 8
 ```
 
@@ -40,10 +39,13 @@ timestamps with the host's local time (Linux; on macOS/Windows pass the
 timezone name directly, e.g. `-e TZ=Europe/Zurich`).
 
 *MRSIPrep* is a preprocessing and derivative-generation pipeline for already
-quantified whole-brain MRSI maps, run as a BIDS App via Docker. Its default light mode normalizes MRSI
-maps and uses fast SynthSeg cortical parcellation for parcelwise anatomical
-coverage and CRLB reporting. `parc-con` mode adds SynthSeg+FAST tissue maps,
-PETPVC, and Chimera/MNI-atlas regional profile extraction for metabolic connectivty computation.
+quantified whole-brain MRSI maps, run as a BIDS App via Docker.
+`--parcellation-mode` is the primary switch for how much of the pipeline
+runs: `synthseg` (the default) normalizes MRSI maps and uses fast SynthSeg
+cortical parcellation for parcelwise anatomical coverage and CRLB
+reporting; `chimera`/`atlas` additionally run SynthSeg+FAST tissue maps,
+PETPVC, and Chimera/atlas regional profile extraction for metabolic
+connectivity computation.
 
 ## License
 
