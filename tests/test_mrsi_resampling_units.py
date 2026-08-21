@@ -30,7 +30,7 @@ def _touch(path: Path):
     return path
 
 
-def _fake_apply(*args, **kwargs):
+def _fake_apply(*args, **_kwargs):
     """Stand-in for apply_image_transform: creates and returns the output path."""
     return _touch(args[3])
 

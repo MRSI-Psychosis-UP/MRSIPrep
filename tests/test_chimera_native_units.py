@@ -38,7 +38,7 @@ def _save(path: Path, values, shape=(2, 2, 2)):
     return path
 
 
-def _fake_apply(*args, **kwargs):
+def _fake_apply(*args, **_kwargs):
     """Copy rather than re-encode: the source may be .nii while the
     derivative name is .nii.gz, and nibabel would reject the mismatch."""
     import shutil
@@ -52,8 +52,7 @@ def _fake_apply(*args, **kwargs):
 class _Harness:
     """Patches every external dependency of run_chimera_parcellation."""
 
-    def __init__(self, test, root, *, source_atlas=None, raw_t1=None, dir_valid=True):
-        self.test = test
+    def __init__(self, root, *, source_atlas=None, raw_t1=None, dir_valid=True):
         self.root = root
         self.layout = SimpleNamespace(
             chimera_atlas=lambda *a, **k: source_atlas,
@@ -132,7 +131,7 @@ class RunChimeraParcellationTests(unittest.TestCase):
             root = Path(tmpdir)
             source = _save(root / "source.nii.gz", [1] * 8)
 
-            with _Harness(self, root, source_atlas=source) as mocks:
+            with _Harness(root, source_atlas=source) as mocks:
                 result = run_chimera_parcellation(_config(root), "S001", "V1", root / "ref.nii.gz", [])
 
             mocks.run_recon_all.assert_not_called()
@@ -145,7 +144,7 @@ class RunChimeraParcellationTests(unittest.TestCase):
             produced = _save(root / "produced.nii.gz", [1] * 8)
             raw_t1 = _save(root / "t1.nii.gz", [1] * 8)
 
-            harness = _Harness(self, root, source_atlas=None, raw_t1=raw_t1)
+            harness = _Harness(root, source_atlas=None, raw_t1=raw_t1)
             harness.produced = produced
             with harness as mocks:
                 run_chimera_parcellation(_config(root), "S001", "V1", root / "ref.nii.gz", [])
@@ -159,7 +158,7 @@ class RunChimeraParcellationTests(unittest.TestCase):
             raw_t1 = _save(root / "t1.nii.gz", [1] * 8)
 
             for dir_valid, expected in ((True, 0), (False, 1)):
-                harness = _Harness(self, root, source_atlas=None, raw_t1=raw_t1, dir_valid=dir_valid)
+                harness = _Harness(root, source_atlas=None, raw_t1=raw_t1, dir_valid=dir_valid)
                 harness.produced = produced
                 with harness as mocks:
                     run_chimera_parcellation(
@@ -171,7 +170,7 @@ class RunChimeraParcellationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
 
-            with _Harness(self, root, source_atlas=None, raw_t1=None) as mocks:
+            with _Harness(root, source_atlas=None, raw_t1=None) as mocks:
                 with self.assertRaisesRegex(FileNotFoundError, "Missing raw T1w required for Chimera"):
                     run_chimera_parcellation(_config(root), "S001", "V1", root / "ref.nii.gz", [])
 
@@ -186,7 +185,7 @@ class RunChimeraParcellationTests(unittest.TestCase):
 
             for flag in ("overwrite", "overwrite_chimera"):
                 cached = _save(root / f"cached-{flag}.nii.gz", [1] * 8)
-                harness = _Harness(self, root, source_atlas=cached, raw_t1=raw_t1)
+                harness = _Harness(root, source_atlas=cached, raw_t1=raw_t1)
                 harness.produced = produced
                 with harness as mocks:
                     run_chimera_parcellation(
@@ -203,7 +202,7 @@ class RunChimeraParcellationTests(unittest.TestCase):
             root = Path(tmpdir)
             source = _save(root / "source.nii.gz", [1] * 8)
 
-            with _Harness(self, root, source_atlas=source):
+            with _Harness(root, source_atlas=source):
                 result = run_chimera_parcellation(
                     _config(root, chimera_scheme="LFMIHIFIS", chimera_scale=1), "S001", "V1", root / "ref.nii.gz", []
                 )
@@ -218,7 +217,7 @@ class RunChimeraParcellationTests(unittest.TestCase):
             source = _save(root / "source.nii.gz", [1] * 8)
             transforms = [root / "xfm.mat"]
 
-            with _Harness(self, root, source_atlas=source) as mocks:
+            with _Harness(root, source_atlas=source) as mocks:
                 result = run_chimera_parcellation(_config(root), "S001", "V1", root / "ref.nii.gz", transforms)
 
             # A parcellation is categorical: nearest-label, never linear.
@@ -232,7 +231,7 @@ class RunChimeraParcellationTests(unittest.TestCase):
             source = _save(root / "source.nii.gz", [1] * 8)
             source.with_suffix("").with_suffix(".tsv").write_text("index\tname\n1\tA\n", encoding="utf-8")
 
-            with _Harness(self, root, source_atlas=source) as mocks:
+            with _Harness(root, source_atlas=source) as mocks:
                 run_chimera_parcellation(_config(root), "S001", "V1", root / "ref.nii.gz", [])
 
             mocks.copy_labels.assert_called_once()
@@ -242,7 +241,7 @@ class RunChimeraParcellationTests(unittest.TestCase):
             root = Path(tmpdir)
             source = _save(root / "source.nii.gz", [0, 1, 1, 2, 2, 2, 0, 0])
 
-            with _Harness(self, root, source_atlas=source) as mocks:
+            with _Harness(root, source_atlas=source) as mocks:
                 result = run_chimera_parcellation(_config(root), "S001", "V1", root / "ref.nii.gz", [])
 
             mocks.copy_labels.assert_not_called()
@@ -259,7 +258,7 @@ class RunChimeraParcellationTests(unittest.TestCase):
             nib.save(nib.Nifti1Image(np.ones((2, 2, 2), dtype=np.float32), np.eye(4)), source)
             (root / "source.tsv").write_text("index\tname\n1\tA\n", encoding="utf-8")
 
-            with _Harness(self, root, source_atlas=source) as mocks:
+            with _Harness(root, source_atlas=source) as mocks:
                 run_chimera_parcellation(_config(root), "S001", "V1", root / "ref.nii.gz", [])
 
             mocks.copy_labels.assert_called_once()
@@ -270,10 +269,10 @@ class RunChimeraParcellationTests(unittest.TestCase):
             source = _save(root / "source.nii.gz", [1] * 8)
             config = _config(root)
 
-            with _Harness(self, root, source_atlas=source):
+            with _Harness(root, source_atlas=source):
                 run_chimera_parcellation(config, "S001", "V1", root / "ref.nii.gz", [])
 
-            with _Harness(self, root, source_atlas=source) as mocks:
+            with _Harness(root, source_atlas=source) as mocks:
                 run_chimera_parcellation(config, "S001", "V1", root / "ref.nii.gz", [])
 
             mocks.apply_image_transform.assert_not_called()
