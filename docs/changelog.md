@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.11.0
 
 - **Removed `--mode`/`--processing-mode`.** `parc-con` was never a
   fundamentally different pipeline from `mni-norm` -- it ran everything

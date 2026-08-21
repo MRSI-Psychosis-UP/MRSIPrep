@@ -325,7 +325,7 @@ def build_parser() -> argparse.ArgumentParser:
     parcellation.add_argument(
         "--atlas",
         default="chimera-LFMIHIFIS_scale3",
-        help="Atlas used when --parcellation-mode mni. One of: a bundled atlas name (see "
+        help="Atlas used when --parcellation-mode atlas. One of: a bundled atlas name (see "
         "mrsiprep.parcellation.atlas_registry.available_bundled_atlases(), e.g. 'chimera-LFMIHIFIS_scale3'); "
         "'custom' (requires --custom-atlas and --custom-atlas-lut); 'schaefer<N>' for the Schaefer 2018 "
         "N-parcel cortical atlas (e.g. 'schaefer400'); or 'mist197'/'mist-197' for the BASC multiscale "
