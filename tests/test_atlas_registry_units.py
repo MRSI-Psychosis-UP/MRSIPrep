@@ -30,7 +30,7 @@ class SaveNiftiAtomicTests(unittest.TestCase):
             img = nib.Nifti1Image(np.zeros((2, 2, 2), dtype=np.float32), np.eye(4))
             _save_nifti_atomic(img, out_path)
             self.assertTrue(out_path.exists())
-            self.assertEqual(list(Path(tmpdir).glob(".atlas.nii.gz.tmp-*")), [])
+            self.assertEqual(list(Path(tmpdir).glob(".tmp-*-atlas.nii.gz")), [])
 
 
 class AtlasKeyTests(unittest.TestCase):

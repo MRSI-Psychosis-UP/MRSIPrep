@@ -19,7 +19,11 @@ def _save_nifti_atomic(img, out_path: Path) -> None:
     it into place -- avoids two concurrent --nproc workers racing to fetch
     and write the same shared, subject-independent atlas cache file and
     corrupting it (one worker's partial write clobbering another's)."""
-    tmp_path = out_path.with_name(f".{out_path.name}.tmp-{os.getpid()}")
+    # The pid/temp marker must come *before* the real filename, not after --
+    # nib.save() infers the image format from a trailing .nii/.nii.gz/etc.
+    # extension, so appending anything past it (e.g. "...nii.gz.tmp-123")
+    # leaves no recognizable extension and raises ImageFileError.
+    tmp_path = out_path.with_name(f".tmp-{os.getpid()}-{out_path.name}")
     nib.save(img, tmp_path)
     os.replace(tmp_path, out_path)
 
