@@ -43,7 +43,7 @@ MRSI signal, CC0) and run MRSIPrep against it directly:
 ```bash
 # 1. Download and extract the public test dataset (~300-400MB)
 curl -L -o SynthMRSI-Project.zip \
-  "https://zenodo.org/records/21477048/files/SynthMRSI-Project.zip"
+  "https://zenodo.org/records/22014466/files/SynthMRSI-Project.zip"
 unzip SynthMRSI-Project.zip
 
 # 2. Pull the CPU image
@@ -54,8 +54,6 @@ docker pull mrsiup/mrsiprep:cpu
 docker run --rm \
   -v "$(pwd)/SynthMRSI-Project:/data:ro" \
   -v "$(pwd)/SynthMRSI-Project/derivatives:/out" \
-  -v /path/to/your/freesurfer/license.txt:/opt/freesurfer/license.txt:ro \
-  -e FS_LICENSE=/opt/freesurfer/license.txt \
   mrsiup/mrsiprep:cpu \
   /data /out participant \
   --participant-label 01 \
@@ -64,15 +62,15 @@ docker run --rm \
   --t1 acq-mprage_T1w \
   --metabolites NAANAAG,GPCPCh,CrPCr,GluGln,Ins \
   --ref-met CrPCr \
-  --nthreads 8 --nproc 2 --verbose 2
+  --nthreads 8 --nproc 1 --verbose 2
 
 # 4. Open the QC report to confirm it worked
 xdg-open SynthMRSI-Project/derivatives/mrsiprep/sub-01/ses-01/reports/coverage/sub-01_ses-01_desc-report.html
 ```
 
 Drop `--participant-label 01` to process all 32 subjects (scale runtime by
-`32 / --nproc`). You'll need a free FreeSurfer license file (from
-https://surfer.nmr.mgh.harvard.edu/registration.html) for `mri_synthseg`.
+`32 / --nproc`, and raise `--nproc` accordingly for batch runs). `mni-norm`
+mode does not require FreeSurfer, so no `FS_LICENSE` is needed for this demo.
 See [PUBLIC_DATASET.md](https://github.com/MRSI-Psychosis-UP/MRSIPrep/blob/main/PUBLIC_DATASET.md)
 in the repository for the dataset's full description, ground-truth files,
 and expected output layout.
