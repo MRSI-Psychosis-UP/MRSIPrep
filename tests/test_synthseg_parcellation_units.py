@@ -115,7 +115,10 @@ class WriteLabelsTests(unittest.TestCase):
             out_path = Path(outdir) / "labels.tsv"
             with patch.dict(os.environ, {"FREESURFER_HOME": fs_home}):
                 result = _write_labels(np.array([2, 3]), out_path)
-            df = pd.read_csv(result, sep="\t")
+            # keep_default_na=False: pandas otherwise reads the literal
+            # string "NA" (a valid infer_hemisphere() return value) back as
+            # NaN, since "NA" is one of its default missing-value markers.
+            df = pd.read_csv(result, sep="\t", keep_default_na=False)
 
         self.assertEqual(list(df["parcel_id"]), [2, 3])
         self.assertEqual(list(df["parcel_name"]), ["Left-Cerebral-White-Matter", "Left-Cerebral-Cortex"])
@@ -128,7 +131,10 @@ class WriteLabelsTests(unittest.TestCase):
             out_path = Path(outdir) / "labels.tsv"
             with patch.dict(os.environ, {"FREESURFER_HOME": fs_home}):
                 result = _write_labels(np.array([999]), out_path)
-            df = pd.read_csv(result, sep="\t")
+            # keep_default_na=False: pandas otherwise reads the literal
+            # string "NA" (a valid infer_hemisphere() return value) back as
+            # NaN, since "NA" is one of its default missing-value markers.
+            df = pd.read_csv(result, sep="\t", keep_default_na=False)
 
         self.assertEqual(df["parcel_name"][0], "SynthSeg-999")
         self.assertEqual(df["color"][0], "#808080")
