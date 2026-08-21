@@ -1,4 +1,6 @@
+import queue
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -8,10 +10,20 @@ from mrsiprep.io.bids import Recording
 from mrsiprep.workflows.nipype_engine.run import (
     _configure_nipype_logging,
     _run_one_recording_nipype,
+    _start_live_status_table,
     _terminal_outputs,
     execute_recordings_nipype,
 )
 from mrsiprep.workflows.participant import RecordingStatus
+
+
+def _wait_until(predicate, timeout=2.0, interval=0.02):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if predicate():
+            return True
+        time.sleep(interval)
+    return predicate()
 
 
 class ConfigureNipypeLoggingTests(unittest.TestCase):
@@ -221,6 +233,60 @@ class RunOneRecordingFailureTests(RunOneRecordingNipypeFixture):
         set_logbook.assert_called_with(None)
         set_status_queue.assert_called_with(None)
         set_timing_sink.assert_called_with(False)
+
+
+class StartLiveStatusTableDrainOnlyTests(unittest.TestCase):
+    """When verbose<1 or stdout isn't a tty, the returned thread just drains
+    the queue (so it doesn't fill up unbounded) without rendering anything --
+    verified by observing that a queued item actually gets consumed."""
+
+    def test_low_verbosity_drains_queued_item(self):
+        config = SimpleNamespace(verbose=0)
+        q = queue.Queue()
+        q.put(("sub-01", "always", "START sub-01"))
+        with patch("sys.stdout", MagicMock(isatty=lambda: True)):
+            stop_event, thread = _start_live_status_table(config, ["sub-01"], q)
+        try:
+            self.assertTrue(_wait_until(q.empty))
+        finally:
+            stop_event.set()
+            thread.join(timeout=2)
+
+    def test_non_tty_drains_queued_item(self):
+        config = SimpleNamespace(verbose=2)
+        q = queue.Queue()
+        q.put(("sub-01", "always", "START sub-01"))
+        with patch("sys.stdout", MagicMock(isatty=lambda: False)):
+            stop_event, thread = _start_live_status_table(config, ["sub-01"], q)
+        try:
+            self.assertTrue(_wait_until(q.empty))
+        finally:
+            stop_event.set()
+            thread.join(timeout=2)
+
+
+class StartLiveStatusTableLivePathTests(unittest.TestCase):
+    """When verbose>=1 and stdout is a tty, a rich.Live table is built and
+    entered on the background thread instead. rich.Live/Console are mocked
+    throughout (no real terminal rendering); all polling and cleanup stay
+    inside the patch scope since the background thread keeps calling into
+    these patched names until stop_event is set."""
+
+    def test_constructs_console_and_enters_live_context(self):
+        config = SimpleNamespace(verbose=1)
+        with patch("sys.stdout", MagicMock(isatty=lambda: True)), patch("rich.console.Console") as console_cls, patch(
+            "rich.live.Live"
+        ) as live_cls:
+            live_cls.return_value.__enter__.return_value = live_cls.return_value
+            stop_event, thread = _start_live_status_table(config, ["sub-01"], queue.Queue())
+            try:
+                self.assertTrue(_wait_until(lambda: live_cls.return_value.__enter__.called))
+                console_cls.assert_called_once()
+                live_cls.assert_called_once()
+            finally:
+                stop_event.set()
+                thread.join(timeout=2)
+            self.assertTrue(_wait_until(lambda: live_cls.return_value.__exit__.called))
 
 
 if __name__ == "__main__":
