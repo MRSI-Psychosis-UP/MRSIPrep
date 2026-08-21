@@ -73,10 +73,7 @@ def resample_tissue_to_mrsi(config, subject: str, session: str | None, tissue_t1
 
     Plain linear-interpolation resample, applying the (inverse) MRSI-to-T1w
     transform to bring each map back onto ``mrsi_reference``'s grid for use
-    in partial-volume correction. For the MIDAS-mode PSF-aware alternative
-    (which convolves with the MRSI spatial response before resampling
-    instead of a bare linear interpolation), see
-    :func:`mrsiprep.tissue.psf.resample_tissue_to_mrsi_psf`.
+    in partial-volume correction.
 
     :param config: Run-wide :class:`mrsiprep.config.settings.MRSIPrepConfig`.
     :param subject: BIDS subject label, without the ``sub-`` prefix.

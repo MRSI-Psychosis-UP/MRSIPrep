@@ -103,25 +103,6 @@ class StepTissueSegmentationTests(unittest.TestCase):
         self.assertEqual(t1_path, Path("brain"))
         self.assertEqual(mask, Path("brain_mask"))
 
-    def test_midas_raises_without_raw_t1(self):
-        config = self._cfg("midas")
-        with self.assertRaisesRegex(FileNotFoundError, "MIDAS fuzzy c-means segmentation"):
-            P._step_tissue_segmentation(config, "01", "01", None, Path("t1"), _debug())
-
-    def test_midas_derives_paths_from_synthseg_extraction(self):
-        config = self._cfg("midas")
-        with patch(
-            "mrsiprep.workflows.participant.extract_t1_synthseg", return_value=(Path("synthseg_brain"), Path("synthseg_mask"))
-        ), patch(
-            "mrsiprep.workflows.participant.segment_t1_fuzzy_cmeans", return_value={"CSF": Path("csf.nii.gz"), "GM": Path("gm.nii.gz")}
-        ) as fuzzy:
-            t1_path, tissue, p3, mask = P._step_tissue_segmentation(config, "01", "01", Path("raw"), Path("orig_t1"), _debug())
-        fuzzy.assert_called_once_with(config, "01", "01", Path("synthseg_brain"), Path("synthseg_mask"))
-        self.assertEqual(t1_path, Path("synthseg_brain"))
-        self.assertEqual(mask, Path("synthseg_mask"))
-        self.assertEqual(p3, Path("csf.nii.gz"))  # tissue["CSF"]
-        self.assertEqual(tissue, {"CSF": Path("csf.nii.gz"), "GM": Path("gm.nii.gz")})
-
     def test_parc_con_synthseg_fast_raises_without_raw_t1(self):
         config = self._cfg("parc-con", tissue_backend="synthseg-fast")
         with self.assertRaisesRegex(FileNotFoundError, "SynthSeg\\+FAST segmentation"):
@@ -218,8 +199,11 @@ class StepRegistrationTests(unittest.TestCase):
 
 
 class StepTissueProbmapsTests(unittest.TestCase):
-    def test_runs_for_each_recognized_mode(self):
-        for mode in ("parc-con", "midas", "mni-norm"):
+    def test_runs_unconditionally_regardless_of_mode(self):
+        # No gating left in the function at all (its mode guard was already
+        # dead code, since it covered every valid processing_mode) -- confirm
+        # it runs the same way for both real modes.
+        for mode in ("parc-con", "mni-norm"):
             config = SimpleNamespace(processing_mode=mode)
             anat = SimpleNamespace(registration_t1w=Path("t1"), registration_mask=Path("mask"))
             mrsi = SimpleNamespace(reference=Path("ref"))
@@ -230,13 +214,6 @@ class StepTissueProbmapsTests(unittest.TestCase):
             run_fn.assert_called_once_with(
                 config, "01", "01", Path("t1"), Path("mask"), Path("ref"), "inv", precomputed_tissue_t1="precomputed"
             )
-
-    def test_returns_none_for_unrecognized_mode(self):
-        config = SimpleNamespace(processing_mode="bogus")
-        with patch("mrsiprep.workflows.participant.run_tissue_workflow") as run_fn:
-            result = P._step_tissue_probmaps(config, "01", "01", None, None, None, None, _debug())
-        self.assertIsNone(result)
-        run_fn.assert_not_called()
 
 
 class StepPvcTests(unittest.TestCase):
@@ -254,15 +231,6 @@ class StepPvcTests(unittest.TestCase):
         pvc.assert_not_called()
         self.assertEqual(corrected, mrsi.preproc_maps)
         self.assertIsNone(tissue4d)
-
-    def test_ineligible_mode_skips_correction(self):
-        config = SimpleNamespace(processing_mode="midas", no_pvc=False)
-        mrsi = self._mrsi()
-        with patch("mrsiprep.workflows.participant.create_tissue_4d") as tissue_4d, patch("mrsiprep.workflows.participant.run_pvc") as pvc:
-            corrected, tissue4d = P._step_pvc(config, "01", "01", mrsi, SimpleNamespace(mrsi={}), _debug())
-        tissue_4d.assert_not_called()
-        pvc.assert_not_called()
-        self.assertEqual(corrected, mrsi.preproc_maps)
 
     def test_missing_tissue_raises(self):
         config = SimpleNamespace(processing_mode="parc-con", no_pvc=False)
@@ -383,21 +351,20 @@ class StepParcellationTests(unittest.TestCase):
         self.assertIs(parcels, preliminary)
         self.assertIsNone(qc)
 
-    def test_parc_con_and_midas_run_full_parcellation(self):
-        for mode in ("parc-con", "midas"):
-            config = SimpleNamespace(processing_mode=mode)
-            preliminary = SimpleNamespace(atlas_t1="preliminary")
-            final = SimpleNamespace(atlas_t1="final", labels="labels")
-            with patch("mrsiprep.workflows.participant.run_parcellation_workflow", return_value=final) as run_fn, patch(
-                "mrsiprep.workflows.participant.build_parcellation_qc_sections", return_value=["qc"]
-            ) as qc_fn:
-                parcels, qc = P._step_parcellation(
-                    config, "01", "01", Path("raw_t1"), SimpleNamespace(reference="ref"), SimpleNamespace(registration_t1w="t1"), "registration", preliminary, _debug()
-                )
-            run_fn.assert_called_once_with(config, "01", "01", "ref", "registration", raw_t1=Path("raw_t1"), t1_reference="t1")
-            qc_fn.assert_called_once_with(config, "01", "01", Path("raw_t1"), "final", "labels")
-            self.assertIs(parcels, final, msg=mode)
-            self.assertEqual(qc, ["qc"], msg=mode)
+    def test_parc_con_runs_full_parcellation(self):
+        config = SimpleNamespace(processing_mode="parc-con")
+        preliminary = SimpleNamespace(atlas_t1="preliminary")
+        final = SimpleNamespace(atlas_t1="final", labels="labels")
+        with patch("mrsiprep.workflows.participant.run_parcellation_workflow", return_value=final) as run_fn, patch(
+            "mrsiprep.workflows.participant.build_parcellation_qc_sections", return_value=["qc"]
+        ) as qc_fn:
+            parcels, qc = P._step_parcellation(
+                config, "01", "01", Path("raw_t1"), SimpleNamespace(reference="ref"), SimpleNamespace(registration_t1w="t1"), "registration", preliminary, _debug()
+            )
+        run_fn.assert_called_once_with(config, "01", "01", "ref", "registration", raw_t1=Path("raw_t1"), t1_reference="t1")
+        qc_fn.assert_called_once_with(config, "01", "01", Path("raw_t1"), "final", "labels")
+        self.assertIs(parcels, final)
+        self.assertEqual(qc, ["qc"])
 
 
 class StepRegionalExtractionTests(unittest.TestCase):
@@ -407,39 +374,16 @@ class StepRegionalExtractionTests(unittest.TestCase):
     def test_parc_con_with_tissue_passes_tissue_fractions(self):
         config = SimpleNamespace(processing_mode="parc-con")
         tissue = SimpleNamespace(mrsi={"GM": Path("gm")})
-        with patch("mrsiprep.workflows.participant.extract_regional_metabolites", return_value="regional") as extract, patch(
-            "mrsiprep.workflows.participant.regional_tissue_regression"
-        ) as regression:
-            regional, regional_regression = P._step_regional_extraction(config, "01", "01", {}, "parcels", self._mrsi(), tissue, _debug())
+        with patch("mrsiprep.workflows.participant.extract_regional_metabolites", return_value="regional") as extract:
+            regional = P._step_regional_extraction(config, "01", "01", {}, "parcels", self._mrsi(), tissue, _debug())
         self.assertEqual(extract.call_args.args[-1], {"GM": Path("gm")})
-        regression.assert_not_called()
         self.assertEqual(regional, "regional")
-        self.assertIsNone(regional_regression)
 
     def test_parc_con_without_tissue_passes_empty_dict(self):
         config = SimpleNamespace(processing_mode="parc-con")
         with patch("mrsiprep.workflows.participant.extract_regional_metabolites", return_value="regional") as extract:
             P._step_regional_extraction(config, "01", "01", {}, "parcels", self._mrsi(), None, _debug())
         self.assertEqual(extract.call_args.args[-1], {})
-
-    def test_midas_with_tissue_runs_regression(self):
-        config = SimpleNamespace(processing_mode="midas")
-        tissue = SimpleNamespace(mrsi={"GM": Path("gm")})
-        with patch("mrsiprep.workflows.participant.extract_regional_metabolites", return_value="regional"), patch(
-            "mrsiprep.workflows.participant.regional_tissue_regression", return_value="regression-result"
-        ) as regression:
-            _regional, regional_regression = P._step_regional_extraction(config, "01", "01", {}, "parcels", self._mrsi(), tissue, _debug())
-        regression.assert_called_once_with(config, "01", "01", {}, "parcels", {}, {"GM": Path("gm")})
-        self.assertEqual(regional_regression, "regression-result")
-
-    def test_midas_without_tissue_skips_regression(self):
-        config = SimpleNamespace(processing_mode="midas")
-        with patch("mrsiprep.workflows.participant.extract_regional_metabolites", return_value="regional"), patch(
-            "mrsiprep.workflows.participant.regional_tissue_regression"
-        ) as regression:
-            _regional, regional_regression = P._step_regional_extraction(config, "01", "01", {}, "parcels", self._mrsi(), None, _debug())
-        regression.assert_not_called()
-        self.assertIsNone(regional_regression)
 
 
 class StepConnectivityTests(unittest.TestCase):
@@ -484,15 +428,14 @@ class StepMetprofilesTests(unittest.TestCase):
         self.assertIsNone(result)
         fn.assert_not_called()
 
-    def test_parc_con_and_midas_export_metprofiles(self):
-        for mode in ("parc-con", "midas"):
-            config = SimpleNamespace(processing_mode=mode)
-            mrsi = SimpleNamespace(water_map=Path("water"))
-            anat = SimpleNamespace(registration_mask=Path("mask"))
-            with patch("mrsiprep.workflows.participant.export_metprofile_npz", return_value="npz-path") as fn:
-                result = P._step_metprofiles(config, "01", "01", {"corrected": 1}, mrsi, "parcels", "regional", anat)
-            fn.assert_called_once_with(config, "01", "01", {"corrected": 1}, Path("water"), "parcels", "regional", Path("mask"))
-            self.assertEqual(result, "npz-path", msg=mode)
+    def test_parc_con_exports_metprofiles(self):
+        config = SimpleNamespace(processing_mode="parc-con")
+        mrsi = SimpleNamespace(water_map=Path("water"))
+        anat = SimpleNamespace(registration_mask=Path("mask"))
+        with patch("mrsiprep.workflows.participant.export_metprofile_npz", return_value="npz-path") as fn:
+            result = P._step_metprofiles(config, "01", "01", {"corrected": 1}, mrsi, "parcels", "regional", anat)
+        fn.assert_called_once_with(config, "01", "01", {"corrected": 1}, Path("water"), "parcels", "regional", Path("mask"))
+        self.assertEqual(result, "npz-path")
 
 
 class StepReportsTests(unittest.TestCase):

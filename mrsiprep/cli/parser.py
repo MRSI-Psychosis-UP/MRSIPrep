@@ -121,18 +121,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--mode",
         "--processing-mode",
         dest="processing_mode",
-        choices=["mni-norm", "parc-con", "midas"],
+        choices=["mni-norm", "parc-con"],
         default="mni-norm",
-        help="Processing mode. 'midas' runs a MIDAS-faithful pipeline (Maudsley et al. 2006): fuzzy c-means "
-        "tissue segmentation, PSF-convolved tissue fractions, rigid MRSI->T1 registration, and per-parcel "
-        "Eq. 4 pure-GM/pure-WM regression instead of PETPVC.",
+        help="Processing mode.",
     )
     processing.add_argument(
         "--tissue-backend",
         choices=["synthseg-fast", "existing", "none"],
         default="synthseg-fast",
-        help="Tissue segmentation backend for PVC. 'none' disables tissue segmentation and PVC entirely. "
-        "Ignored in --mode midas, which always uses its own fuzzy c-means segmentation.",
+        help="Tissue segmentation backend for PVC. 'none' disables tissue segmentation and PVC entirely.",
     )
 
     registration = parser.add_argument_group("Specific options for registrations")
@@ -197,8 +194,7 @@ def build_parser() -> argparse.ArgumentParser:
         "mimic ANTs' default SyN warp. On by default when --registration-backend fsl is selected (confirmed to "
         "give consistently better MRSI-brainmask/T1w-brain overlap than FLIRT-only across a 3T and a 7T subject, "
         "see experiments/registration_backend_benchmark.py); pass --no-fsl-deformable for FLIRT-only (faster, "
-        "seconds instead of several minutes per subject). Has no effect on --registration-backend ants or on "
-        "--mode midas (rigid-only by design).",
+        "seconds instead of several minutes per subject). Has no effect on --registration-backend ants.",
     )
     registration.add_argument(
         "--no-fsl-deformable",
@@ -260,7 +256,7 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["brain-csf", "brain", "raw"],
         default=None,
         help="Which T1w image registration targets. 'brain' registers directly to the skull-stripped T1w "
-        "(default for --mode mni-norm/midas). 'brain-csf' re-adds the CSF compartment to the skull-stripped "
+        "(default for --mode mni-norm). 'brain-csf' re-adds the CSF compartment to the skull-stripped "
         "image before registering, so CSF-adjacent MRSI signal isn't clipped at the brain-only boundary "
         "(default for --mode parc-con; requires a CAT12 p3 CSF map). 'raw' registers to the original, "
         "non-skull-stripped T1w with no fixed mask.",
@@ -293,7 +289,7 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["synthseg", "chimera", "mni"],
         default=None,
         help="Parcellation scheme. 'synthseg' uses SynthSeg's own cortical/subcortical labels (default for "
-        "--mode mni-norm/midas; the only mode compatible with mni-norm). 'chimera' runs the Chimera "
+        "--mode mni-norm; the only mode compatible with mni-norm). 'chimera' runs the Chimera "
         "multi-atlas fusion tool live, combining several region-specific atlases per --chimera-scheme "
         "(default for --mode parc-con; requires FreeSurfer recon-all and FS_LICENSE). 'mni' warps a "
         "pre-bundled or custom MNI-space atlas (see --atlas) into subject space instead of running Chimera.",

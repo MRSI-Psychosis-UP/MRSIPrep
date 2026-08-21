@@ -12,6 +12,13 @@
 
 ## 1.10.0
 
+- **Removed `--mode midas`.** The MIDAS-faithful pipeline (fuzzy c-means
+  tissue segmentation, PSF-convolved tissue fractions, rigid MRSI→T1
+  registration, and per-parcel Eq. 4 pure-GM/pure-WM regression) is no
+  longer available; only `mni-norm` and `parc-con` remain. Removed
+  `mrsiprep.tissue.fuzzy_cmeans`, `mrsiprep.tissue.psf`, and
+  `mrsiprep.parcellation.tissue_regression` along with their call sites.
+
 - **Added `--reports-only`,** which reuses every already-completed step's
   output derivatives as-is (tissue segmentation, registration,
   parcellation, PVC, etc.) and only regenerates QC tables, figures, and
