@@ -99,9 +99,7 @@ MRSIPrep shells out to or calls via Python bindings.
    :toctree: _autosummary
 
    mrsiprep.tissue.synthseg_fast
-   mrsiprep.tissue.fuzzy_cmeans
    mrsiprep.tissue.fractions
-   mrsiprep.tissue.psf
 ```
 
 ## Parcellation and connectivity
@@ -114,7 +112,6 @@ MRSIPrep shells out to or calls via Python bindings.
    mrsiprep.parcellation.chimera_native
    mrsiprep.parcellation.mni_atlas
    mrsiprep.parcellation.extraction
-   mrsiprep.parcellation.tissue_regression
    mrsiprep.connectivity.export
    mrsiprep.connectivity.connectivity
 ```

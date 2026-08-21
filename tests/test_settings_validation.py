@@ -45,22 +45,6 @@ class ModeParcellationCombinationTests(unittest.TestCase):
         self.assertEqual(cfg.registration_t1_target, "brain")
 
 
-class MidasOverrideTests(unittest.TestCase):
-    def test_midas_forces_no_pvc_and_synthseg_fast(self):
-        cfg = _config(processing_mode="midas", tissue_backend="existing", no_pvc=False)
-        self.assertTrue(cfg.no_pvc)
-        self.assertEqual(cfg.tissue_backend, "synthseg-fast")
-
-    def test_midas_defaults_registration_target_and_parcellation(self):
-        cfg = _config(processing_mode="midas")
-        self.assertEqual(cfg.registration_t1_target, "brain")
-        self.assertEqual(cfg.parcellation_mode, "synthseg")
-
-    def test_non_midas_mode_leaves_tissue_backend_unchanged(self):
-        cfg = _config(processing_mode="parc-con", tissue_backend="existing")
-        self.assertEqual(cfg.tissue_backend, "existing")
-
-
 class RegistrationBackendTests(unittest.TestCase):
     def test_flirt_fnirt_alias_normalizes_to_fsl(self):
         for alias in ("flirt/fnirt", "flirt_fnirt", "flirt-fnirt"):

@@ -112,7 +112,7 @@ class MRSIPrepConfig:
             self.fs_subjects_dir = Path(self.fs_subjects_dir).resolve()
 
     def _validate_enum_choices(self) -> None:
-        if self.processing_mode not in {"mni-norm", "parc-con", "midas"}:
+        if self.processing_mode not in {"mni-norm", "parc-con"}:
             raise ValueError(f"Unsupported processing mode: {self.processing_mode}")
         if self.synthseg_mode not in {"fast", "standard", "robust"}:
             raise ValueError(f"Unsupported SynthSeg mode: {self.synthseg_mode}")
@@ -141,11 +141,9 @@ class MRSIPrepConfig:
         if self.tissue_backend == "none":
             self.no_pvc = True
         if self.registration_t1_target is None:
-            self.registration_t1_target = "brain" if self.processing_mode in {"mni-norm", "midas"} else "brain-csf"
+            self.registration_t1_target = "brain" if self.processing_mode == "mni-norm" else "brain-csf"
         if self.parcellation_mode is None:
-            # midas defaults to SynthSeg parcellation: subject-native, needs no
-            # recon-all, and its GM/WM atlas suffices for the Eq. 4 regression.
-            self.parcellation_mode = "synthseg" if self.processing_mode in {"mni-norm", "midas"} else "chimera"
+            self.parcellation_mode = "synthseg" if self.processing_mode == "mni-norm" else "chimera"
 
     def _validate_mode_parcellation_combination(self) -> None:
         if self.processing_mode == "mni-norm" and self.parcellation_mode != "synthseg":
@@ -160,16 +158,6 @@ class MRSIPrepConfig:
         if self.processing_mode == "parc-con" and self.parcellation_mode == "synthseg":
             raise ValueError("parc-con requires Chimera or MNI atlas parcellation.")
 
-    def _apply_midas_overrides(self) -> None:
-        if self.processing_mode != "midas":
-            return
-        # MIDAS mode's tissue correction is the per-parcel Eq. 4 regression,
-        # not PETPVC RBV; the paper has no voxelwise PVC step. Fuzzy c-means
-        # always supplies its own GM/WM/CSF maps, so the SynthSeg+FAST/CAT12
-        # tissue backends do not apply here.
-        self.no_pvc = True
-        self.tissue_backend = "synthseg-fast"
-
     def __post_init__(self) -> None:
         self._validate_required_fields()
         self._resolve_paths()
@@ -177,7 +165,6 @@ class MRSIPrepConfig:
         self._validate_registration_backend()
         self._resolve_mode_dependent_defaults()
         self._validate_mode_parcellation_combination()
-        self._apply_midas_overrides()
         self.nproc = max(1, int(self.nproc))
         self.nthreads = max(1, int(self.nthreads))
 
