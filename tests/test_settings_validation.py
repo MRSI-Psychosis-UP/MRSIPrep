@@ -37,8 +37,8 @@ class DerivedDefaultsTests(unittest.TestCase):
         cfg = _config(parcellation_mode="chimera")
         self.assertEqual(cfg.registration_t1_target, "brain-csf")
 
-    def test_mni_parcellation_defaults_registration_target_to_brain_csf(self):
-        cfg = _config(parcellation_mode="mni")
+    def test_atlas_parcellation_defaults_registration_target_to_brain_csf(self):
+        cfg = _config(parcellation_mode="atlas")
         self.assertEqual(cfg.registration_t1_target, "brain-csf")
 
     def test_explicit_registration_target_is_not_overridden(self):

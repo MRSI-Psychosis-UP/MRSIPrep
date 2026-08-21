@@ -75,7 +75,7 @@ class RequiredExternalToolsTests(unittest.TestCase):
         self.assertIn("chimera", tools)
 
     def test_non_chimera_parcellation_excludes_chimera_and_reconall(self):
-        tools = required_external_tools(_cfg(parcellation_mode="mni"))
+        tools = required_external_tools(_cfg(parcellation_mode="atlas"))
         self.assertNotIn("chimera", tools)
         self.assertNotIn("recon-all", tools)
 
@@ -138,7 +138,7 @@ class PipelineTraceTests(unittest.TestCase):
         # Everything else -- including metprofiles export and profile
         # estimation -- runs unconditionally regardless of parcellation_mode.
         trace = pipeline_trace(self._cfg(parcellation_mode="synthseg"))
-        self.assertEqual(self._status(trace, "Parcellation (chimera/mni atlas)"), "SKIPPED")
+        self.assertEqual(self._status(trace, "Parcellation (chimera/atlas)"), "SKIPPED")
         for step in (
             "Tissue probability maps in MRSI space",
             "Partial volume correction",
@@ -147,13 +147,13 @@ class PipelineTraceTests(unittest.TestCase):
         ):
             self.assertEqual(self._status(trace, step), "RAN", msg=step)
 
-    def test_chimera_or_mni_parcellation_runs_all_gated_steps(self):
-        for parcellation_mode in ("chimera", "mni"):
+    def test_chimera_or_atlas_parcellation_runs_all_gated_steps(self):
+        for parcellation_mode in ("chimera", "atlas"):
             trace = pipeline_trace(self._cfg(parcellation_mode=parcellation_mode))
             for step in (
                 "Tissue probability maps in MRSI space",
                 "Partial volume correction",
-                "Parcellation (chimera/mni atlas)",
+                "Parcellation (chimera/atlas)",
                 "Regional metabolic profile estimation",
                 "Metprofiles export",
             ):
@@ -173,7 +173,7 @@ class PipelineTraceTests(unittest.TestCase):
         self.assertEqual(self._status(pipeline_trace(self._cfg(write_connectivity=True)), "Connectivity matrix"), "RAN")
 
     def test_always_on_steps_never_skipped_regardless_of_parcellation_mode(self):
-        for parcellation_mode in ("synthseg", "chimera", "mni"):
+        for parcellation_mode in ("synthseg", "chimera", "atlas"):
             trace = pipeline_trace(self._cfg(parcellation_mode=parcellation_mode))
             for step in (
                 "Tissue segmentation",

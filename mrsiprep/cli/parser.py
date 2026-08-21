@@ -250,7 +250,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Which T1w image registration targets. 'brain' registers directly to the skull-stripped T1w "
         "(default when --parcellation-mode synthseg). 'brain-csf' re-adds the CSF compartment to the "
         "skull-stripped image before registering, so CSF-adjacent MRSI signal isn't clipped at the "
-        "brain-only boundary (default when --parcellation-mode chimera or mni; requires a CAT12 p3 CSF "
+        "brain-only boundary (default when --parcellation-mode chimera or atlas; requires a CAT12 p3 CSF "
         "map). 'raw' registers to the original, non-skull-stripped T1w with no fixed mask.",
     )
     registration.add_argument(
@@ -278,16 +278,16 @@ def build_parser() -> argparse.ArgumentParser:
     parcellation = parser.add_argument_group("parcellation")
     parcellation.add_argument(
         "--parcellation-mode",
-        choices=["synthseg", "chimera", "mni"],
+        choices=["synthseg", "chimera", "atlas"],
         default="synthseg",
         help="Parcellation scheme, and the primary switch for how much of the pipeline runs. 'synthseg' "
         "(default) uses SynthSeg's own cortical/subcortical labels for parcellation, needs no FreeSurfer "
         "recon-all, and is the lighter-weight default (see --registration-t1-target). 'chimera' runs the "
         "Chimera multi-atlas fusion tool live, combining several region-specific atlases per "
-        "--chimera-scheme (requires FreeSurfer recon-all and FS_LICENSE). 'mni' warps a pre-bundled or "
-        "custom MNI-space atlas (see --atlas) into subject space instead of running Chimera. Regional "
-        "metabolite extraction, per-parcel metabolite-profile export, and CRLB-scaled Monte Carlo profile "
-        "estimation all run unconditionally regardless of this flag's value -- 'chimera'/'mni' "
+        "--chimera-scheme (requires FreeSurfer recon-all and FS_LICENSE). 'atlas' warps a pre-bundled or "
+        "custom standardized MNI-space atlas (see --atlas) into subject space instead of running Chimera. "
+        "Regional metabolite extraction, per-parcel metabolite-profile export, and CRLB-scaled Monte Carlo "
+        "profile estimation all run unconditionally regardless of this flag's value -- 'chimera'/'atlas' "
         "additionally run that parcellation step itself on top of SynthSeg's own parcellation, which "
         "always runs for QC. See --write-connectivity for the optional connectivity matrix.",
     )

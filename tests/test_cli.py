@@ -62,19 +62,19 @@ class CLITests(unittest.TestCase):
         cfg = parse_args(["/tmp/bids", "/tmp/derivatives/mrsiprep", "participant"])
         self.assertEqual(cfg.derivative_dir, Path("/tmp/derivatives/mrsiprep"))
 
-    def test_cli_accepts_mni_atlas_parcellation(self):
+    def test_cli_accepts_atlas_parcellation(self):
         cfg = parse_args([
             "/tmp/bids",
             "/tmp/out",
             "participant",
             "--parcellation-mode",
-            "mni",
+            "atlas",
             "--atlas",
             "chimera-LFMIHIFIS-3",
             "--synthseg-mode",
             "robust",
         ])
-        self.assertEqual(cfg.parcellation_mode, "mni")
+        self.assertEqual(cfg.parcellation_mode, "atlas")
         self.assertEqual(cfg.synthseg_mode, "robust")
 
     def test_cli_normalizes_mni_output_space_alias(self):
@@ -83,7 +83,7 @@ class CLITests(unittest.TestCase):
             "/tmp/out",
             "participant",
             "--parcellation-mode",
-            "mni",
+            "atlas",
             "--output-spaces",
             "mni",
         ])
