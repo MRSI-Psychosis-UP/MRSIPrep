@@ -6,7 +6,7 @@ message preparation/tagging, and the status-queue short-circuit path.
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from mrsiprep.utils.debug import Debug, _logbook_write, _strip_markup, collect_timings, set_logbook, set_status_queue, set_timing_sink, timestamp
 
@@ -203,14 +203,36 @@ class VerbosityGatingTests(_ResetGlobalDebugStateMixin, unittest.TestCase):
 
 class ExceptionMethodTests(_ResetGlobalDebugStateMixin, unittest.TestCase):
     def test_tag_prepended_to_logged_summary(self):
+        # Tests exception()'s own contract (it prepends the tag before
+        # handing off to _logbook_write) in isolation from
+        # _logbook_write/_strip_markup's downstream behavior: Rich's
+        # markup parser treats a bare "[sub-01]" prefix as a style tag and
+        # silently drops it from the *file* content, so asserting on the
+        # written file's text here would test _strip_markup, not exception().
+        with patch("mrsiprep.utils.debug._logbook_write") as logbook_write:
+            debug = Debug(verbose=0, tag="sub-01")
+            debug.exception("boom", "traceback here")
+        summary_call = next(c for c in logbook_write.call_args_list if c.args[0] == "ERROR")
+        self.assertEqual(summary_call.args[1], "[sub-01] boom")
+        trace_call = next(c for c in logbook_write.call_args_list if c.args[0] == "TRACE")
+        self.assertEqual(trace_call.args[1], "traceback here")
+
+    def test_logged_tag_prefix_does_not_survive_markup_stripping(self):
+        """Documents a real quirk, not a requirement: Rich's Text.from_markup
+        treats any "[word]" as a style-open tag, so a tag prefix added by
+        plain string concatenation (not markup-escaped) vanishes from the
+        logbook *file* even though it renders correctly on the console
+        (which uses rich.markup.escape() instead). Low real-world impact
+        since one logbook file is already scoped to a single recording, but
+        worth knowing if anything ever greps logbooks for the tag."""
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "log.txt"
             set_logbook(path)
             debug = Debug(verbose=0, tag="sub-01")
             debug.exception("boom", "traceback here")
             content = path.read_text()
-        self.assertIn("[sub-01] boom", content)
-        self.assertIn("traceback here", content)
+        self.assertNotIn("[sub-01]", content)
+        self.assertIn("boom", content)
 
     def test_traceback_only_printed_at_verbose_3(self):
         debug = Debug(verbose=2)
