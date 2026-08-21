@@ -21,9 +21,9 @@ class BlurredScratchPathTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             config = SimpleNamespace(work_dir=Path(tmpdir))
             path = _blurred_scratch_path(config, "01", "01", "GM")
-        self.assertIn("ses-01", str(path))
-        self.assertIn("sub-01_label-GM_desc-psfblurredT1w_probseg.nii.gz", path.name)
-        self.assertTrue(path.parent.is_dir())  # created eagerly
+            self.assertIn("ses-01", str(path))
+            self.assertIn("sub-01_label-GM_desc-psfblurredT1w_probseg.nii.gz", path.name)
+            self.assertTrue(path.parent.is_dir())  # created eagerly
 
     def test_uses_ses_none_placeholder_when_session_absent(self):
         with tempfile.TemporaryDirectory() as tmpdir:
