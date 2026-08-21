@@ -132,7 +132,7 @@ def _preflight_transform_status(layout, subject, session, config) -> dict[str, b
 
 def _preflight_freesurfer_status(layout, subject, session, config) -> bool | None:
     """FreeSurfer recon-all completeness, or None when this run doesn't need it."""
-    if config.processing_mode != "parc-con" or config.parcellation_mode != "chimera":
+    if config.parcellation_mode != "chimera":
         return None
     raw_t1 = layout.raw_t1(subject, session)
     if raw_t1 is None:
@@ -246,7 +246,7 @@ def _preflight_missing_items(row: dict, config) -> list[str]:
         missing_items.append("SNR")
     if "linewidth" in config.quality_metrics and not row["fwhm"]:
         missing_items.append("FWHM")
-    if config.processing_mode == "parc-con" and config.tissue_backend == "existing" and "red" in row["tissue"]:
+    if config.tissue_backend == "existing" and "red" in row["tissue"]:
         missing_items.append("Tissue")
     if row.get("corrupt_items"):
         missing_items.append(f"CORRUPT ({', '.join(row['corrupt_items'])})")
@@ -570,19 +570,19 @@ def run_reports_only_workflow(config) -> list[RecordingStatus]:
 def _validate_backend_inputs(config, subject: str, session: str | None) -> None:
     layout = BIDSLayout(config.bids_dir, filters=config.bids_filters)
     raw_t1 = layout.raw_t1(subject, session)
-    if config.processing_mode == "mni-norm" and raw_t1 is None:
-        raise FileNotFoundError(f"Missing raw T1w required for light-mode SynthSeg parcellation: sub-{subject} ses-{session}")
     if config.tissue_backend == "synthseg-fast" and raw_t1 is None:
         raise FileNotFoundError(f"Missing raw T1w required for {config.tissue_backend}: sub-{subject} ses-{session}")
-    if config.parcellation_mode == "mni" and config.atlas == "custom":
+    if config.parcellation_mode == "atlas" and config.atlas == "custom":
         if not config.custom_atlas or not config.custom_atlas.exists():
-            raise FileNotFoundError("--custom-atlas is required for --parcellation-mode mni --atlas custom")
+            raise FileNotFoundError("--custom-atlas is required for --parcellation-mode atlas --atlas custom")
         if not config.custom_atlas_lut or not config.custom_atlas_lut.exists():
-            raise FileNotFoundError("--custom-atlas-lut is required for --parcellation-mode mni --atlas custom")
+            raise FileNotFoundError("--custom-atlas-lut is required for --parcellation-mode atlas --atlas custom")
 
 
 def _step_tissue_segmentation(config, subject, session, raw_t1, t1_path, debug):
-    """Light mode: SynthSeg brain extraction. Full+synthseg-fast: SynthSeg+FAST inputs.
+    """Runs SynthSeg+FAST when --tissue-backend synthseg-fast (the default);
+    a no-op otherwise ('existing' reuses CAT12 p1/p2/p3 maps found directly
+    on disk, 'none' skips tissue segmentation and PVC entirely).
 
     Returns (t1_path, precomputed_tissue_t1, p3_override, brain_mask_override),
     where t1_path may be overridden from the input value.
@@ -591,15 +591,7 @@ def _step_tissue_segmentation(config, subject, session, raw_t1, t1_path, debug):
     p3_override = None
     brain_mask_override = None
     with debug.step("Tissue segmentation"):
-        if config.processing_mode == "mni-norm":
-            if raw_t1 is None:
-                raise FileNotFoundError(f"Missing raw T1w required for SynthSeg+FAST segmentation: sub-{subject} ses-{session}")
-            precomputed_tissue_t1 = segment_t1_synthseg_fast(config, subject, session, raw_t1)
-            p3_override = synthseg_fast_csf_probseg_path(config, subject, session)
-            if config.registration_t1_target == "brain":
-                t1_path = synthseg_fast_brain_path(config, subject, session)
-                brain_mask_override = synthseg_fast_brain_mask_path(config, subject, session)
-        elif config.processing_mode == "parc-con" and config.tissue_backend == "synthseg-fast":
+        if config.tissue_backend == "synthseg-fast":
             if raw_t1 is None:
                 raise FileNotFoundError(f"Missing raw T1w required for SynthSeg+FAST segmentation: sub-{subject} ses-{session}")
             precomputed_tissue_t1 = segment_t1_synthseg_fast(config, subject, session, raw_t1)
@@ -658,10 +650,10 @@ def _step_tissue_probmaps(config, subject, session, anat, mrsi, registration, pr
 
 def _step_pvc(config, subject, session, mrsi, tissue, debug):
     """Returns (corrected_maps, tissue_4d). corrected_maps defaults to
-    mrsi.preproc_maps unchanged when full-mode PVC is not applicable."""
+    mrsi.preproc_maps unchanged when --no-pvc is set."""
     corrected_maps = mrsi.preproc_maps
     tissue_4d = None
-    if config.processing_mode in {"parc-con", "mni-norm"} and not config.no_pvc:
+    if not config.no_pvc:
         if tissue is None:
             raise ValueError("PVC requires tissue segmentation, but none was provided")
         with debug.step("Partial volume correction"):
@@ -751,10 +743,10 @@ def _step_synthseg_parcellation_qc(config, subject, session, raw_t1, mrsi, regis
 
 def _step_parcellation(config, subject, session, raw_t1, mrsi, anat, registration, preliminary_parcels, debug):
     """Returns (parcels, qc_sections_parcellation). parcels defaults to the
-    preliminary SynthSeg parcellation outside parc-con mode."""
+    preliminary SynthSeg parcellation when parcellation_mode is synthseg."""
     parcels = preliminary_parcels
     qc_sections_parcellation = None
-    if config.processing_mode == "parc-con":
+    if config.parcellation_mode != "synthseg":
         with debug.step("Parcellation"):
             parcels = run_parcellation_workflow(
                 config,
@@ -788,7 +780,7 @@ def _step_regional_extraction(config, subject, session, corrected_maps, parcels,
 
 def _step_connectivity(config, subject, session, regional, parcels, corrected_maps, mrsi, tissue, debug):
     """Regional metabolic profile estimation (CRLB-scaled Monte Carlo
-    uncertainty propagation) always runs in parc-con mode; the metabolic
+    uncertainty propagation) always runs, for every recording; the metabolic
     connectivity matrix is the optional add-on gated on
     ``--write-connectivity`` (see ``run_connectivity_workflow``).
 
@@ -799,8 +791,6 @@ def _step_connectivity(config, subject, session, regional, parcels, corrected_ma
     that function's docstring for the ``n_perturbations`` degeneracy this
     implies when no metabolite has real CRLB at all.
     """
-    if config.processing_mode != "parc-con":
-        return {}, None
     with debug.step("Regional metabolic profiles" + (" and connectivity" if config.write_connectivity else ""), live=False):
         connectivity = run_connectivity_workflow(
             config,
@@ -818,8 +808,6 @@ def _step_connectivity(config, subject, session, regional, parcels, corrected_ma
 
 
 def _step_metprofiles(config, subject, session, corrected_maps, mrsi, parcels, regional, anat):
-    if config.processing_mode != "parc-con":
-        return None
     return export_metprofile_npz(
         config,
         subject,

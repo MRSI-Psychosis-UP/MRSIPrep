@@ -105,7 +105,7 @@ class PreflightRowCellsTests(unittest.TestCase):
 
 class PreflightMissingItemsTests(unittest.TestCase):
     def _config(self, **overrides):
-        base = dict(quality_metrics=["snr", "linewidth", "crlb"], processing_mode="mni-norm", tissue_backend="synthseg-fast")
+        base = dict(quality_metrics=["snr", "linewidth", "crlb"], tissue_backend="synthseg-fast")
         base.update(overrides)
         return SimpleNamespace(**base)
 
@@ -124,13 +124,15 @@ class PreflightMissingItemsTests(unittest.TestCase):
         self.assertIn("CRLB 1/5", _preflight_missing_items(row, self._config(quality_metrics=["crlb"])))
         self.assertNotIn("CRLB 1/5", _preflight_missing_items(row, self._config(quality_metrics=["snr"])))
 
-    def test_tissue_flagged_only_for_parc_con_existing_with_red_marker(self):
+    def test_tissue_flagged_for_any_existing_backend_with_red_marker(self):
+        # No longer depends on parcellation_mode -- flagged for any config
+        # using --tissue-backend existing.
         row = _row(tissue="[red]p2[/red]")
-        config = self._config(processing_mode="parc-con", tissue_backend="existing")
+        config = self._config(tissue_backend="existing")
         self.assertIn("Tissue", _preflight_missing_items(row, config))
 
-        config_mni_norm = self._config(processing_mode="mni-norm", tissue_backend="existing")
-        self.assertNotIn("Tissue", _preflight_missing_items(row, config_mni_norm))
+        config_synthseg_fast = self._config(tissue_backend="synthseg-fast")
+        self.assertNotIn("Tissue", _preflight_missing_items(row, config_synthseg_fast))
 
     def test_corrupt_items_flagged(self):
         row = _row(corrupt_items=["SNR"])

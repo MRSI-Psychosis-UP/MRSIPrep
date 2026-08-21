@@ -54,12 +54,14 @@ class ValidateQualityMapsPresentTests(unittest.TestCase):
 
 
 class ValidateExistingTissueBackendTests(unittest.TestCase):
-    def test_skipped_outside_parc_con_existing(self):
-        config = SimpleNamespace(processing_mode="mni-norm", tissue_backend="existing")
+    def test_skipped_when_tissue_backend_is_not_existing(self):
+        # No longer depends on parcellation_mode at all -- the only
+        # remaining gate is tissue_backend itself.
+        config = SimpleNamespace(tissue_backend="synthseg-fast")
         _validate_existing_tissue_backend(config, layout=None, subject="S001", session="V1")
 
     def test_raises_when_probseg_missing(self):
-        config = SimpleNamespace(processing_mode="parc-con", tissue_backend="existing")
+        config = SimpleNamespace(tissue_backend="existing")
         layout = SimpleNamespace(cat12_probseg=lambda subject, session, idx: None)
         with self.assertRaisesRegex(ValidationError, "p1, p2, p3"):
             _validate_existing_tissue_backend(config, layout, "S001", "V1")
@@ -68,7 +70,7 @@ class ValidateExistingTissueBackendTests(unittest.TestCase):
         from pathlib import Path
         import tempfile
 
-        config = SimpleNamespace(processing_mode="parc-con", tissue_backend="existing")
+        config = SimpleNamespace(tissue_backend="existing")
         with tempfile.TemporaryDirectory() as td:
             existing = Path(td) / "p.nii.gz"
             existing.touch()
