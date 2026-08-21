@@ -92,6 +92,23 @@ def check_external_software(debug: Debug, config=None) -> bool:
     return all_available
 
 
+def _requested_parcellation_count(config) -> int:
+    """How many parcellations the config asks for.
+
+    The nominal cross product -- Chimera may yield fewer if a scheme isn't
+    multi-resolution -- so this describes the request, not the outcome.
+    Tolerates configs without the accessors (e.g. SimpleNamespace fixtures).
+    """
+    try:
+        if config.parcellation_mode == "chimera":
+            return max(1, len(config.chimera_schemes()) * len(config.chimera_scales()) * len(config.chimera_grows()))
+        if config.parcellation_mode == "atlas":
+            return max(1, len(config.atlases()))
+    except AttributeError:
+        return 1
+    return 1
+
+
 def pipeline_trace(config) -> list[dict]:
     """Which pipeline steps ran vs. were skipped for this config, and why.
 
@@ -101,6 +118,11 @@ def pipeline_trace(config) -> list[dict]:
     """
     full_parcellation = config.parcellation_mode != "synthseg"
     parcellation_reason = f"parcellation_mode={config.parcellation_mode}, requires chimera or atlas"
+    parcellation_step = "Parcellation (chimera/atlas)"
+    if full_parcellation:
+        requested = _requested_parcellation_count(config)
+        if requested > 1:
+            parcellation_step += f" x{requested}"
     pvc_ran = not config.no_pvc
     pvc_reason = "" if pvc_ran else "--no-pvc"
     t1corr_ran = config.t1_correction == "literature"
@@ -114,7 +136,7 @@ def pipeline_trace(config) -> list[dict]:
         {"step": "Partial volume correction", "ran": pvc_ran, "reason": pvc_reason},
         {"step": "Resampling MRSI maps to T1w/MNI space", "ran": True, "reason": ""},
         {"step": "SynthSeg parcellation and QC", "ran": True, "reason": ""},
-        {"step": "Parcellation (chimera/atlas)", "ran": full_parcellation, "reason": "" if full_parcellation else parcellation_reason},
+        {"step": parcellation_step, "ran": full_parcellation, "reason": "" if full_parcellation else parcellation_reason},
         {"step": "Regional metabolite extraction", "ran": True, "reason": ""},
         {"step": "Regional metabolic profile estimation", "ran": True, "reason": ""},
         {"step": "Connectivity matrix", "ran": bool(config.write_connectivity), "reason": "" if config.write_connectivity else "--write-connectivity not set"},

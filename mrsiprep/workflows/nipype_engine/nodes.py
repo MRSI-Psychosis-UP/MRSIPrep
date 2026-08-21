@@ -178,6 +178,7 @@ def step_parcellation(config, subject, session, ctx):
         config, subject, session, ctx["raw_t1"], ctx["mrsi"], ctx["anat"], ctx["registration"], ctx["preliminary_parcels"], debug
     )
     ctx = dict(ctx)
+    # `parcels` is a list: one entry per comma-separated scheme/scale/atlas.
     ctx.update(parcels=parcels, qc_sections_parcellation=qc_sections_parcellation)
     return ctx
 
@@ -229,7 +230,9 @@ def step_reports(config, subject, session, ctx):
     debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""))
     anat = ctx["anat"]
     mrsi = ctx["mrsi"]
-    parcels = ctx["parcels"]
+    parcels_list = ctx["parcels"]
+    primary = parcels_list[0]
+    primary_id = primary.parcellation_id
     outputs = {
         "t1w": anat.t1w,
         "registration_t1w": anat.registration_t1w,
@@ -238,12 +241,28 @@ def step_reports(config, subject, session, ctx):
         "parcel_qc": ctx["parcel_qc"],
         "leakage_qc": ctx["leakage_qc"],
         "tissue_4d": ctx["tissue_4d"],
-        "atlas_mrsi": parcels.atlas_mrsi,
+        # Singular keys stay pointed at the first parcellation so existing
+        # report/provenance consumers keep working; `parcellations` below
+        # carries the full set.
+        "atlas_mrsi": primary.atlas_mrsi,
         "preliminary_atlas_mrsi": ctx["preliminary_parcels"].atlas_mrsi,
-        "regional_table": ctx["regional"],
-        "metprofiles": ctx["metprofiles"],
-        "connectivity": ctx["connectivity"],
+        "regional_table": ctx["regional"][primary_id],
+        "metprofiles": ctx["metprofiles"][primary_id],
+        "connectivity": ctx["connectivity"][primary_id],
         "transformed_maps": ctx["transformed"],
+        "parcellations": [
+            {
+                "id": one.parcellation_id,
+                "atlas_name": one.atlas_name,
+                "scale": one.scale,
+                "grow": one.grow,
+                "atlas_mrsi": one.atlas_mrsi,
+                "regional_table": ctx["regional"][one.parcellation_id],
+                "metprofiles": ctx["metprofiles"][one.parcellation_id],
+                "connectivity": ctx["connectivity"][one.parcellation_id],
+            }
+            for one in parcels_list
+        ],
     }
     qc_sections = {
         "tissue": ctx["qc_sections_tissue"],

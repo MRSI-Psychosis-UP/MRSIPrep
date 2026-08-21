@@ -56,10 +56,7 @@ def generate_subject_report(config, subject: str, session: str | None, outputs: 
     if qc_path and Path(qc_path).exists():
         qc_html = pd.read_csv(qc_path, sep="\t").to_html(index=False, border=0)
 
-    regional_html = ""
-    regional = outputs.get("regional_table")
-    if regional and Path(regional).exists():
-        regional_html = pd.read_csv(regional, sep="\t").head(50).to_html(index=False, border=0)
+    regional_html = _regional_tables_html(outputs)
 
     parcel_qc_html = ""
     parcel_qc_summary = ""
@@ -119,7 +116,7 @@ def generate_subject_report(config, subject: str, session: str | None, outputs: 
         "MNI-space alignment",
         _sections_html(qc_sections.get("mni_alignment")) + leakage_table_html(leakage_df, "MNI152NLin2009cAsym"),
     ))
-    tabs.append(("parcellation", "Parcellation", _sections_html(qc_sections.get("parcellation"))))
+    tabs.append(("parcellation", "Parcellation", _sections_html(qc_sections.get("parcellation")) + regional_html))
 
     connectivity_sections = qc_sections.get("connectivity")
     if connectivity_sections is not None:
@@ -160,6 +157,29 @@ def generate_subject_report(config, subject: str, session: str | None, outputs: 
     lines.extend(["</body></html>"])
     out.write_text("\n".join(lines), encoding="utf-8")
     return out
+
+
+def _regional_tables_html(outputs: dict) -> str:
+    """Preview of each parcellation's regional metabolite table.
+
+    Uses the structured ``parcellations`` list when present (one entry per
+    comma-separated scheme/scale/atlas), falling back to the singular
+    ``regional_table`` key for runs that predate it.
+    """
+    entries = outputs.get("parcellations")
+    if not entries:
+        regional = outputs.get("regional_table")
+        entries = [{"id": None, "regional_table": regional}] if regional else []
+
+    blocks = []
+    for entry in entries:
+        table = entry.get("regional_table")
+        if not table or not Path(table).exists():
+            continue
+        preview = pd.read_csv(table, sep="\t").head(50).to_html(index=False, border=0)
+        heading = f"<h3>Regional metabolites: {entry['id']}</h3>" if entry.get("id") else "<h3>Regional metabolites</h3>"
+        blocks.append(heading + preview)
+    return "".join(blocks)
 
 
 def _sections_html(sections: list[tuple[str, str]] | None) -> str:
