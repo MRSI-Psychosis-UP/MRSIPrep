@@ -50,10 +50,10 @@ no regeneration support.
 
 ```bash
 curl -L -o SynthMRSI-Project.zip "https://zenodo.org/records/22014466/files/SynthMRSI-Project.zip"
-unzip SynthMRSI-Project.zip
+unzip SynthMRSI-Project.zip -d SynthMRSI-Project
 ```
 
-This extracts a `SynthMRSI-Project/` directory in your current working directory (the zip's own top-level folder) -- don't pass `-d SynthMRSI-Project`, since that would double-nest it.
+The zip has no top-level wrapper folder -- its contents (`dataset_description.json`, `sub-01`...`sub-32`, `derivatives/`, etc.) sit flat at its root -- so `-d SynthMRSI-Project` is required to land them inside a `SynthMRSI-Project/` directory instead of scattering them into your current working directory.
 
 The record id in that URL (`22014466`) is this specific version's id, since
 Zenodo's direct-file-download route needs one -- unlike the DOI below, it
