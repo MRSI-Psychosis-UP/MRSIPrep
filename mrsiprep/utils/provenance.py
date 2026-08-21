@@ -102,8 +102,9 @@ def pipeline_trace(config) -> list[dict]:
     """
     parc_con = config.processing_mode == "parc-con"
     mode_reason = f"mode={config.processing_mode}, requires parc-con"
-    pvc_ran = parc_con and not config.no_pvc
-    pvc_reason = "" if pvc_ran else (mode_reason if not parc_con else "--no-pvc")
+    pvc_eligible_mode = config.processing_mode in {"parc-con", "mni-norm"}
+    pvc_ran = pvc_eligible_mode and not config.no_pvc
+    pvc_reason = "" if pvc_ran else (mode_reason if not pvc_eligible_mode else "--no-pvc")
     t1corr_ran = config.t1_correction == "literature"
     trace = [
         {"step": "Tissue segmentation", "ran": True, "reason": ""},
@@ -111,7 +112,7 @@ def pipeline_trace(config) -> list[dict]:
         {"step": "MRSI preprocessing", "ran": True, "reason": ""},
         {"step": "T1 saturation correction", "ran": t1corr_ran, "reason": "" if t1corr_ran else "--t1-correction none"},
         {"step": "MRSI-T1w-MNI registration", "ran": True, "reason": ""},
-        {"step": "Tissue probability maps in MRSI space", "ran": parc_con, "reason": "" if parc_con else mode_reason},
+        {"step": "Tissue probability maps in MRSI space", "ran": True, "reason": ""},
         {"step": "Partial volume correction", "ran": pvc_ran, "reason": pvc_reason},
         {"step": "Resampling MRSI maps to T1w/MNI space", "ran": True, "reason": ""},
         {"step": "SynthSeg parcellation and QC", "ran": True, "reason": ""},
