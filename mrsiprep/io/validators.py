@@ -62,7 +62,7 @@ def _validate_mrsi_map_integrity(config, subject: str, session: str | None, inpu
 
 
 def _validate_existing_tissue_backend(config, layout, subject: str, session: str | None) -> None:
-    if config.processing_mode != "parc-con" or config.tissue_backend != "existing":
+    if config.tissue_backend != "existing":
         return
     missing_pv = []
     for index in (1, 2, 3):
