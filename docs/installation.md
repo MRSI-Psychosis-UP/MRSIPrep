@@ -4,6 +4,10 @@ MRSIPrep is distributed as a Docker image. There is no supported host
 installation of the pipeline itself: everything runs inside the container,
 including its [Nipype](https://nipype.readthedocs.io/)-based workflow engine.
 
+You will need Docker installed and running first; see the official
+[Docker installation guide](https://docs.docker.com/get-started/get-docker/)
+for instructions for your platform.
+
 ```bash
 docker pull mrsiup/mrsiprep:cpu
 ```
