@@ -7,6 +7,7 @@ from mrsiprep.workflows.participant import (
     _preflight_row_cells,
     _preflight_tissue_label,
     _preflight_transform_columns,
+    _report_cpu_budget,
     _report_preflight_summary,
 )
 
@@ -169,6 +170,25 @@ class ReportPreflightSummaryTests(unittest.TestCase):
         self.assertEqual(kind, "error")
         self.assertIn("1/2 recordings", msg)
         self.assertIn("sub-S002", msg)
+
+
+class ReportCpuBudgetTests(unittest.TestCase):
+    def test_no_warning_reports_cpu_budget_line(self):
+        messages = []
+        debug = SimpleNamespace(always=lambda msg: messages.append(msg))
+        config = SimpleNamespace(resolve_cpu_budget=lambda: (2, 4, None))
+        _report_cpu_budget(debug, config)
+        self.assertEqual(len(messages), 1)
+        self.assertIn("CPU budget: --nproc 2 x --nthreads 4 = 8 threads", messages[0])
+
+    def test_warning_is_reported_instead_of_budget_line(self):
+        messages = []
+        debug = SimpleNamespace(always=lambda msg: messages.append(msg))
+        config = SimpleNamespace(resolve_cpu_budget=lambda: (8, 8, "coercing --nthreads"))
+        _report_cpu_budget(debug, config)
+        self.assertEqual(len(messages), 1)
+        self.assertIn("coercing --nthreads", messages[0])
+        self.assertNotIn("CPU budget", messages[0])
 
 
 if __name__ == "__main__":
