@@ -2,7 +2,8 @@
 workflows/participant.py, plus `_build_subject_templates`. These wrap calls
 into the various workflow modules (already unit-tested on their own) behind
 a `with debug.step(...)` context manager -- the thing worth verifying here
-is the data threading and processing_mode/no_pvc gating logic itself, so
+is the data threading and parcellation_mode/tissue_backend/no_pvc gating
+logic itself, so
 every collaborator is mocked.
 """
 
@@ -70,62 +71,45 @@ class BuildSubjectTemplatesTests(unittest.TestCase):
 
 
 class StepTissueSegmentationTests(unittest.TestCase):
-    def _cfg(self, mode, **overrides):
-        return make_config(["/tmp/bids", "/tmp/out", "participant", "--mode", mode], **overrides)
+    def _cfg(self, tissue_backend, **overrides):
+        return make_config(["/tmp/bids", "/tmp/out", "participant", "--tissue-backend", tissue_backend], **overrides)
 
-    def test_mni_norm_raises_without_raw_t1(self):
-        config = self._cfg("mni-norm")
+    def test_synthseg_fast_raises_without_raw_t1(self):
+        config = self._cfg("synthseg-fast")
         with self.assertRaisesRegex(FileNotFoundError, "SynthSeg\\+FAST segmentation"):
             P._step_tissue_segmentation(config, "01", "01", None, Path("t1"), _debug())
 
-    def test_mni_norm_keeps_t1_path_when_target_is_raw(self):
-        config = self._cfg("mni-norm", registration_t1_target="raw")
-        with patch("mrsiprep.workflows.participant.segment_t1_synthseg_fast", return_value={"GM": "gm"}) as seg, patch(
-            "mrsiprep.workflows.participant.synthseg_fast_csf_probseg_path", return_value=Path("p3")
-        ):
-            t1_path, tissue, p3, mask = P._step_tissue_segmentation(config, "01", "01", Path("raw"), Path("orig_t1"), _debug())
-        seg.assert_called_once_with(config, "01", "01", Path("raw"))
-        self.assertEqual(t1_path, Path("orig_t1"))  # unchanged: target is "raw", not "brain"
-        self.assertEqual(tissue, {"GM": "gm"})
-        self.assertEqual(p3, Path("p3"))
+    def test_synthseg_fast_always_overrides_brain_and_mask_regardless_of_registration_target(self):
+        # Confirmed decision: unconditional override, matching the single
+        # unified branch -- not gated on --registration-t1-target at all.
+        for target in ("brain", "raw", "brain-csf"):
+            config = self._cfg("synthseg-fast", registration_t1_target=target)
+            with patch("mrsiprep.workflows.participant.segment_t1_synthseg_fast") as seg, patch(
+                "mrsiprep.workflows.participant.synthseg_fast_brain_path", return_value=Path("brain")
+            ), patch(
+                "mrsiprep.workflows.participant.synthseg_fast_brain_mask_path", return_value=Path("brain_mask")
+            ), patch(
+                "mrsiprep.workflows.participant.synthseg_fast_csf_probseg_path", return_value=Path("p3")
+            ):
+                t1_path, _tissue, p3, mask = P._step_tissue_segmentation(config, "01", "01", Path("raw"), Path("orig_t1"), _debug())
+            seg.assert_called_once_with(config, "01", "01", Path("raw"))
+            self.assertEqual(t1_path, Path("brain"), msg=target)
+            self.assertEqual(mask, Path("brain_mask"), msg=target)
+            self.assertEqual(p3, Path("p3"), msg=target)
+
+    def test_existing_backend_is_a_no_op(self):
+        config = self._cfg("existing")
+        t1_path, tissue, p3, mask = P._step_tissue_segmentation(config, "01", "01", Path("raw"), Path("orig_t1"), _debug())
+        self.assertEqual(t1_path, Path("orig_t1"))
+        self.assertIsNone(tissue)
+        self.assertIsNone(p3)
         self.assertIsNone(mask)
 
-    def test_mni_norm_overrides_t1_path_when_target_is_brain(self):
-        config = self._cfg("mni-norm", registration_t1_target="brain")
-        with patch("mrsiprep.workflows.participant.segment_t1_synthseg_fast"), patch(
-            "mrsiprep.workflows.participant.synthseg_fast_csf_probseg_path", return_value=Path("p3")
-        ), patch(
-            "mrsiprep.workflows.participant.synthseg_fast_brain_path", return_value=Path("brain")
-        ), patch(
-            "mrsiprep.workflows.participant.synthseg_fast_brain_mask_path", return_value=Path("brain_mask")
-        ):
-            t1_path, _tissue, _p3, mask = P._step_tissue_segmentation(config, "01", "01", Path("raw"), Path("orig_t1"), _debug())
-        self.assertEqual(t1_path, Path("brain"))
-        self.assertEqual(mask, Path("brain_mask"))
-
-    def test_parc_con_synthseg_fast_raises_without_raw_t1(self):
-        config = self._cfg("parc-con", tissue_backend="synthseg-fast")
-        with self.assertRaisesRegex(FileNotFoundError, "SynthSeg\\+FAST segmentation"):
-            P._step_tissue_segmentation(config, "01", "01", None, Path("t1"), _debug())
-
-    def test_parc_con_synthseg_fast_always_overrides_brain_and_mask(self):
-        config = self._cfg("parc-con", tissue_backend="synthseg-fast", registration_t1_target="raw")
-        with patch("mrsiprep.workflows.participant.segment_t1_synthseg_fast"), patch(
-            "mrsiprep.workflows.participant.synthseg_fast_brain_path", return_value=Path("brain")
-        ), patch(
-            "mrsiprep.workflows.participant.synthseg_fast_brain_mask_path", return_value=Path("brain_mask")
-        ), patch(
-            "mrsiprep.workflows.participant.synthseg_fast_csf_probseg_path", return_value=Path("p3")
-        ):
-            t1_path, _tissue, p3, mask = P._step_tissue_segmentation(config, "01", "01", Path("raw"), Path("orig_t1"), _debug())
-        # Unlike mni-norm, parc-con+synthseg-fast overrides regardless of registration_t1_target.
-        self.assertEqual(t1_path, Path("brain"))
-        self.assertEqual(mask, Path("brain_mask"))
-        self.assertEqual(p3, Path("p3"))
-
-    def test_parc_con_existing_backend_is_a_no_op(self):
-        config = self._cfg("parc-con", tissue_backend="existing")
-        t1_path, tissue, p3, mask = P._step_tissue_segmentation(config, "01", "01", Path("raw"), Path("orig_t1"), _debug())
+    def test_none_backend_is_a_no_op(self):
+        # Previously always forced to synthseg-fast under mni-norm regardless
+        # of --tissue-backend; now genuinely skips tissue segmentation.
+        config = self._cfg("none")
+        t1_path, tissue, p3, mask = P._step_tissue_segmentation(config, "01", "01", None, Path("orig_t1"), _debug())
         self.assertEqual(t1_path, Path("orig_t1"))
         self.assertIsNone(tissue)
         self.assertIsNone(p3)
@@ -199,21 +183,17 @@ class StepRegistrationTests(unittest.TestCase):
 
 
 class StepTissueProbmapsTests(unittest.TestCase):
-    def test_runs_unconditionally_regardless_of_mode(self):
-        # No gating left in the function at all (its mode guard was already
-        # dead code, since it covered every valid processing_mode) -- confirm
-        # it runs the same way for both real modes.
-        for mode in ("parc-con", "mni-norm"):
-            config = SimpleNamespace(processing_mode=mode)
-            anat = SimpleNamespace(registration_t1w=Path("t1"), registration_mask=Path("mask"))
-            mrsi = SimpleNamespace(reference=Path("ref"))
-            registration = SimpleNamespace(mrsi_to_t1=SimpleNamespace(inverse="inv"))
-            with patch("mrsiprep.workflows.participant.run_tissue_workflow", return_value="tissue-result") as run_fn:
-                result = P._step_tissue_probmaps(config, "01", "01", anat, mrsi, registration, "precomputed", _debug())
-            self.assertEqual(result, "tissue-result", msg=mode)
-            run_fn.assert_called_once_with(
-                config, "01", "01", Path("t1"), Path("mask"), Path("ref"), "inv", precomputed_tissue_t1="precomputed"
-            )
+    def test_always_runs_tissue_workflow(self):
+        config = SimpleNamespace()
+        anat = SimpleNamespace(registration_t1w=Path("t1"), registration_mask=Path("mask"))
+        mrsi = SimpleNamespace(reference=Path("ref"))
+        registration = SimpleNamespace(mrsi_to_t1=SimpleNamespace(inverse="inv"))
+        with patch("mrsiprep.workflows.participant.run_tissue_workflow", return_value="tissue-result") as run_fn:
+            result = P._step_tissue_probmaps(config, "01", "01", anat, mrsi, registration, "precomputed", _debug())
+        self.assertEqual(result, "tissue-result")
+        run_fn.assert_called_once_with(
+            config, "01", "01", Path("t1"), Path("mask"), Path("ref"), "inv", precomputed_tissue_t1="precomputed"
+        )
 
 
 class StepPvcTests(unittest.TestCase):
@@ -221,7 +201,7 @@ class StepPvcTests(unittest.TestCase):
         return SimpleNamespace(preproc_maps={"preproc": 1}, reference=Path("ref"), brainmask=Path("mask"), corrected_maps=None)
 
     def test_no_pvc_flag_skips_correction(self):
-        config = SimpleNamespace(processing_mode="parc-con", no_pvc=True)
+        config = SimpleNamespace(no_pvc=True)
         mrsi = self._mrsi()
         with patch("mrsiprep.workflows.participant.create_tissue_4d") as tissue_4d, patch(
             "mrsiprep.workflows.participant.run_pvc"
@@ -233,12 +213,12 @@ class StepPvcTests(unittest.TestCase):
         self.assertIsNone(tissue4d)
 
     def test_missing_tissue_raises(self):
-        config = SimpleNamespace(processing_mode="parc-con", no_pvc=False)
+        config = SimpleNamespace(no_pvc=False)
         with self.assertRaisesRegex(ValueError, "PVC requires tissue segmentation"):
             P._step_pvc(config, "01", "01", self._mrsi(), None, _debug())
 
-    def test_parc_con_runs_pvc_and_mutates_mrsi_corrected_maps(self):
-        config = SimpleNamespace(processing_mode="parc-con", no_pvc=False)
+    def test_runs_pvc_and_mutates_mrsi_corrected_maps(self):
+        config = SimpleNamespace(no_pvc=False)
         mrsi = self._mrsi()
         tissue = SimpleNamespace(mrsi={"GM": Path("gm")})
         with patch("mrsiprep.workflows.participant.create_tissue_4d", return_value="tissue_4d") as tissue_4d, patch(
@@ -250,17 +230,6 @@ class StepPvcTests(unittest.TestCase):
         self.assertEqual(corrected, {"corrected": 1})
         self.assertEqual(tissue4d, "tissue_4d")
         self.assertEqual(mrsi.corrected_maps, {"corrected": 1})  # mutated as a side effect
-
-    def test_mni_norm_is_also_pvc_eligible(self):
-        config = SimpleNamespace(processing_mode="mni-norm", no_pvc=False)
-        mrsi = self._mrsi()
-        tissue = SimpleNamespace(mrsi={})
-        with patch("mrsiprep.workflows.participant.create_tissue_4d", return_value="t4d"), patch(
-            "mrsiprep.workflows.participant.run_pvc", return_value="corrected"
-        ) as pvc:
-            corrected, _tissue4d = P._step_pvc(config, "01", "01", mrsi, tissue, _debug())
-        pvc.assert_called_once()
-        self.assertEqual(corrected, "corrected")
 
 
 class StepResamplingTests(unittest.TestCase):
@@ -339,8 +308,8 @@ class StepSynthsegParcellationQcTests(unittest.TestCase):
 
 
 class StepParcellationTests(unittest.TestCase):
-    def test_mni_norm_returns_preliminary_parcels_unchanged(self):
-        config = SimpleNamespace(processing_mode="mni-norm")
+    def test_synthseg_returns_preliminary_parcels_unchanged(self):
+        config = SimpleNamespace(parcellation_mode="synthseg")
         preliminary = SimpleNamespace(atlas_t1="preliminary")
         with patch("mrsiprep.workflows.participant.run_parcellation_workflow") as run_fn, patch(
             "mrsiprep.workflows.participant.build_parcellation_qc_sections"
@@ -351,54 +320,60 @@ class StepParcellationTests(unittest.TestCase):
         self.assertIs(parcels, preliminary)
         self.assertIsNone(qc)
 
-    def test_parc_con_runs_full_parcellation(self):
-        config = SimpleNamespace(processing_mode="parc-con")
-        preliminary = SimpleNamespace(atlas_t1="preliminary")
-        final = SimpleNamespace(atlas_t1="final", labels="labels")
-        with patch("mrsiprep.workflows.participant.run_parcellation_workflow", return_value=final) as run_fn, patch(
-            "mrsiprep.workflows.participant.build_parcellation_qc_sections", return_value=["qc"]
-        ) as qc_fn:
-            parcels, qc = P._step_parcellation(
-                config, "01", "01", Path("raw_t1"), SimpleNamespace(reference="ref"), SimpleNamespace(registration_t1w="t1"), "registration", preliminary, _debug()
-            )
-        run_fn.assert_called_once_with(config, "01", "01", "ref", "registration", raw_t1=Path("raw_t1"), t1_reference="t1")
-        qc_fn.assert_called_once_with(config, "01", "01", Path("raw_t1"), "final", "labels")
-        self.assertIs(parcels, final)
-        self.assertEqual(qc, ["qc"])
+    def test_chimera_and_mni_run_full_parcellation(self):
+        for parcellation_mode in ("chimera", "mni"):
+            config = SimpleNamespace(parcellation_mode=parcellation_mode)
+            preliminary = SimpleNamespace(atlas_t1="preliminary")
+            final = SimpleNamespace(atlas_t1="final", labels="labels")
+            with patch("mrsiprep.workflows.participant.run_parcellation_workflow", return_value=final) as run_fn, patch(
+                "mrsiprep.workflows.participant.build_parcellation_qc_sections", return_value=["qc"]
+            ) as qc_fn:
+                parcels, qc = P._step_parcellation(
+                    config, "01", "01", Path("raw_t1"), SimpleNamespace(reference="ref"), SimpleNamespace(registration_t1w="t1"), "registration", preliminary, _debug()
+                )
+            run_fn.assert_called_once_with(config, "01", "01", "ref", "registration", raw_t1=Path("raw_t1"), t1_reference="t1")
+            qc_fn.assert_called_once_with(config, "01", "01", Path("raw_t1"), "final", "labels")
+            self.assertIs(parcels, final, msg=parcellation_mode)
+            self.assertEqual(qc, ["qc"], msg=parcellation_mode)
 
 
 class StepRegionalExtractionTests(unittest.TestCase):
     def _mrsi(self):
         return SimpleNamespace(qcmasks={}, snr_map=None, linewidth_map=None, crlb_maps={})
 
-    def test_parc_con_with_tissue_passes_tissue_fractions(self):
-        config = SimpleNamespace(processing_mode="parc-con")
+    def test_with_tissue_passes_tissue_fractions(self):
+        config = SimpleNamespace()
         tissue = SimpleNamespace(mrsi={"GM": Path("gm")})
         with patch("mrsiprep.workflows.participant.extract_regional_metabolites", return_value="regional") as extract:
             regional = P._step_regional_extraction(config, "01", "01", {}, "parcels", self._mrsi(), tissue, _debug())
         self.assertEqual(extract.call_args.args[-1], {"GM": Path("gm")})
         self.assertEqual(regional, "regional")
 
-    def test_parc_con_without_tissue_passes_empty_dict(self):
-        config = SimpleNamespace(processing_mode="parc-con")
+    def test_without_tissue_passes_empty_dict(self):
+        config = SimpleNamespace()
         with patch("mrsiprep.workflows.participant.extract_regional_metabolites", return_value="regional") as extract:
             P._step_regional_extraction(config, "01", "01", {}, "parcels", self._mrsi(), None, _debug())
         self.assertEqual(extract.call_args.args[-1], {})
 
 
 class StepConnectivityTests(unittest.TestCase):
-    def test_non_parc_con_mode_returns_empty_without_calling_anything(self):
-        config = SimpleNamespace(processing_mode="mni-norm", write_connectivity=False)
-        with patch("mrsiprep.workflows.participant.run_connectivity_workflow") as run_fn, patch(
-            "mrsiprep.workflows.participant.build_connectivity_qc_sections"
+    def test_runs_unconditionally_even_without_write_connectivity(self):
+        # Profile estimation always runs; only the matrix itself (inside
+        # run_connectivity_workflow) is gated on write_connectivity, so this
+        # step must call run_connectivity_workflow regardless.
+        config = SimpleNamespace(write_connectivity=False)
+        mrsi = SimpleNamespace(crlb_maps={}, brainmask=Path("mask"))
+        with patch("mrsiprep.workflows.participant.run_connectivity_workflow", return_value={}) as run_fn, patch(
+            "mrsiprep.workflows.participant.build_connectivity_qc_sections", return_value=["conn-qc"]
         ) as qc_fn:
-            result = P._step_connectivity(config, "01", "01", "regional", "parcels", {}, SimpleNamespace(), None, _debug())
-        self.assertEqual(result, ({}, None))
-        run_fn.assert_not_called()
-        qc_fn.assert_not_called()
+            connectivity, qc = P._step_connectivity(config, "01", "01", "regional", "parcels", {}, mrsi, None, _debug())
+        run_fn.assert_called_once()
+        qc_fn.assert_called_once()
+        self.assertEqual(connectivity, {})
+        self.assertEqual(qc, ["conn-qc"])
 
-    def test_parc_con_with_tissue_passes_gm_fraction_path(self):
-        config = SimpleNamespace(processing_mode="parc-con", write_connectivity=True)
+    def test_with_tissue_passes_gm_fraction_path(self):
+        config = SimpleNamespace(write_connectivity=True)
         mrsi = SimpleNamespace(crlb_maps={}, brainmask=Path("mask"))
         tissue = SimpleNamespace(mrsi={"GM": Path("gm")})
         with patch(
@@ -410,8 +385,8 @@ class StepConnectivityTests(unittest.TestCase):
         self.assertEqual(connectivity, {"matrix_tsv": Path("matrix.tsv")})
         self.assertEqual(qc, ["conn-qc"])
 
-    def test_parc_con_without_tissue_passes_none_gm_fraction_path(self):
-        config = SimpleNamespace(processing_mode="parc-con", write_connectivity=False)
+    def test_without_tissue_passes_none_gm_fraction_path(self):
+        config = SimpleNamespace(write_connectivity=False)
         mrsi = SimpleNamespace(crlb_maps={}, brainmask=Path("mask"))
         with patch("mrsiprep.workflows.participant.run_connectivity_workflow", return_value={}) as run_fn, patch(
             "mrsiprep.workflows.participant.build_connectivity_qc_sections"
@@ -421,15 +396,8 @@ class StepConnectivityTests(unittest.TestCase):
 
 
 class StepMetprofilesTests(unittest.TestCase):
-    def test_mni_norm_returns_none_without_calling(self):
-        config = SimpleNamespace(processing_mode="mni-norm")
-        with patch("mrsiprep.workflows.participant.export_metprofile_npz") as fn:
-            result = P._step_metprofiles(config, "01", "01", {}, SimpleNamespace(), "parcels", "regional", SimpleNamespace())
-        self.assertIsNone(result)
-        fn.assert_not_called()
-
-    def test_parc_con_exports_metprofiles(self):
-        config = SimpleNamespace(processing_mode="parc-con")
+    def test_exports_metprofiles_unconditionally(self):
+        config = SimpleNamespace()
         mrsi = SimpleNamespace(water_map=Path("water"))
         anat = SimpleNamespace(registration_mask=Path("mask"))
         with patch("mrsiprep.workflows.participant.export_metprofile_npz", return_value="npz-path") as fn:

@@ -43,7 +43,9 @@ class BIDSInputTests(unittest.TestCase):
                 session_label=["V1"],
                 metabolites=["CrPCr"],
                 ref_met="CrPCr",
-                processing_mode="parc-con",
+                # parcellation_mode chimera/mni derives registration_t1_target
+                # to brain-csf by default, which is what this test needs.
+                parcellation_mode="chimera",
                 tissue_backend="existing",
             )
             with self.assertRaisesRegex(Exception, "p3"):
@@ -57,7 +59,7 @@ class BIDSInputTests(unittest.TestCase):
                 session_label=["V1"],
                 metabolites=["CrPCr"],
                 ref_met="CrPCr",
-                processing_mode="parc-con",
+                parcellation_mode="chimera",
                 tissue_backend="synthseg-fast",
             )
             validate_recording(cfg_synthseg_fast, "S001", "V1")

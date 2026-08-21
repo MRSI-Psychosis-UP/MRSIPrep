@@ -254,7 +254,6 @@ class ExportConnectivityTests(unittest.TestCase):
                 tmp_path / "bids", tmp_path / "derivatives", "participant",
                 participant_label=["CHUVUP013"], session_label=["V1"],
                 metabolites=["CrPCr"], ref_met="CrPCr",
-                processing_mode="parc-con",
                 write_connectivity=True, connectivity_n_perturbations=4,
             )
 
@@ -321,7 +320,7 @@ class ExportConnectivityTests(unittest.TestCase):
             config = MRSIPrepConfig(
                 tmp_path / "bids", tmp_path / "derivatives", "participant",
                 metabolites=["CrPCr"], ref_met="CrPCr",
-                processing_mode="parc-con", write_connectivity=True,
+                write_connectivity=True,
             )
             path = _connectivity_matrix_path(config, "S1", "V1", "chimeraLFMIHIFIS", "scale3", True, 50)
             self.assertIn("_scale3_", path.name)

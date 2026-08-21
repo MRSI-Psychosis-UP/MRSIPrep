@@ -36,7 +36,6 @@ class NumpyEncoderTests(unittest.TestCase):
 def _cfg(**overrides):
     base = dict(
         registration_backend="ants",
-        processing_mode="parc-con",
         tissue_backend="synthseg-fast",
         no_pvc=False,
         parcellation_mode="chimera",
@@ -60,10 +59,12 @@ class RequiredExternalToolsTests(unittest.TestCase):
         self.assertIn("flirt", tools)
         self.assertIn("convert_xfm", tools)
 
-    def test_mni_norm_mode_excludes_full_only_tools(self):
-        tools = required_external_tools(_cfg(processing_mode="mni-norm"))
-        self.assertNotIn("fast", tools)
-        self.assertNotIn("petpvc", tools)
+    def test_synthseg_parcellation_still_requires_tissue_and_pvc_tools(self):
+        # fast/petpvc depend on tissue_backend/no_pvc, not parcellation_mode --
+        # a synthseg-only run still needs them; only chimera/recon-all drop.
+        tools = required_external_tools(_cfg(parcellation_mode="synthseg"))
+        self.assertIn("fast", tools)
+        self.assertIn("petpvc", tools)
         self.assertNotIn("chimera", tools)
         self.assertNotIn("recon-all", tools)
 
@@ -129,43 +130,67 @@ class PipelineTraceTests(unittest.TestCase):
         return next(e for e in trace if e["step"] == step)["status"]
 
     def _cfg(self, **overrides):
-        base = dict(processing_mode="parc-con", no_pvc=False, t1_correction="none", write_connectivity=False)
+        base = dict(parcellation_mode="chimera", no_pvc=False, t1_correction="none", write_connectivity=False)
         base.update(overrides)
         return SimpleNamespace(**base)
 
-    def test_mni_norm_runs_tissue_probmaps_and_pvc_but_skips_parc_con_only_steps(self):
-        trace = pipeline_trace(self._cfg(processing_mode="mni-norm"))
-        for step in ("Parcellation (chimera/mni atlas)", "Metprofiles export"):
-            self.assertEqual(self._status(trace, step), "SKIPPED")
-        for step in ("Tissue probability maps in MRSI space", "Partial volume correction"):
-            self.assertEqual(self._status(trace, step), "RAN")
+    def test_synthseg_parcellation_skips_only_the_parcellation_step(self):
+        # Everything else -- including metprofiles export and profile
+        # estimation -- runs unconditionally regardless of parcellation_mode.
+        trace = pipeline_trace(self._cfg(parcellation_mode="synthseg"))
+        self.assertEqual(self._status(trace, "Parcellation (chimera/mni atlas)"), "SKIPPED")
+        for step in (
+            "Tissue probability maps in MRSI space",
+            "Partial volume correction",
+            "Regional metabolic profile estimation",
+            "Metprofiles export",
+        ):
+            self.assertEqual(self._status(trace, step), "RAN", msg=step)
 
-    def test_parc_con_runs_all_gated_steps_by_default(self):
-        trace = pipeline_trace(self._cfg(processing_mode="parc-con"))
-        for step in ("Tissue probability maps in MRSI space", "Partial volume correction", "Parcellation (chimera/mni atlas)", "Metprofiles export"):
-            self.assertEqual(self._status(trace, step), "RAN")
+    def test_chimera_or_mni_parcellation_runs_all_gated_steps(self):
+        for parcellation_mode in ("chimera", "mni"):
+            trace = pipeline_trace(self._cfg(parcellation_mode=parcellation_mode))
+            for step in (
+                "Tissue probability maps in MRSI space",
+                "Partial volume correction",
+                "Parcellation (chimera/mni atlas)",
+                "Regional metabolic profile estimation",
+                "Metprofiles export",
+            ):
+                self.assertEqual(self._status(trace, step), "RAN", msg=(parcellation_mode, step))
 
-    def test_no_pvc_skips_pvc_under_both_eligible_modes(self):
-        for mode in ("parc-con", "mni-norm"):
-            trace = pipeline_trace(self._cfg(processing_mode=mode, no_pvc=True))
-            self.assertEqual(self._status(trace, "Partial volume correction"), "SKIPPED")
+    def test_no_pvc_skips_pvc_regardless_of_parcellation_mode(self):
+        for parcellation_mode in ("synthseg", "chimera"):
+            trace = pipeline_trace(self._cfg(parcellation_mode=parcellation_mode, no_pvc=True))
+            self.assertEqual(self._status(trace, "Partial volume correction"), "SKIPPED", msg=parcellation_mode)
 
     def test_t1_correction_gated_on_literature_setting(self):
         self.assertEqual(self._status(pipeline_trace(self._cfg(t1_correction="none")), "T1 saturation correction"), "SKIPPED")
         self.assertEqual(self._status(pipeline_trace(self._cfg(t1_correction="literature")), "T1 saturation correction"), "RAN")
 
-    def test_connectivity_gated_on_write_connectivity_flag(self):
-        self.assertEqual(self._status(pipeline_trace(self._cfg(write_connectivity=False)), "Connectivity"), "SKIPPED")
-        self.assertEqual(self._status(pipeline_trace(self._cfg(write_connectivity=True)), "Connectivity"), "RAN")
+    def test_connectivity_matrix_gated_on_write_connectivity_flag(self):
+        self.assertEqual(self._status(pipeline_trace(self._cfg(write_connectivity=False)), "Connectivity matrix"), "SKIPPED")
+        self.assertEqual(self._status(pipeline_trace(self._cfg(write_connectivity=True)), "Connectivity matrix"), "RAN")
 
-    def test_always_on_steps_never_skipped(self):
-        for mode in ("parc-con", "mni-norm"):
-            trace = pipeline_trace(self._cfg(processing_mode=mode))
-            for step in ("Tissue segmentation", "Anatomical preparation", "MRSI preprocessing", "MRSI-T1w-MNI registration", "Resampling MRSI maps to T1w/MNI space", "SynthSeg parcellation and QC", "Regional metabolite extraction", "Reports"):
-                self.assertEqual(self._status(trace, step), "RAN")
+    def test_always_on_steps_never_skipped_regardless_of_parcellation_mode(self):
+        for parcellation_mode in ("synthseg", "chimera", "mni"):
+            trace = pipeline_trace(self._cfg(parcellation_mode=parcellation_mode))
+            for step in (
+                "Tissue segmentation",
+                "Anatomical preparation",
+                "MRSI preprocessing",
+                "MRSI-T1w-MNI registration",
+                "Resampling MRSI maps to T1w/MNI space",
+                "SynthSeg parcellation and QC",
+                "Regional metabolite extraction",
+                "Regional metabolic profile estimation",
+                "Metprofiles export",
+                "Reports",
+            ):
+                self.assertEqual(self._status(trace, step), "RAN", msg=(parcellation_mode, step))
 
     def test_every_entry_has_a_reason_iff_skipped(self):
-        for trace in (pipeline_trace(self._cfg(processing_mode="mni-norm")), pipeline_trace(self._cfg(processing_mode="parc-con"))):
+        for trace in (pipeline_trace(self._cfg(parcellation_mode="synthseg")), pipeline_trace(self._cfg(parcellation_mode="chimera"))):
             for entry in trace:
                 if entry["status"] == "SKIPPED":
                     self.assertTrue(entry["reason"], entry["step"])
@@ -177,7 +202,7 @@ class WriteProvenanceTests(unittest.TestCase):
     def test_writes_valid_json_with_expected_top_level_keys(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             out_path = Path(tmpdir) / "nested" / "provenance.json"
-            config = SimpleNamespace(processing_mode="parc-con", no_pvc=False, t1_correction="none", write_connectivity=False)
+            config = SimpleNamespace(parcellation_mode="chimera", no_pvc=False, t1_correction="none", write_connectivity=False)
             with patch("mrsiprep.utils.provenance.software_versions", return_value={}):
                 result = write_provenance(config, out_path)
             payload = json.loads(out_path.read_text())
@@ -191,18 +216,18 @@ class WriteProvenanceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             out_path = Path(tmpdir) / "provenance.json"
             config = SimpleNamespace(
-                processing_mode="parc-con", no_pvc=False, t1_correction="none", write_connectivity=False,
-                to_dict=lambda: {"processing_mode": "parc-con"},
+                parcellation_mode="chimera", no_pvc=False, t1_correction="none", write_connectivity=False,
+                to_dict=lambda: {"parcellation_mode": "chimera"},
             )
             with patch("mrsiprep.utils.provenance.software_versions", return_value={}):
                 write_provenance(config, out_path)
             payload = json.loads(out_path.read_text())
-        self.assertEqual(payload["config"], {"processing_mode": "parc-con"})
+        self.assertEqual(payload["config"], {"parcellation_mode": "chimera"})
 
     def test_extra_payload_is_merged_in(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             out_path = Path(tmpdir) / "provenance.json"
-            config = SimpleNamespace(processing_mode="parc-con", no_pvc=False, t1_correction="none", write_connectivity=False)
+            config = SimpleNamespace(parcellation_mode="chimera", no_pvc=False, t1_correction="none", write_connectivity=False)
             with patch("mrsiprep.utils.provenance.software_versions", return_value={}):
                 write_provenance(config, out_path, extra={"subject": "01", "outputs": {"t1w": "path"}})
             payload = json.loads(out_path.read_text())
