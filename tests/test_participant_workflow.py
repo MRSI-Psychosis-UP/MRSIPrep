@@ -230,6 +230,11 @@ class PreflightMissingItemsTests(unittest.TestCase):
         self.assertIn("SNR", P._preflight_missing_items(row, self._config()))
         self.assertNotIn("SNR", P._preflight_missing_items(row, self._config(quality_metrics=["linewidth"])))
 
+    def test_missing_fwhm_only_reported_when_required(self):
+        row = self._row(fwhm=False)
+        self.assertIn("FWHM", P._preflight_missing_items(row, self._config()))
+        self.assertNotIn("FWHM", P._preflight_missing_items(row, self._config(quality_metrics=["snr"])))
+
     def test_missing_tissue_only_for_parc_con_existing_backend(self):
         row = self._row(tissue="[red]p3[/red]")
         self.assertIn("Tissue", P._preflight_missing_items(row, self._config(processing_mode="parc-con", tissue_backend="existing")))
@@ -300,6 +305,20 @@ class ValidateBackendInputsTests(unittest.TestCase):
             layout_cls.return_value.raw_t1.return_value = Path("/tmp/t1.nii.gz")
             with self.assertRaisesRegex(FileNotFoundError, "--custom-atlas is required"):
                 P._validate_backend_inputs(config, "01", "01")
+
+    def test_custom_atlas_lut_required_even_when_custom_atlas_present(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            custom_atlas = Path(tmpdir) / "atlas.nii.gz"
+            custom_atlas.touch()
+            config = make_config(
+                ["/tmp/bids", "/tmp/out", "participant", "--mode", "parc-con", "--parcellation-mode", "mni", "--atlas", "custom"],
+                custom_atlas=custom_atlas,
+                custom_atlas_lut=None,
+            )
+            with patch("mrsiprep.workflows.participant.BIDSLayout") as layout_cls:
+                layout_cls.return_value.raw_t1.return_value = Path("/tmp/t1.nii.gz")
+                with self.assertRaisesRegex(FileNotFoundError, "--custom-atlas-lut is required"):
+                    P._validate_backend_inputs(config, "01", "01")
 
     def test_passes_when_all_requirements_met(self):
         config = make_config(["/tmp/bids", "/tmp/out", "participant"])
