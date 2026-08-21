@@ -1,5 +1,40 @@
 # Changelog
 
+## Unreleased
+
+- **Removed `--mode`/`--processing-mode`.** `parc-con` was never a
+  fundamentally different pipeline from `mni-norm` -- it ran everything
+  `mni-norm` ran, plus a few optional extras. `--parcellation-mode`
+  (`synthseg`/`chimera`/`atlas`) is now the sole switch for how much of
+  the pipeline runs: `synthseg` (the new default) is the lighter-weight
+  path; `chimera`/`atlas` additionally run full parcellation. Every other
+  behavior (tissue backend, PVC, connectivity matrix, metabolite
+  profiles) is controlled independently by its own already-existing
+  flag, as it always should have been. `--mode`/`--processing-mode` is
+  now a hard, unrecognized-argument error.
+
+  Bundled with this, three real behavior changes (not just renames):
+  - Regional metabolic profile estimation and the per-parcel metabolite
+    NPZ export now run unconditionally for every recording, regardless
+    of `--parcellation-mode` (previously `mni-norm`-equivalent runs
+    skipped both entirely). Only the connectivity *matrix* itself stays
+    behind `--write-connectivity`.
+  - The preflight "Tissue" warning for `--tissue-backend existing` with
+    an incomplete CAT12 map now applies regardless of
+    `--parcellation-mode` (previously only checked under what used to
+    be `parc-con` mode).
+  - `--tissue-backend synthseg-fast`'s SynthSeg-brain path/mask
+    override is now unconditional, regardless of
+    `--registration-t1-target` (previously only applied when the
+    target was `brain`, unless what used to be `parc-con` mode was
+    also set) -- this also fixes a pre-existing gap where a
+    `mni-norm`-equivalent run silently ignored `--tissue-backend`
+    entirely and always forced `synthseg-fast`.
+  - `--check-external-libs`'s required-tool list is corrected to key
+    `fast`/`petpvc` off `--tissue-backend`/`--no-pvc` directly rather
+    than off the old mode bundle, so a `synthseg`-parcellation run now
+    correctly lists them as required.
+
 ## 1.10.1
 
 - **Fixed the SynthMRSI-Project quickstart's `unzip` instructions**

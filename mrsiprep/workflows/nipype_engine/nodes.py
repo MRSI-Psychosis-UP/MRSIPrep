@@ -3,8 +3,9 @@
 Each function has the uniform signature ``(config, subject, session, ctx) -> ctx``
 and runs one stage of the recording pipeline by calling the shared ``_step_*``
 functions in :mod:`mrsiprep.workflows.participant`, threading a context dict
-between stages. Together they reproduce the full sequence (both ``mni-norm`` and
-``parc-con`` modes; each ``_step_*`` gates its own mode internally).
+between stages. Together they reproduce the full sequence; each ``_step_*``
+gates its own optional behavior internally (on ``--parcellation-mode``,
+``--tissue-backend``, ``--no-pvc``, ``--write-connectivity``, etc.).
 
 These bodies are kept self-contained (imports live inside each function, and
 each builds its own tagged ``Debug`` inline rather than calling a shared
@@ -110,9 +111,9 @@ def step_tissue_qc(config, subject, session, ctx):
     from mrsiprep.reports.tissue import build_tissue_qc_sections
     from mrsiprep.tissue.synthseg_fast import synthseg_native_labels_path
 
-    # synthseg-fast is now also mni-norm's tissue backend (not just
-    # parc-con's), so gate on the label file actually existing rather than
-    # on a stale (mode, backend) pair that predates that change.
+    # Gate on the label file actually existing rather than re-deriving
+    # whether SynthSeg-FAST ran from config alone -- a cached run can leave
+    # the file in place even if config.tissue_backend was later changed.
     candidate_dseg = synthseg_native_labels_path(config, subject, session)
     dseg_for_qc = candidate_dseg if candidate_dseg.exists() else None
     tissue = ctx["tissue"]

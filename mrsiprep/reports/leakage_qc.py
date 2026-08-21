@@ -11,7 +11,7 @@ artifacts while still flagging real signal displaced outside the brain.
 
 Computed against whichever resampled space(s) the run actually produced:
 T1w (opt-in, ``--output-mrsi-t1w``) against the T1w reference brain mask,
-and/or MNI152 (the default ``mni-norm``/``parc-con`` output) against
+and/or MNI152 (the default ``--output-spaces`` target) against
 nilearn's standard MNI152 brain mask, resampled onto the transformed
 maps' own grid.
 """
