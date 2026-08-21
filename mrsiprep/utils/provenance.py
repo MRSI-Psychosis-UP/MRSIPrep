@@ -40,13 +40,12 @@ def required_external_tools(config=None) -> list[str]:
     tools = ["antsRegistrationSyN.sh", "antsRegistration", "antsApplyTransforms", "N4BiasFieldCorrection", "mri_synthseg"]
     if config is not None and getattr(config, "registration_backend", "ants") == "fsl":
         tools.extend(["flirt", "convert_xfm"])
-    full = config is None or getattr(config, "processing_mode", "parc-con") == "parc-con"
     tissue_backend = getattr(config, "tissue_backend", "synthseg-fast") if config is not None else "synthseg-fast"
-    if full and tissue_backend == "synthseg-fast":
+    if tissue_backend == "synthseg-fast":
         tools.append("fast")
-    if full and (config is None or not getattr(config, "no_pvc", False)):
+    if config is None or not getattr(config, "no_pvc", False):
         tools.append("petpvc")
-    if full and (config is None or getattr(config, "parcellation_mode", "chimera") == "chimera"):
+    if config is None or getattr(config, "parcellation_mode", "chimera") == "chimera":
         tools.extend(["chimera", "recon-all"])
     if config is not None and getattr(config, "longitudinal", False):
         tools.extend([
@@ -100,11 +99,10 @@ def pipeline_trace(config) -> list[dict]:
     in sync with the gating logic in workflows/participant.py's _step_*
     functions -- no state needs to be threaded through them to build this.
     """
-    parc_con = config.processing_mode == "parc-con"
-    mode_reason = f"mode={config.processing_mode}, requires parc-con"
-    pvc_eligible_mode = config.processing_mode in {"parc-con", "mni-norm"}
-    pvc_ran = pvc_eligible_mode and not config.no_pvc
-    pvc_reason = "" if pvc_ran else (mode_reason if not pvc_eligible_mode else "--no-pvc")
+    full_parcellation = config.parcellation_mode != "synthseg"
+    parcellation_reason = f"parcellation_mode={config.parcellation_mode}, requires chimera or mni"
+    pvc_ran = not config.no_pvc
+    pvc_reason = "" if pvc_ran else "--no-pvc"
     t1corr_ran = config.t1_correction == "literature"
     trace = [
         {"step": "Tissue segmentation", "ran": True, "reason": ""},
@@ -116,10 +114,11 @@ def pipeline_trace(config) -> list[dict]:
         {"step": "Partial volume correction", "ran": pvc_ran, "reason": pvc_reason},
         {"step": "Resampling MRSI maps to T1w/MNI space", "ran": True, "reason": ""},
         {"step": "SynthSeg parcellation and QC", "ran": True, "reason": ""},
-        {"step": "Parcellation (chimera/mni atlas)", "ran": parc_con, "reason": "" if parc_con else mode_reason},
+        {"step": "Parcellation (chimera/mni atlas)", "ran": full_parcellation, "reason": "" if full_parcellation else parcellation_reason},
         {"step": "Regional metabolite extraction", "ran": True, "reason": ""},
-        {"step": "Connectivity", "ran": bool(config.write_connectivity), "reason": "" if config.write_connectivity else "--write-connectivity not set"},
-        {"step": "Metprofiles export", "ran": parc_con, "reason": "" if parc_con else mode_reason},
+        {"step": "Regional metabolic profile estimation", "ran": True, "reason": ""},
+        {"step": "Connectivity matrix", "ran": bool(config.write_connectivity), "reason": "" if config.write_connectivity else "--write-connectivity not set"},
+        {"step": "Metprofiles export", "ran": True, "reason": ""},
         {"step": "Reports", "ran": True, "reason": ""},
     ]
     for entry in trace:
