@@ -1,4 +1,4 @@
-import subprocess
+import subprocess  # nosec B404 -- only used to construct a mock CompletedProcess in tests below
 import unittest
 from unittest.mock import patch
 
@@ -10,6 +10,7 @@ class FakeError(Exception):
 
 
 def _completed(returncode=0, stdout=None, stderr=None):
+    # nosemgrep: dangerous-subprocess-use-audit -- test double, does not execute anything
     return subprocess.CompletedProcess(args=["tool"], returncode=returncode, stdout=stdout, stderr=stderr)
 
 
