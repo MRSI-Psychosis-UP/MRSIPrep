@@ -30,7 +30,6 @@ _STEP_LABELS = (
 # (label, config attribute, formatter) -- the processing parameters most
 # relevant to what actually ran for this recording, not every config field.
 _PARAM_ROWS = (
-    ("Processing mode", "processing_mode", str),
     ("Tissue backend", "tissue_backend", str),
     ("Registration backend", "registration_backend", str),
     ("Registration T1w target", "registration_t1_target", str),

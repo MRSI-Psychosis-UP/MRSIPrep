@@ -10,10 +10,9 @@ def run_connectivity_workflow(config, subject, session, regional_table, parcels,
     optionally correlate them into a metabolic connectivity matrix.
 
     Profile estimation (CRLB-scaled Monte Carlo uncertainty propagation,
-    Instrella & Juchem 2024) always runs -- it is the standard, unconditional
-    regional-derivative output of ``parc-con`` mode, independent of
-    ``--write-connectivity``. Connectivity-matrix construction is the
-    optional add-on: it reuses the already-computed profiles rather than
+    Instrella & Juchem 2024) always runs, for every recording, independent of
+    ``--parcellation-mode`` or ``--write-connectivity``. Connectivity-matrix
+    construction is the optional add-on: it reuses the already-computed profiles rather than
     recomputing them, and only runs when ``config.write_connectivity`` is
     set.
 

@@ -140,7 +140,8 @@ def generate_subject_report(config, subject: str, session: str | None, outputs: 
         "<h2>Inputs</h2>",
         f"<p>BIDS directory: <code>{config.bids_dir}</code></p>",
         f"<p>Output directory: <code>{config.derivative_dir}</code></p>",
-        f"<p>Processing mode: <code>{config.processing_mode}</code></p>",
+        f"<p>Parcellation mode: <code>{config.parcellation_mode}</code></p>",
+        f"<p>Tissue backend: <code>{config.tissue_backend}</code></p>",
         "<div class='tabs'>",
     ]
     lines.extend(
