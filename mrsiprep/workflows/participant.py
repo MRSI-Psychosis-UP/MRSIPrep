@@ -572,11 +572,11 @@ def _validate_backend_inputs(config, subject: str, session: str | None) -> None:
     raw_t1 = layout.raw_t1(subject, session)
     if config.tissue_backend == "synthseg-fast" and raw_t1 is None:
         raise FileNotFoundError(f"Missing raw T1w required for {config.tissue_backend}: sub-{subject} ses-{session}")
-    if config.parcellation_mode == "mni" and config.atlas == "custom":
+    if config.parcellation_mode == "atlas" and config.atlas == "custom":
         if not config.custom_atlas or not config.custom_atlas.exists():
-            raise FileNotFoundError("--custom-atlas is required for --parcellation-mode mni --atlas custom")
+            raise FileNotFoundError("--custom-atlas is required for --parcellation-mode atlas --atlas custom")
         if not config.custom_atlas_lut or not config.custom_atlas_lut.exists():
-            raise FileNotFoundError("--custom-atlas-lut is required for --parcellation-mode mni --atlas custom")
+            raise FileNotFoundError("--custom-atlas-lut is required for --parcellation-mode atlas --atlas custom")
 
 
 def _step_tissue_segmentation(config, subject, session, raw_t1, t1_path, debug):

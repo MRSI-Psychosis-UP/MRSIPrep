@@ -293,7 +293,7 @@ class ValidateBackendInputsTests(unittest.TestCase):
 
     def test_custom_atlas_requires_both_files(self):
         config = make_config(
-            ["/tmp/bids", "/tmp/out", "participant", "--parcellation-mode", "mni", "--atlas", "custom"],
+            ["/tmp/bids", "/tmp/out", "participant", "--parcellation-mode", "atlas", "--atlas", "custom"],
             custom_atlas=None,
             custom_atlas_lut=None,
         )
@@ -307,7 +307,7 @@ class ValidateBackendInputsTests(unittest.TestCase):
             custom_atlas = Path(tmpdir) / "atlas.nii.gz"
             custom_atlas.touch()
             config = make_config(
-                ["/tmp/bids", "/tmp/out", "participant", "--parcellation-mode", "mni", "--atlas", "custom"],
+                ["/tmp/bids", "/tmp/out", "participant", "--parcellation-mode", "atlas", "--atlas", "custom"],
                 custom_atlas=custom_atlas,
                 custom_atlas_lut=None,
             )
