@@ -262,8 +262,8 @@ def register_cli(
         affine = cli_prefix.with_name(cli_prefix.name + "0GenericAffine.mat")
         warp = cli_prefix.with_name(cli_prefix.name + "1Warp.nii.gz")
         inverse_warp = cli_prefix.with_name(cli_prefix.name + "1InverseWarp.nii.gz")
-        # Rigid/affine-only registrations (e.g. MIDAS mode's "Rigid") produce no
-        # deformable warp; emit the affine-only transform pair in that case.
+        # Rigid/affine-only registrations produce no deformable warp; emit
+        # the affine-only transform pair in that case.
         if warp.exists():
             outputs = {
                 "forward": [out_prefix.with_suffix(".syn.nii.gz"), out_prefix.with_suffix(".affine.mat")],
