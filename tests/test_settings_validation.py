@@ -1,4 +1,7 @@
+import json
+import tempfile
 import unittest
+from pathlib import Path
 
 from mrsiprep.config.settings import MRSIPrepConfig
 
@@ -99,6 +102,68 @@ class NumericClampingTests(unittest.TestCase):
         cfg = _config(nproc=0, nthreads=-5)
         self.assertEqual(cfg.nproc, 1)
         self.assertEqual(cfg.nthreads, 1)
+
+
+class NucleusResolutionTests(unittest.TestCase):
+    def _bids_with_nucleus(self, tmpdir, nucleus):
+        root = Path(tmpdir)
+        (root / "mrsinmrs.json").write_text(json.dumps({"CommonMetadata": {"Nucleus": nucleus}}), encoding="utf-8")
+        return root
+
+    def test_defaults_to_proton(self):
+        self.assertEqual(_config().nucleus, "1H")
+
+    def test_proton_thresholds_are_unchanged_by_default(self):
+        # The headline regression guard for moving these out of defaults.py.
+        cfg = _config()
+        self.assertEqual((cfg.snr_min, cfg.linewidth_max, cfg.crlb_max), (4.0, 0.1, 20.0))
+
+    def test_explicit_nucleus_is_canonicalized(self):
+        cfg = _config(nucleus="phosphorus", snr_min=2.0, linewidth_max=0.3, crlb_max=50.0)
+        self.assertEqual(cfg.nucleus, "31P")
+
+    def test_nucleus_is_read_from_mrsinmrs_common_metadata(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cfg = _config(
+                bids_dir=self._bids_with_nucleus(tmpdir, "31P"),
+                snr_min=2.0, linewidth_max=0.3, crlb_max=50.0,
+            )
+            self.assertEqual(cfg.nucleus, "31P")
+
+    def test_explicit_nucleus_overrides_the_sidecar(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cfg = _config(bids_dir=self._bids_with_nucleus(tmpdir, "31P"), nucleus="1H")
+            self.assertEqual(cfg.nucleus, "1H")
+            self.assertEqual(cfg.snr_min, 4.0)
+
+    def test_explicit_threshold_wins_over_the_nucleus_default(self):
+        cfg = _config(snr_min=9.5)
+        self.assertEqual(cfg.snr_min, 9.5)
+        # ...and the ones left unset still come from the nucleus table.
+        self.assertEqual((cfg.linewidth_max, cfg.crlb_max), (0.1, 20.0))
+
+    def test_uncurated_nucleus_without_explicit_thresholds_raises(self):
+        with self.assertRaisesRegex(ValueError, "No curated voxel-quality thresholds for 31P"):
+            _config(nucleus="31P")
+
+    def test_uncurated_nucleus_is_fine_once_thresholds_are_given(self):
+        cfg = _config(nucleus="2H", snr_min=1.5, linewidth_max=0.4, crlb_max=60.0)
+        self.assertEqual(cfg.nucleus, "2H")
+        self.assertEqual(cfg.snr_min, 1.5)
+
+    def test_unknown_nucleus_raises(self):
+        with self.assertRaisesRegex(ValueError, "Unknown nucleus"):
+            _config(nucleus="19F")
+
+    def test_metabolite_aliases_follow_the_nucleus(self):
+        proton = _config().nucleus_metabolite_aliases()
+        phosphorus = _config(nucleus="31P", snr_min=2.0, linewidth_max=0.3, crlb_max=50.0).nucleus_metabolite_aliases()
+        self.assertIn("NAA", proton)
+        self.assertIn("PCr", phosphorus)
+        self.assertNotIn("NAA", phosphorus)
+
+    def test_nucleus_reaches_provenance_via_to_dict(self):
+        self.assertEqual(_config().to_dict()["nucleus"], "1H")
 
 
 class ParcellationListAccessorTests(unittest.TestCase):

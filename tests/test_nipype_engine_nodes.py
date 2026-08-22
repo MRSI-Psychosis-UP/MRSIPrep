@@ -38,6 +38,7 @@ class StepPrepareTests(unittest.TestCase):
         with patch("mrsiprep.io.validators.validate_recording", return_value=("t1.nii.gz", inputs)), patch(
             "mrsiprep.io.bids.BIDSLayout"
         ) as layout_cls:
+            layout_cls.from_config.return_value = layout_cls.return_value
             layout_cls.return_value.raw_t1.return_value = raw_t1
             original = {}
             result = N.step_prepare(_fake_config(), _SUBJECT, _SESSION, original)
@@ -51,6 +52,7 @@ class StepPrepareTests(unittest.TestCase):
         with patch("mrsiprep.io.validators.validate_recording", return_value=("t1.nii.gz", SimpleNamespace())), patch(
             "mrsiprep.io.bids.BIDSLayout"
         ) as layout_cls:
+            layout_cls.from_config.return_value = layout_cls.return_value
             layout_cls.return_value.raw_t1.return_value = None
             with self.assertRaisesRegex(FileNotFoundError, "Missing raw T1w"):
                 N.step_prepare(_fake_config(), _SUBJECT, _SESSION, {})

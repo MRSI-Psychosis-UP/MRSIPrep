@@ -238,6 +238,43 @@ threads).
 `synthseg-fast` tissue backend additionally requires FSL `fast`, PETPVC, and
 (for Chimera parcellation) `recon-all` and a valid `FS_LICENSE`.
 
+## Nucleus
+
+MRSIPrep defaults to proton (`1H`) MRSI. Declare a different nucleus either on
+the command line:
+
+```bash
+  --nucleus 31P
+```
+
+or, preferably, once per dataset in `mrsinmrs.json` (the `Nucleus` field is part
+of the MRSinMRS reporting standard), where it also shows up in every report:
+
+```json
+{"CommonMetadata": {"Nucleus": "31P"}}
+```
+
+The CLI flag wins when both are present. Common aliases (`proton`, `phosphorus`,
+`deuterium`, `P31`, …) are accepted and normalized.
+
+The nucleus selects the voxel-quality thresholds and the metabolite alias
+spellings used to locate input maps, and is recorded in the QC report and
+`provenance.json`.
+
+**Non-proton nuclei need explicit thresholds.** `31P` and `2H` ship with no
+curated `--snr-min`/`--linewidth-max`/`--crlb-max` defaults, because their SNR
+regimes differ substantially from proton's and a guessed value would look
+authoritative while being wrong. MRSIPrep therefore refuses to start without
+them:
+
+```bash
+  --nucleus 31P --snr-min 2 --linewidth-max 0.3 --crlb-max 50
+```
+
+If you have citation-backed values for a nucleus, contributing them to
+`mrsiprep/config/nuclei.json` is a welcome PR — see
+[Extending MRSIPrep](extending.md).
+
 ## Tissue backends (parc-con mode)
 
 ```bash

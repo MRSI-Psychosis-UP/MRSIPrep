@@ -9,6 +9,7 @@ from dataclasses import fields as _dataclass_fields
 from pathlib import Path
 
 from mrsiprep.config.defaults import QUALITY_DEFAULTS
+from mrsiprep.config.nuclei import available_nuclei
 from mrsiprep.config.settings import MRSIPrepConfig
 
 PRESETS_DIR = Path(__file__).resolve().parent.parent / "config" / "presets"
@@ -58,6 +59,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="Comma-separated metabolite names to process, e.g. 'CrPCr,GluGln,GPCPCh,NAANAAG,Ins'.",
     )
     quality.add_argument(
+        "--nucleus",
+        default=None,
+        help="Acquired nucleus, e.g. "
+        + "/".join(available_nuclei())
+        + " (aliases such as 'proton' or 'phosphorus' are accepted). Selects the curated voxel-quality "
+        "defaults and metabolite alias spellings for that nucleus. Falls back to the 'Nucleus' field of "
+        "the dataset's mrsinmrs.json, then to 1H. Nuclei other than 1H ship no curated quality "
+        "thresholds, so pass --snr-min/--linewidth-max/--crlb-max explicitly for them; see "
+        "mrsiprep/config/nuclei.json to contribute values.",
+    )
+    quality.add_argument(
         "--quality-metrics",
         nargs="+",
         default=["snr", "linewidth", "crlb"],
@@ -70,20 +82,23 @@ def build_parser() -> argparse.ArgumentParser:
     quality.add_argument(
         "--snr-min",
         type=float,
-        default=QUALITY_DEFAULTS["snr_min"],
-        help="Minimum per-voxel SNR to include a voxel, when 'snr' is in --quality-metrics.",
+        default=None,
+        help=f"Minimum per-voxel SNR to include a voxel, when 'snr' is in --quality-metrics. "
+        f"Defaults to the acquired nucleus's curated value (--nucleus; {QUALITY_DEFAULTS['snr_min']} for 1H).",
     )
     quality.add_argument(
         "--linewidth-max",
         type=float,
-        default=QUALITY_DEFAULTS["linewidth_max"],
-        help="Maximum per-voxel linewidth (FWHM) to include a voxel, when 'linewidth' is in --quality-metrics.",
+        default=None,
+        help=f"Maximum per-voxel linewidth (FWHM) to include a voxel, when 'linewidth' is in --quality-metrics. "
+        f"Defaults to the acquired nucleus's curated value (--nucleus; {QUALITY_DEFAULTS['linewidth_max']} for 1H).",
     )
     quality.add_argument(
         "--crlb-max",
         type=float,
-        default=QUALITY_DEFAULTS["crlb_max"],
-        help="Maximum per-voxel Cramér-Rao lower bound (%%) to include a voxel, when 'crlb' is in --quality-metrics.",
+        default=None,
+        help=f"Maximum per-voxel Cramér-Rao lower bound (%%%%) to include a voxel, when 'crlb' is in --quality-metrics. "
+        f"Defaults to the acquired nucleus's curated value (--nucleus; {QUALITY_DEFAULTS['crlb_max']} for 1H).",
     )
 
     t1_correction = parser.add_argument_group("T1 saturation correction")
@@ -640,6 +655,7 @@ def parse_args(argv: list[str] | None = None) -> MRSIPrepConfig:
         bids_filter_file=args.bids_filter_file,
         metabolites=args.metabolites,
         quality_metrics=args.quality_metrics,
+        nucleus=args.nucleus,
         snr_min=args.snr_min,
         linewidth_max=args.linewidth_max,
         crlb_max=args.crlb_max,
