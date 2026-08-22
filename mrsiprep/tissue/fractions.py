@@ -24,7 +24,7 @@ def load_existing_cat12(config, subject: str, session: str | None) -> dict[str, 
         probability-segmentation files found in the BIDS layout.
     :raises FileNotFoundError: If any of the three maps is missing.
     """
-    layout = BIDSLayout(config.bids_dir, filters=config.bids_filters)
+    layout = BIDSLayout.from_config(config)
     paths = {
         "GM": layout.cat12_probseg(subject, session, 1),
         "WM": layout.cat12_probseg(subject, session, 2),

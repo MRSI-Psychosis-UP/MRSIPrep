@@ -31,7 +31,6 @@ docker run --rm \
   --session-label V1 \
   --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \
   --ref-met CrPCr \
-  --mode mni-norm \
   --nthreads 8
 ```
 
@@ -52,7 +51,7 @@ mrsiprep-docker /path/to/bids /path/to/bids/derivatives participant \
   --participant-label S001 --session-label V1 \
   --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \
   --ref-met CrPCr \
-  --mode mni-norm --nthreads 8 \
+  --nthreads 8 \
   --fs-license-file /path/to/freesurfer/license.txt
 ```
 
@@ -71,7 +70,7 @@ You will still need a BIDS dataset with already-quantified MRSI maps; see
 | Resource | Minimum | Notes |
 |---|---|---|
 | RAM (Docker-allocated) | **8 GB** | Below this, `mri_synthseg` reliably crashes with `std::bad_alloc` / exit status `-9` (SIGKILL from the OOM killer), confirmed reproducible with as little as 4 GB allocated to the Docker VM, and previously hit on GitHub Actions' standard 16 GB runners under concurrent `--nproc`. `--synthseg-mode fast` uses somewhat less memory than `robust` (the default) but is not a substitute for adequate RAM. |
-| CPU cores | **4** | `recon-all` (parc-con + Chimera) and `mri_synthseg` are the most CPU-heavy steps; `--nthreads`/`--nproc` (see [Basic Usage](usage_basic.md)) should stay within the machine's actual core count; MRSIPrep coerces `--nthreads` down automatically if `nproc * nthreads` would exceed it. |
+| CPU cores | **4** | `recon-all` (with `--parcellation-mode chimera`) and `mri_synthseg` are the most CPU-heavy steps; `--nthreads`/`--nproc` (see [Basic Usage](usage_basic.md)) should stay within the machine's actual core count; MRSIPrep coerces `--nthreads` down automatically if `nproc * nthreads` would exceed it. |
 | Disk | A few GB per subject/session | Nipype's `--work-dir` cache (SynthSeg/FAST intermediates, resampled QC scratch maps) is the bulk of this; safe to delete between runs (see "The Nipype workflow engine" in [Basic Usage](usage_basic.md)). |
 
 **On memory specifically**: if running multiple subjects concurrently

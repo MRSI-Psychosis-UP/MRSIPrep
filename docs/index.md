@@ -77,20 +77,31 @@ output):
 
 ## Pipelines
 
-MRSIPrep runs in one of two modes, selected with `--mode`:
+Every run performs the same core processing: MRSI spike filtering and
+quality masking, tissue segmentation, PETPVC partial-volume correction
+(`--no-pvc` to disable), MRSI↔T1w↔MNI registration, resampling to the
+requested output spaces, regional metabolite extraction, and per-parcel
+metabolic profile estimation.
 
-- **`mni-norm`** (MNI normalization, default): registers MRSI maps to a SynthSeg-extracted T1w image,
-  generates SynthSeg+FAST tissue probability maps, applies PETPVC
-  partial-volume correction (`--no-pvc` to disable), resamples to the
-  requested output spaces, and parcellates with SynthSeg cortical/subcortical
-  labels. No Chimera, no `recon-all`. This is the fast default path for
-  anatomical coverage and CRLB reporting.
-- **`parc-con`** (parcellation and connectivity): adds a choice of Chimera
-  multi-atlas or bundled MNI-atlas parcellation, plus optional
-  perturbation-based connectivity matrices.
+`--parcellation-mode` selects how the brain is parcellated, and is the main
+control over how much work a run does:
 
-Both modes share the same MRSI filtering, quality-masking, and T1w/MNI
-normalization machinery; `parc-con` mode is a superset of `mni-norm` outputs.
+- **`synthseg`** (default): SynthSeg cortical/subcortical labels. No Chimera,
+  no `recon-all` — the fast path, and enough for anatomical coverage and CRLB
+  reporting.
+- **`chimera`**: Chimera multi-atlas fusion. Requires `recon-all` and a
+  FreeSurfer licence.
+- **`atlas`**: a bundled or custom standardized MNI-space atlas, warped into
+  subject space. No FreeSurfer licence needed.
+
+`chimera` and `atlas` accept comma-separated lists, building several
+parcellations from a single preprocessing pass (see
+[Parcellation and Connectivity](usage_parcellation.md)). The metabolic
+connectivity matrix is a separate opt-in, `--write-connectivity`.
+
+Other behaviour — tissue backend, PVC, T1 saturation correction, output
+spaces, and the acquired nucleus — is controlled independently by its own
+flag, so any combination is available.
 
 ## Design Principles
 
@@ -201,6 +212,7 @@ usage_t1_correction
 :hidden:
 
 benchmarks
+benchmark_smoothing
 vba_benchmark
 cross_sequence_benchmark
 ```
@@ -210,6 +222,8 @@ cross_sequence_benchmark
 :caption: 'Developer Reference:'
 :hidden:
 
+architecture
+extending
 api
 ```
 

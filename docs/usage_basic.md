@@ -18,16 +18,16 @@ docker run --rm \
   --session-label V1 \
   --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \
   --ref-met CrPCr \
-  --mode mni-norm \
   --synthseg-mode fast \
   --nthreads 8
 ```
 
-`mni-norm` registers the imported MRSI signal maps to a SynthSeg-extracted
-T1w image, resamples into MNI space, and runs SynthSeg with cortical
-parcellation. Its parcel QC table reports the percentage of each anatomical
-T1w parcel covered by MRSI, parcelwise CRLB, and valid-voxel fractions.
-`mni-norm` does not run FAST, PETPVC, Chimera, or `recon-all`.
+That default run registers the imported MRSI signal maps to a
+SynthSeg-extracted T1w image, resamples into MNI space, and parcellates with
+SynthSeg cortical/subcortical labels. Its parcel QC table reports the
+percentage of each anatomical T1w parcel covered by MRSI, parcelwise CRLB,
+and valid-voxel fractions. With `--parcellation-mode synthseg` (the default)
+it runs no Chimera and no `recon-all`, so no FreeSurfer licence is needed.
 
 SynthSeg-based brain extraction always retains the whole brain (GM, WM,
 ventricles, and inner/outer CSF, including extra-ventricular CSF label 24).
@@ -49,7 +49,7 @@ unzip SynthMRSI-Project.zip -d SynthMRSI-Project
 # 2. Pull the CPU image
 docker pull mrsiup/mrsiprep:cpu
 
-# 3. Run a single subject in mni-norm mode (a couple of minutes on a
+# 3. Run a single subject with the default settings (a couple of minutes on a
 #    modern multi-core machine)
 docker run --rm \
   -v "$(pwd)/SynthMRSI-Project:/data:ro" \
@@ -58,7 +58,6 @@ docker run --rm \
   /data /out participant \
   --participant-label 01 \
   --session-label 01 \
-  --mode mni-norm \
   --t1 acq-mprage_T1w \
   --metabolites NAANAAG,GPCPCh,CrPCr,GluGln,Ins \
   --ref-met CrPCr \
@@ -69,8 +68,9 @@ xdg-open SynthMRSI-Project/derivatives/mrsiprep/sub-01/ses-01/reports/coverage/s
 ```
 
 Drop `--participant-label 01` to process all 32 subjects (scale runtime by
-`32 / --nproc`, and raise `--nproc` accordingly for batch runs). `mni-norm`
-mode does not require FreeSurfer, so no `FS_LICENSE` is needed for this demo.
+`32 / --nproc`, and raise `--nproc` accordingly for batch runs). The default
+`--parcellation-mode synthseg` does not require FreeSurfer, so no
+`FS_LICENSE` is needed for this demo.
 See [PUBLIC_DATASET.md](https://github.com/MRSI-Psychosis-UP/MRSIPrep/blob/main/PUBLIC_DATASET.md)
 in the repository for the dataset's full description, ground-truth files,
 and expected output layout.
@@ -95,7 +95,7 @@ starting an expensive batch run.
 
 The preflight table shows, per recording: T1w reference, MRSI file count,
 CRLB/SNR/FWHM quality map availability, brainmask, tissue files, a
-FreeSurfer column (shown only in parc-con mode with Chimera parcellation,
+FreeSurfer column (shown only with `--parcellation-mode chimera`,
 indicating whether a valid prior `recon-all` output already exists and will
 be reused), and the MRSI→T1/T1→MNI transform status.
 
@@ -137,10 +137,11 @@ is transparent to normal use (the CLI, its arguments, and the console output
 are unchanged) but it has two practical consequences:
 
 - **Rerunning a completed subject/session skips already-finished steps.**
-  Each of the 13 pipeline steps (tissue segmentation, anatomical prep, MRSI
-  preprocessing, registration, tissue probability maps, PVC, resampling,
-  SynthSeg parcellation/QC, Chimera/MNI parcellation, regional extraction,
-  connectivity, metprofiles export, reports) is a cached Nipype node, keyed
+  Each of the 16 pipeline steps (input preparation, tissue segmentation,
+  anatomical prep, MRSI preprocessing, registration, tissue probability maps,
+  tissue QC, PVC, resampling, leakage QC, SynthSeg parcellation/QC,
+  Chimera/atlas parcellation, regional extraction, connectivity, metprofiles
+  export, reports) is a cached Nipype node, keyed
   on the step name plus the full run configuration. If nothing about the
   configuration or the subject/session changed since a prior successful run,
   the step is skipped rather than recomputed: a rerun of an already-fully
@@ -172,7 +173,7 @@ docker run --rm \
   --participants participants.tsv \
   --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \
   --ref-met CrPCr \
-  --mode parc-con \
+  --parcellation-mode chimera \
   --verbose 1 \
   --nthreads 8 \
   --nproc 4
@@ -219,10 +220,11 @@ Each subject/session additionally gets, inside its own output folder:
   batch-run output readable at lower verbosity levels.
 - `sub-*/ses-*/reports/sub-*_ses-*_desc-provenance.json`: the full run
   configuration, software versions, and a `pipeline_trace` array listing
-  each of the 13 steps as `RAN` or `SKIPPED` with a one-line reason (e.g.
-  `"mode=mni-norm, requires parc-con"`, `"--no-pvc"`, `"--write-connectivity
-  not set"`). Because most steps are conditional on `--mode`,
-  `--tissue-backend`, `--no-pvc`, and `--write-connectivity`, this is the
+  each step as `RAN` or `SKIPPED` with a one-line reason (e.g.
+  `"parcellation_mode=synthseg, requires chimera or atlas"`, `"--no-pvc"`,
+  `"--write-connectivity not set"`). Because several steps are conditional on
+  `--parcellation-mode`, `--tissue-backend`, `--no-pvc`, and
+  `--write-connectivity`, this is the
   authoritative record of what actually happened for a given recording,
   without having to re-derive it from the CLI flags used.
 
@@ -234,11 +236,50 @@ summary before any recordings are processed, e.g. on a 32-core machine,
 `--nproc 4 --nthreads 10` (40 threads) is coerced down to `--nthreads 8` (32
 threads).
 
-`mni-norm` requires `mri_synthseg` and ANTs. `parc-con` with the default
-`synthseg-fast` tissue backend additionally requires FSL `fast`, PETPVC, and
-(for Chimera parcellation) `recon-all` and a valid `FS_LICENSE`.
+Every run requires `mri_synthseg` and ANTs. The default `synthseg-fast`
+tissue backend additionally requires FSL `fast`, and PVC requires PETPVC;
+`--parcellation-mode chimera` also needs `recon-all` and a valid
+`FS_LICENSE`. `--check-external-libs` reports exactly which binaries the
+current configuration needs and whether they were found.
 
-## Tissue backends (parc-con mode)
+## Nucleus
+
+MRSIPrep defaults to proton (`1H`) MRSI. Declare a different nucleus either on
+the command line:
+
+```bash
+  --nucleus 31P
+```
+
+or, preferably, once per dataset in `mrsinmrs.json` (the `Nucleus` field is part
+of the MRSinMRS reporting standard), where it also shows up in every report:
+
+```json
+{"CommonMetadata": {"Nucleus": "31P"}}
+```
+
+The CLI flag wins when both are present. Common aliases (`proton`, `phosphorus`,
+`deuterium`, `P31`, …) are accepted and normalized.
+
+The nucleus selects the voxel-quality thresholds and the metabolite alias
+spellings used to locate input maps, and is recorded in the QC report and
+`provenance.json`.
+
+**Non-proton nuclei need explicit thresholds.** `31P` and `2H` ship with no
+curated `--snr-min`/`--linewidth-max`/`--crlb-max` defaults, because their SNR
+regimes differ substantially from proton's and a guessed value would look
+authoritative while being wrong. MRSIPrep therefore refuses to start without
+them:
+
+```bash
+  --nucleus 31P --snr-min 2 --linewidth-max 0.3 --crlb-max 50
+```
+
+If you have citation-backed values for a nucleus, contributing them to
+`mrsiprep/config/nuclei.json` is a welcome PR — see
+[Extending MRSIPrep](extending.md).
+
+## Tissue backends
 
 ```bash
 docker run --rm \
@@ -250,7 +291,7 @@ docker run --rm \
   --session-label V1 \
   --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \
   --ref-met CrPCr \
-  --mode parc-con \
+  --parcellation-mode chimera \
   --tissue-backend existing
 ```
 
@@ -276,7 +317,7 @@ docker run --rm \
   --session-label V1 \
   --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \
   --ref-met CrPCr \
-  --mode parc-con \
+  --parcellation-mode chimera \
   --tissue-backend none
 ```
 
@@ -318,7 +359,7 @@ and `--output-mrsi-t1w`, and
 <out>/mrsiprep/sub-*/ses-*/mrsi/orig-pvc/      PVC-corrected native-grid signal maps only
 <out>/mrsiprep/sub-*/ses-*/mrsi/t1w/           T1w-aligned MRSI signal maps only (opt-in, --output-mrsi-t1w)
 <out>/mrsiprep/sub-*/ses-*/mrsi/mni/           MNI-normalized MRSI signal maps only
-<out>/mrsiprep/sub-*/ses-*/mrsi/parcel/        parc-con mode metabolite profile NPZ files
+<out>/mrsiprep/sub-*/ses-*/mrsi/parcel/        per-parcel metabolite profile NPZ files
 <out>/mrsiprep/sub-*/ses-*/anat/synthseg/      SynthSeg brain/dseg outputs, brainCSF/registration inputs,
                                                 and parcelwise QC tables
 <out>/mrsiprep/sub-*/ses-*/confounds/          every quantity that encodes a preprocessing assumption
@@ -369,8 +410,8 @@ general-purpose neuroimaging pipeline. In particular:
   [Longitudinal (Subject-Template) Normalization](usage_longitudinal.md); it
   does not otherwise change per-session processing, and assumes reasonably
   stable anatomy across a subject's sessions.
-- Chimera parcellation and the `synthseg-fast` tissue backend require
-  FreeSurfer, FSL, and a valid `FS_LICENSE`; `mni-norm` mode does not.
+- Chimera parcellation requires FreeSurfer and a valid `FS_LICENSE`; the
+  default `--parcellation-mode synthseg` does not.
 
 ## Troubleshooting
 

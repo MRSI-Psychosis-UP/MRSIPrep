@@ -66,8 +66,9 @@ class ProcessingModeTests(unittest.TestCase):
                 no_pvc=False,
                 derivative_dir=root / "derivatives",
                 bids_dir=root / "dataset",
-                chimera_grow=2,
+                chimera_grow="2",
             )
+            config.chimera_grows = lambda: [2]
             parcels = ParcellationResult(atlas_mrsi=atlas, labels=labels, mode="chimera", atlas_name="chimeraLFMIHIFIS", scale="3")
             output = export_metprofile_npz(config, "S001", "V1", maps, None, parcels, regional, None)
             archive = np.load(output, allow_pickle=True)

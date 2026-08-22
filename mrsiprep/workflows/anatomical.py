@@ -78,7 +78,7 @@ def prepare_anatomical(
     :raises ValueError: If ``config.registration_t1_target`` isn't one of
         the three supported values.
     """
-    layout = BIDSLayout(config.bids_dir, filters=config.bids_filters)
+    layout = BIDSLayout.from_config(config)
     raw_t1 = layout.raw_t1(subject, session)
     brain_mask = brain_mask_override or layout.brain_mask(subject, session)
     registration_t1 = t1_path

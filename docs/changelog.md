@@ -1,5 +1,81 @@
 # Changelog
 
+## Unreleased
+
+- **Nucleus is now explicit, and non-proton MRSI is a first-class case.**
+  New `--nucleus` (or a `Nucleus` field in `mrsinmrs.json`'s
+  `CommonMetadata`) declares which nucleus a dataset was acquired with;
+  it is recorded in the QC report and `provenance.json`. Nucleus
+  definitions live in the new data-only `mrsiprep/config/nuclei.json`
+  (¹H, ³¹P, ²H ship), so supporting another nucleus is a JSON edit rather
+  than a code change -- see the new `docs/extending.md`.
+
+  Voxel-quality thresholds and metabolite alias spellings are now
+  per-nucleus rather than global. **Proton behaviour is unchanged**: ¹H
+  keeps exactly the previous `snr_min=4.0 / linewidth_max=0.1 /
+  crlb_max=20.0` and the same alias table, now sourced from the JSON.
+
+  ³¹P and ²H ship *no* curated thresholds on purpose: their SNR regimes
+  differ substantially from proton, so MRSIPrep refuses to run without
+  explicit `--snr-min/--linewidth-max/--crlb-max` rather than silently
+  applying proton values. Contributing citation-backed defaults is
+  welcome.
+
+  Precedence for the thresholds is: explicit CLI flag > `--config-preset`
+  > nucleus defaults. `config/defaults.py`'s `QUALITY_DEFAULTS` and
+  `METABOLITE_ALIASES` remain importable as the proton values.
+
+- **Contributor documentation.** New `CONTRIBUTING.md` (container-based
+  dev/test loop, the gitignored-`tests/` gotcha, CI expectations), plus
+  `docs/architecture.md` (package responsibilities, config resolution
+  order, the output-naming contract) and `docs/extending.md` (worked
+  recipes for adding a nucleus, a tissue backend, or a parcellation
+  backend).
+
+- **Backend selection is now a registry rather than an if/elif chain.**
+  `TISSUE_BACKENDS` (`workflows/tissue.py`) and `PARCELLATION_BACKENDS`
+  (`workflows/parcellation.py`) map a name to a callable; adding a
+  backend means adding an entry, and an unknown name errors listing what
+  is registered.
+
+- **`workflows/participant.py` split** (863 lines) into `preflight.py`
+  (pre-run inventory and startup table), `steps.py` (the `_step_*`
+  stages), and `participant.py` (orchestration). Pure code movement --
+  `participant.py` re-exports the moved names, so existing imports keep
+  working. `BIDSLayout.from_config()` replaces nine identical
+  construction sites and carries the run's nucleus aliases.
+
+- **Several parcellations in one run.** `--chimera-scheme`,
+  `--chimera-scale`, `--chimera-grow`, and `--atlas` now each accept a
+  comma-separated list, the same syntax Chimera's own
+  `--parcodes`/`--scale`/`--growwm` use. The lists combine as a cross
+  product, so `--chimera-scheme A,B --chimera-scale 1,3` builds four
+  parcellations off a **single** preprocessing pass -- `recon-all` and
+  Chimera each run once for the whole set, with registration, PVC, and
+  resampling shared.
+
+  Every parcellation gets its own regional table, metabolite-profile NPZ,
+  profile estimation, and connectivity matrix, each keyed by atlas and
+  scale so they never collide. The QC report stays one file per
+  recording, gaining one Parcellation section per parcellation.
+
+  Notes:
+  - The cross product is a *request*, not a guarantee: `--chimera-scale`
+    only applies to multi-resolution (Lausanne `L` cortex) schemes, so a
+    non-multi-resolution scheme yields one parcellation however many
+    scales are listed. Combinations Chimera doesn't produce are logged
+    and skipped rather than failing the run.
+  - When several `--chimera-grow` values are requested, the growth
+    distance is added to the output names to keep the variants apart.
+    Single-value runs are unaffected and keep byte-identical paths.
+  - `provenance.json`'s `outputs` gains a `parcellations` list carrying
+    every parcellation's derivatives. The existing singular keys
+    (`regional_table`, `metprofiles`, `connectivity`, `atlas_mrsi`) still
+    point at the first parcellation, so existing consumers keep working.
+  - `--chimera-scale`/`--chimera-grow` are stored as given rather than
+    coerced to `int`, so configs and presets round-trip unchanged; both
+    bare integers (as in the shipped presets) and `scaleN` are accepted.
+
 ## 1.11.0
 
 - **Removed `--mode`/`--processing-mode`.** `parc-con` was never a

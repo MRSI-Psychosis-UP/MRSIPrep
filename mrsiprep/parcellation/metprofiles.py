@@ -47,12 +47,29 @@ def _metprofile_atlas_entity(parcels: ParcellationResult) -> str:
     return atlas_entity
 
 
+def _parcel_grow(config, parcels: ParcellationResult) -> int:
+    """Gyral-WM growth (mm) recorded for this parcellation's NPZ metadata.
+
+    Prefers the value the parcellation was actually built with (set when
+    --chimera-grow named several); falls back to the first configured value.
+    """
+    if parcels.mode != "chimera":
+        return 0
+    if parcels.grow is not None:
+        return parcels.grow
+    grows = config.chimera_grows()
+    return grows[0] if grows else 0
+
+
 def _metprofile_output_path(config, subject: str, session: str | None, parcels: ParcellationResult, desc_entity: str) -> Path:
     scale_entity = f"_scale{parcels.scale}" if parcels.scale else ""
+    # Only present when --chimera-grow named several distances, which would
+    # otherwise collide here; single-grow runs keep their existing filenames.
+    grow_entity = f"_grow{parcels.grow}mm" if parcels.grow is not None else ""
     prefix = f"sub-{subject}" + (f"_ses-{session}" if session else "")
     out_dir = mrsi_parcel_dir(config.derivative_dir, subject, session)
     out_dir.mkdir(parents=True, exist_ok=True)
-    return out_dir / f"{prefix}_atlas-{_metprofile_atlas_entity(parcels)}{scale_entity}_desc-{desc_entity}_mrsi.npz"
+    return out_dir / f"{prefix}_atlas-{_metprofile_atlas_entity(parcels)}{scale_entity}{grow_entity}_desc-{desc_entity}_mrsi.npz"
 
 
 def export_metprofile_npz(
@@ -112,7 +129,7 @@ def export_metprofile_npz(
         session_id=session or "",
         parc_scheme=parcels.atlas_name,
         scale=int(parcels.scale) if parcels.scale and str(parcels.scale).isdigit() else parcels.scale or "",
-        grow=config.chimera_grow if parcels.mode == "chimera" else 0,
+        grow=_parcel_grow(config, parcels),
         metadata=np.asarray([metadata], dtype=object),
     )
     return out

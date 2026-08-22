@@ -28,10 +28,16 @@ def _save_nifti_atomic(img, out_path: Path) -> None:
     os.replace(tmp_path, out_path)
 
 
-def load_mni_atlas(config, work_dir: str | Path) -> tuple[Path, Path, str]:
+def load_mni_atlas(config, work_dir: str | Path, atlas_name: str | None = None) -> tuple[Path, Path, str]:
+    """Resolve one MNI-space atlas to (atlas_path, labels_path, name).
+
+    :param atlas_name: Which atlas to load. Defaults to ``config.atlas``;
+        pass an explicit name when ``--atlas`` carries a comma-separated list
+        so each entry resolves independently.
+    """
     work_dir = Path(work_dir)
     work_dir.mkdir(parents=True, exist_ok=True)
-    atlas = config.atlas.lower()
+    atlas = (atlas_name if atlas_name is not None else config.atlas).lower()
     bundled = _find_bundled_atlas(atlas)
     if bundled is not None:
         return bundled
@@ -74,7 +80,7 @@ def load_mni_atlas(config, work_dir: str | Path) -> tuple[Path, Path, str]:
         indices = indices[indices != 0]
         write_labels(indices, [f"MIST-{i}" for i in indices], labels_path)
         return atlas_path, labels_path, "mist197"
-    raise ValueError(f"Unsupported MNI atlas: {config.atlas}")
+    raise ValueError(f"Unsupported MNI atlas: {atlas}")
 
 
 def available_bundled_atlases() -> list[str]:
