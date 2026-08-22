@@ -17,7 +17,7 @@ pip install mrsiprep-docker
 ```bash
 mrsiprep-docker /path/to/bids /path/to/derivatives participant \
   --participant-label S001 --session-label V1 \
-  --mode mni-norm --nthreads 8 \
+  --nthreads 8 \
   --fs-license-file /path/to/freesurfer/license.txt
 ```
 
@@ -33,11 +33,12 @@ docker run --rm -it -u "$(id -u):$(id -g)" \
   mrsiup/mrsiprep:cpu \
   /data /out participant \
   --participant-label S001 --session-label V1 \
-  --mode mni-norm --nthreads 8
+  --nthreads 8
 ```
 
-All ordinary `mrsiprep` arguments (`--mode`, `--participant-label`,
-`--tissue-backend`, `--parcellation-mode`, `--nproc`, `--verbose`, ...) are
+All ordinary `mrsiprep` arguments (`--participant-label`,
+`--tissue-backend`, `--parcellation-mode`, `--nucleus`, `--nproc`,
+`--verbose`, ...) are
 passed straight through to the container unchanged. The wrapper only
 special-cases the few options that need a bind mount or an environment
 variable: `--fs-license-file`, `--fs-subjects-dir`, `--work-dir`, and

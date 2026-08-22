@@ -14,6 +14,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+from mrsiprep.parcellation.base import ParcellationResult
 from mrsiprep.workflows.nipype_engine import nodes as N
 
 _SUBJECT, _SESSION = "01", "01"
@@ -37,6 +38,7 @@ class StepPrepareTests(unittest.TestCase):
         with patch("mrsiprep.io.validators.validate_recording", return_value=("t1.nii.gz", inputs)), patch(
             "mrsiprep.io.bids.BIDSLayout"
         ) as layout_cls:
+            layout_cls.from_config.return_value = layout_cls.return_value
             layout_cls.return_value.raw_t1.return_value = raw_t1
             original = {}
             result = N.step_prepare(_fake_config(), _SUBJECT, _SESSION, original)
@@ -50,6 +52,7 @@ class StepPrepareTests(unittest.TestCase):
         with patch("mrsiprep.io.validators.validate_recording", return_value=("t1.nii.gz", SimpleNamespace())), patch(
             "mrsiprep.io.bids.BIDSLayout"
         ) as layout_cls:
+            layout_cls.from_config.return_value = layout_cls.return_value
             layout_cls.return_value.raw_t1.return_value = None
             with self.assertRaisesRegex(FileNotFoundError, "Missing raw T1w"):
                 N.step_prepare(_fake_config(), _SUBJECT, _SESSION, {})
@@ -253,19 +256,23 @@ class StepReportsTests(unittest.TestCase):
     def _ctx(self, t1_correction_provenance=None):
         anat = SimpleNamespace(t1w="t1w_path", registration_t1w="reg_t1w_path")
         mrsi = SimpleNamespace(reference="ref_map", qc_summary="qc_sum", t1_correction_provenance=t1_correction_provenance)
-        parcels = SimpleNamespace(atlas_mrsi="atlas_mrsi_final")
+        parcels = ParcellationResult(
+            atlas_mrsi="atlas_mrsi_final", labels="labels", atlas_name="chimeraA", scale="scale3"
+        )
         preliminary_parcels = SimpleNamespace(atlas_mrsi="atlas_mrsi_prelim")
+        pid = parcels.parcellation_id
         return {
             "anat": anat,
             "mrsi": mrsi,
-            "parcels": parcels,
+            # parcels is a list; the per-parcellation results are keyed by id.
+            "parcels": [parcels],
             "parcel_qc": "parcel_qc_obj",
             "leakage_qc": "leakage_qc_obj",
             "tissue_4d": "tissue_4d_obj",
             "preliminary_parcels": preliminary_parcels,
-            "regional": "regional_obj",
-            "metprofiles": "metprofiles_obj",
-            "connectivity": "connectivity_obj",
+            "regional": {pid: "regional_obj"},
+            "metprofiles": {pid: "metprofiles_obj"},
+            "connectivity": {pid: "connectivity_obj"},
             "transformed": "transformed_obj",
             "qc_sections_tissue": "tissue_qc",
             "qc_sections_mrsi_raw": "mrsi_raw_qc",
@@ -291,6 +298,19 @@ class StepReportsTests(unittest.TestCase):
         self.assertEqual(outputs["t1w"], "t1w_path")
         self.assertEqual(outputs["atlas_mrsi"], "atlas_mrsi_final")
         self.assertEqual(outputs["preliminary_atlas_mrsi"], "atlas_mrsi_prelim")
+        # Singular keys still resolve to the first parcellation, so existing
+        # report/provenance consumers keep working unchanged.
+        self.assertEqual(outputs["regional_table"], "regional_obj")
+        self.assertEqual(outputs["metprofiles"], "metprofiles_obj")
+        self.assertEqual(outputs["connectivity"], "connectivity_obj")
+        self.assertEqual(
+            outputs["parcellations"],
+            [{
+                "id": "chimeraA-scale3", "atlas_name": "chimeraA", "scale": "scale3", "grow": None,
+                "atlas_mrsi": "atlas_mrsi_final", "regional_table": "regional_obj",
+                "metprofiles": "metprofiles_obj", "connectivity": "connectivity_obj",
+            }],
+        )
         qc_sections = step_reports.call_args[0][4]
         self.assertEqual(qc_sections["runtime"], "runtime_qc")
 

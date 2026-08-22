@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-from .defaults import QUALITY_DEFAULTS
+from .nuclei import DEFAULT_NUCLEUS, canonical_nucleus, metabolite_aliases, quality_defaults
 
 
 @dataclass
@@ -19,9 +19,15 @@ class MRSIPrepConfig:
     bids_filter_file: Path | None = None
     metabolites: list[str] | None = None
     quality_metrics: list[str] = field(default_factory=lambda: ["snr", "linewidth", "crlb"])
-    snr_min: float = QUALITY_DEFAULTS["snr_min"]
-    linewidth_max: float = QUALITY_DEFAULTS["linewidth_max"]
-    crlb_max: float = QUALITY_DEFAULTS["crlb_max"]
+    # Acquired nucleus. None means "resolve it": --nucleus wins, else
+    # mrsinmrs.json's Nucleus field, else 1H. See config/nuclei.json.
+    nucleus: str | None = None
+    # None means "take this nucleus's default"; an explicit CLI flag or a
+    # preset value arrives non-None and is left alone. Same None-sentinel
+    # idiom as registration_t1_target below.
+    snr_min: float | None = None
+    linewidth_max: float | None = None
+    crlb_max: float | None = None
     tissue_backend: str = "synthseg-fast"
     registration_backend: str = "ants"
     ants_mrsi_to_t1_transform: str = "sr"
@@ -41,9 +47,13 @@ class MRSIPrepConfig:
     csf_pv_threshold: float = 0.95
     parcellation_mode: str = "synthseg"
     synthseg_mode: str = "robust"
+    # Comma-separated lists are accepted on all four, matching Chimera's own
+    # --parcodes/--scale/--growwm syntax: every combination is built in a
+    # single run. Stored as given (str or int) so to_dict()/presets/provenance
+    # round-trip unchanged; read them through the accessors below.
     chimera_scheme: str = "LFMIHIFIS"
-    chimera_scale: int = 3
-    chimera_grow: int = 2
+    chimera_scale: str | int = 3
+    chimera_grow: str | int = 2
     atlas: str = "chimera-LFMIHIFIS_scale3"
     custom_atlas: Path | None = None
     custom_atlas_lut: Path | None = None
@@ -121,6 +131,39 @@ class MRSIPrepConfig:
             raise ValueError(f"Unsupported --t1-correction: {self.t1_correction}")
         if self.t1_correction_water_status not in {"uncorrected", "corrected", "unknown"}:
             raise ValueError(f"Unsupported --t1-correction-water-status: {self.t1_correction_water_status}")
+        self._validate_parcellation_lists()
+
+    def _validate_parcellation_lists(self) -> None:
+        """Validate the comma-separated parcellation options.
+
+        Only meaningful for the mode that actually consumes them, so a
+        synthseg run isn't rejected for a stale chimera value it never reads.
+        """
+        if self.parcellation_mode == "chimera":
+            # Code *content* is Chimera's own business to validate -- lengths
+            # vary in practice (mrsiprep's own default 'LFMIHIFIS' is 9), so
+            # only the list shape is checked here.
+            if not self.chimera_schemes():
+                raise ValueError("--chimera-scheme must name at least one parcellation code.")
+            try:
+                scales = self.chimera_scales()
+            except ValueError as exc:
+                raise ValueError(f"--chimera-scale must be integers (or 'scaleN'): {self.chimera_scale!r}") from exc
+            if not scales:
+                raise ValueError("--chimera-scale must name at least one scale.")
+            for scale in scales:
+                if not 1 <= scale <= 5:
+                    raise ValueError(f"--chimera-scale must be between 1 and 5, got {scale}")
+            try:
+                grows = self.chimera_grows()
+            except ValueError as exc:
+                raise ValueError(f"--chimera-grow must be integers (mm): {self.chimera_grow!r}") from exc
+            if not grows:
+                raise ValueError("--chimera-grow must name at least one distance.")
+            if any(grow < 0 for grow in grows):
+                raise ValueError(f"--chimera-grow must not be negative: {self.chimera_grow!r}")
+        elif self.parcellation_mode == "atlas" and not self.atlases():
+            raise ValueError("--atlas must name at least one atlas.")
 
     def _validate_registration_backend(self) -> None:
         if self.registration_backend in {"flirt/fnirt", "flirt_fnirt", "flirt-fnirt"}:
@@ -135,6 +178,42 @@ class MRSIPrepConfig:
             raise ValueError("--fsl-mrsi-to-t1-init must be 'flirt' or 'usesqform'.")
         if self.fsl_t1_to_mni_dof not in {6, 7, 9, 12}:
             raise ValueError("--fsl-t1-to-mni-dof must be one of 6, 7, 9, or 12.")
+
+    def _resolve_nucleus(self) -> None:
+        """Settle which nucleus this run is processing.
+
+        Precedence: explicit ``--nucleus`` > ``mrsinmrs.json``'s ``Nucleus``
+        (part of the MRSinMRS standard; already loaded into ``self.mrsinmrs``
+        by :meth:`_resolve_paths`) > ``1H``.
+
+        Read from ``CommonMetadata`` rather than a per-recording entry: the
+        nucleus is a property of the acquisition protocol, and this config is
+        run-wide, so a per-recording override would have nowhere to apply.
+        """
+        declared = self.nucleus
+        if declared is None and isinstance(self.mrsinmrs, dict):
+            declared = (self.mrsinmrs.get("CommonMetadata") or {}).get("Nucleus")
+        self.nucleus = canonical_nucleus(declared) if declared else DEFAULT_NUCLEUS
+
+    def _resolve_quality_defaults(self) -> None:
+        """Fill unset voxel-quality thresholds from the nucleus table.
+
+        Only the thresholds left as None are touched, so an explicit CLI flag
+        or a --config-preset value always wins. Precedence overall:
+        explicit CLI > preset > nucleus defaults.
+        """
+        unset = [name for name in ("snr_min", "linewidth_max", "crlb_max") if getattr(self, name) is None]
+        if not unset:
+            return
+        # Raises for a nucleus with uncurated thresholds, naming nuclei.json --
+        # deliberately louder than silently applying proton values.
+        defaults = quality_defaults(self.nucleus)
+        for name in unset:
+            setattr(self, name, defaults[name])
+
+    def nucleus_metabolite_aliases(self) -> dict[str, list[str]]:
+        """Alias spellings used when locating this nucleus's metabolite maps."""
+        return metabolite_aliases(self.nucleus)
 
     def _resolve_derived_defaults(self) -> None:
         if self.tissue_backend == "none":
@@ -155,6 +234,10 @@ class MRSIPrepConfig:
     def __post_init__(self) -> None:
         self._validate_required_fields()
         self._resolve_paths()
+        # Nucleus first: it seeds the quality-threshold defaults below, and
+        # _resolve_paths() has just loaded the mrsinmrs.json it may come from.
+        self._resolve_nucleus()
+        self._resolve_quality_defaults()
         self._validate_enum_choices()
         self._validate_registration_backend()
         self._resolve_derived_defaults()
@@ -197,6 +280,22 @@ class MRSIPrepConfig:
             return self.fs_subjects_dir
         return self.output_dir / "freesurfer"
 
+    def chimera_schemes(self) -> list[str]:
+        """Chimera parcellation codes requested, in order."""
+        return _split_multi(self.chimera_scheme)
+
+    def chimera_scales(self) -> list[int]:
+        """Lausanne scales requested, in order. Accepts 'scaleN' as well as N."""
+        return [_parse_scale_token(token) for token in _split_multi(self.chimera_scale)]
+
+    def chimera_grows(self) -> list[int]:
+        """Gyral-WM growth distances (mm) requested, in order."""
+        return [int(token) for token in _split_multi(self.chimera_grow)]
+
+    def atlases(self) -> list[str]:
+        """Bundled/custom MNI atlas names requested, in order."""
+        return _split_multi(self.atlas)
+
     def to_dict(self) -> dict:
         out = asdict(self)
         for key, value in list(out.items()):
@@ -205,6 +304,30 @@ class MRSIPrepConfig:
             elif isinstance(value, list):
                 out[key] = [str(item) if isinstance(item, Path) else item for item in value]
         return out
+
+
+def _split_multi(value) -> list[str]:
+    """Split a comma-separated option into its elements.
+
+    Mirrors Chimera's own parsing (``[x for x in value.split(",") if x]``), so
+    stray/trailing commas are tolerated rather than producing empty entries.
+    Non-string values (an int scale from a preset JSON, or an already-split
+    list) are accepted as-is.
+    """
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple)):
+        items = [str(item).strip() for item in value]
+    else:
+        items = [item.strip() for item in str(value).split(",")]
+    return [item for item in items if item]
+
+
+def _parse_scale_token(value) -> int:
+    text = str(value)
+    if text.lower().startswith("scale"):
+        text = text[len("scale") :]
+    return int(text)
 
 
 def _normalize_output_spaces(spaces: list[str]) -> list[str]:

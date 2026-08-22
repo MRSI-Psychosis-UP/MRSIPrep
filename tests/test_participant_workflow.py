@@ -138,8 +138,8 @@ class PreflightFreesurferStatusTests(unittest.TestCase):
         layout = MagicMock()
         layout.raw_t1.return_value = Path("/tmp/sub-01_T1w.nii.gz")
         config = SimpleNamespace(parcellation_mode="chimera", freesurfer_dir=Path("/tmp/fs"))
-        with patch("mrsiprep.workflows.participant.freesurfer_subject_id", return_value="sub-01"), patch(
-            "mrsiprep.workflows.participant.subject_dir_valid", return_value=True
+        with patch("mrsiprep.workflows.preflight.freesurfer_subject_id", return_value="sub-01"), patch(
+            "mrsiprep.workflows.preflight.subject_dir_valid", return_value=True
         ) as valid:
             result = P._preflight_freesurfer_status(layout, "01", "01", config)
         self.assertTrue(result)
@@ -276,6 +276,7 @@ class CollectRecordingsTests(unittest.TestCase):
         config = make_config(["/tmp/bids", "/tmp/out", "participant"], participants_file=None, participant_label=[], session_label=[])
         discovered = [Recording("03", "01")]
         with patch("mrsiprep.workflows.participant.BIDSLayout") as layout_cls:
+            layout_cls.from_config.return_value = layout_cls.return_value
             layout_cls.return_value.discover_recordings.return_value = discovered
             recordings = P.collect_recordings(config)
         self.assertEqual(recordings, discovered)
@@ -286,7 +287,8 @@ class ValidateBackendInputsTests(unittest.TestCase):
         # synthseg-fast is the default tissue_backend, so a default config
         # already exercises this without any explicit override.
         config = make_config(["/tmp/bids", "/tmp/out", "participant"])
-        with patch("mrsiprep.workflows.participant.BIDSLayout") as layout_cls:
+        with patch("mrsiprep.workflows.steps.BIDSLayout") as layout_cls:
+            layout_cls.from_config.return_value = layout_cls.return_value
             layout_cls.return_value.raw_t1.return_value = None
             with self.assertRaisesRegex(FileNotFoundError, "synthseg-fast"):
                 P._validate_backend_inputs(config, "01", "01")
@@ -297,7 +299,8 @@ class ValidateBackendInputsTests(unittest.TestCase):
             custom_atlas=None,
             custom_atlas_lut=None,
         )
-        with patch("mrsiprep.workflows.participant.BIDSLayout") as layout_cls:
+        with patch("mrsiprep.workflows.steps.BIDSLayout") as layout_cls:
+            layout_cls.from_config.return_value = layout_cls.return_value
             layout_cls.return_value.raw_t1.return_value = Path("/tmp/t1.nii.gz")
             with self.assertRaisesRegex(FileNotFoundError, "--custom-atlas is required"):
                 P._validate_backend_inputs(config, "01", "01")
@@ -311,14 +314,16 @@ class ValidateBackendInputsTests(unittest.TestCase):
                 custom_atlas=custom_atlas,
                 custom_atlas_lut=None,
             )
-            with patch("mrsiprep.workflows.participant.BIDSLayout") as layout_cls:
+            with patch("mrsiprep.workflows.steps.BIDSLayout") as layout_cls:
+                layout_cls.from_config.return_value = layout_cls.return_value
                 layout_cls.return_value.raw_t1.return_value = Path("/tmp/t1.nii.gz")
                 with self.assertRaisesRegex(FileNotFoundError, "--custom-atlas-lut is required"):
                     P._validate_backend_inputs(config, "01", "01")
 
     def test_passes_when_all_requirements_met(self):
         config = make_config(["/tmp/bids", "/tmp/out", "participant"])
-        with patch("mrsiprep.workflows.participant.BIDSLayout") as layout_cls:
+        with patch("mrsiprep.workflows.steps.BIDSLayout") as layout_cls:
+            layout_cls.from_config.return_value = layout_cls.return_value
             layout_cls.return_value.raw_t1.return_value = Path("/tmp/t1.nii.gz")
             P._validate_backend_inputs(config, "01", "01")  # must not raise
 

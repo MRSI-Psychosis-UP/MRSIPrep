@@ -9,6 +9,7 @@ from dataclasses import fields as _dataclass_fields
 from pathlib import Path
 
 from mrsiprep.config.defaults import QUALITY_DEFAULTS
+from mrsiprep.config.nuclei import available_nuclei
 from mrsiprep.config.settings import MRSIPrepConfig
 
 PRESETS_DIR = Path(__file__).resolve().parent.parent / "config" / "presets"
@@ -58,6 +59,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="Comma-separated metabolite names to process, e.g. 'CrPCr,GluGln,GPCPCh,NAANAAG,Ins'.",
     )
     quality.add_argument(
+        "--nucleus",
+        default=None,
+        help="Acquired nucleus, e.g. "
+        + "/".join(available_nuclei())
+        + " (aliases such as 'proton' or 'phosphorus' are accepted). Selects the curated voxel-quality "
+        "defaults and metabolite alias spellings for that nucleus. Falls back to the 'Nucleus' field of "
+        "the dataset's mrsinmrs.json, then to 1H. Nuclei other than 1H ship no curated quality "
+        "thresholds, so pass --snr-min/--linewidth-max/--crlb-max explicitly for them; see "
+        "mrsiprep/config/nuclei.json to contribute values.",
+    )
+    quality.add_argument(
         "--quality-metrics",
         nargs="+",
         default=["snr", "linewidth", "crlb"],
@@ -70,20 +82,23 @@ def build_parser() -> argparse.ArgumentParser:
     quality.add_argument(
         "--snr-min",
         type=float,
-        default=QUALITY_DEFAULTS["snr_min"],
-        help="Minimum per-voxel SNR to include a voxel, when 'snr' is in --quality-metrics.",
+        default=None,
+        help=f"Minimum per-voxel SNR to include a voxel, when 'snr' is in --quality-metrics. "
+        f"Defaults to the acquired nucleus's curated value (--nucleus; {QUALITY_DEFAULTS['snr_min']} for 1H).",
     )
     quality.add_argument(
         "--linewidth-max",
         type=float,
-        default=QUALITY_DEFAULTS["linewidth_max"],
-        help="Maximum per-voxel linewidth (FWHM) to include a voxel, when 'linewidth' is in --quality-metrics.",
+        default=None,
+        help=f"Maximum per-voxel linewidth (FWHM) to include a voxel, when 'linewidth' is in --quality-metrics. "
+        f"Defaults to the acquired nucleus's curated value (--nucleus; {QUALITY_DEFAULTS['linewidth_max']} for 1H).",
     )
     quality.add_argument(
         "--crlb-max",
         type=float,
-        default=QUALITY_DEFAULTS["crlb_max"],
-        help="Maximum per-voxel Cramér-Rao lower bound (%%) to include a voxel, when 'crlb' is in --quality-metrics.",
+        default=None,
+        help=f"Maximum per-voxel Cramér-Rao lower bound (%%) to include a voxel, when 'crlb' is in --quality-metrics. "
+        f"Defaults to the acquired nucleus's curated value (--nucleus; {QUALITY_DEFAULTS['crlb_max']} for 1H).",
     )
 
     t1_correction = parser.add_argument_group("T1 saturation correction")
@@ -306,21 +321,27 @@ def build_parser() -> argparse.ArgumentParser:
         "ganglia, thalamus, amygdala, hippocampus, hypothalamus, cerebellum, brainstem, gyral WM, WM. "
         "Default 'LFMIHIFIFF' = Lausanne cortex, FreeSurfer/Aseg subcortex/cerebellum/WM, MIALThalParc "
         "thalamus, FSAmygHippoParc amygdala, HBT hippocampus, FSHypoThalParc hypothalamus, FSBrainStemParc "
-        "brainstem. See the Chimera documentation for the full per-position letter set.",
+        "brainstem. See the Chimera documentation for the full per-position letter set. Accepts a "
+        "comma-separated list (e.g. 'LFMIHIFIFF,LFMIHIFIS') to build several parcellations in one run; "
+        "see --chimera-scale for how the lists combine.",
     )
     parcellation.add_argument(
         "--chimera-scale",
-        type=_parse_scale,
-        default=3,
+        default="3",
         help="Lausanne2018 cortical parcellation granularity (1-5; higher = more, finer parcels), used only "
-        "when --chimera-scheme's cortex position is 'L'. Accepts a bare integer or 'scaleN'.",
+        "when --chimera-scheme's cortex position is 'L'. Accepts a bare integer or 'scaleN'. Also accepts a "
+        "comma-separated list (e.g. '1,3'), which is combined with --chimera-scheme and --chimera-grow as a "
+        "cross product -- '--chimera-scheme A,B --chimera-scale 1,3' builds four parcellations. Every "
+        "parcellation gets its own regional table, metabolite profiles, and connectivity outputs, all off a "
+        "single shared preprocessing pass. Schemes whose cortex position isn't 'L' aren't multi-resolution, "
+        "so they yield one parcellation regardless of how many scales are listed.",
     )
     parcellation.add_argument(
         "--chimera-grow",
-        type=int,
-        default=2,
+        default="2",
         help="Distance (mm) to grow cortical/subcortical gray-matter parcel labels into adjacent white "
-        "matter when building the gyral-WM parcellation. Set to 0 to disable growing.",
+        "matter when building the gyral-WM parcellation. Set to 0 to disable growing. Accepts a "
+        "comma-separated list, combined as a cross product with --chimera-scheme/--chimera-scale.",
     )
     parcellation.add_argument(
         "--atlas",
@@ -329,7 +350,7 @@ def build_parser() -> argparse.ArgumentParser:
         "mrsiprep.parcellation.atlas_registry.available_bundled_atlases(), e.g. 'chimera-LFMIHIFIS_scale3'); "
         "'custom' (requires --custom-atlas and --custom-atlas-lut); 'schaefer<N>' for the Schaefer 2018 "
         "N-parcel cortical atlas (e.g. 'schaefer400'); or 'mist197'/'mist-197' for the BASC multiscale "
-        "atlas at scale 197.",
+        "atlas at scale 197. Accepts a comma-separated list to project several atlases in one run.",
     )
     parcellation.add_argument(
         "--custom-atlas",
@@ -634,6 +655,7 @@ def parse_args(argv: list[str] | None = None) -> MRSIPrepConfig:
         bids_filter_file=args.bids_filter_file,
         metabolites=args.metabolites,
         quality_metrics=args.quality_metrics,
+        nucleus=args.nucleus,
         snr_min=args.snr_min,
         linewidth_max=args.linewidth_max,
         crlb_max=args.crlb_max,
@@ -709,10 +731,3 @@ def parse_args(argv: list[str] | None = None) -> MRSIPrepConfig:
 
 def _parse_comma_list(value: str) -> list[str]:
     return [item.strip() for item in str(value).split(",") if item.strip()]
-
-
-def _parse_scale(value) -> int:
-    text = str(value)
-    if text.startswith("scale"):
-        text = text[len("scale") :]
-    return int(text)
