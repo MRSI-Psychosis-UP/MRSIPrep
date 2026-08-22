@@ -61,11 +61,35 @@ def run_tissue_workflow(
     backend = config.tissue_backend
     if precomputed_tissue_t1 is not None:
         tissue_t1 = precomputed_tissue_t1
-    elif backend == "existing":
-        tissue_t1 = copy_tissue_to_derivatives(config, subject, session, load_existing_cat12(config, subject, session))
-    elif backend == "synthseg-fast":
-        tissue_t1 = segment_t1_synthseg_fast(config, subject, session, t1_path)
     else:
-        raise ValueError(f"Unsupported tissue backend: {backend}")
+        segment = TISSUE_BACKENDS.get(backend)
+        if segment is None:
+            raise ValueError(
+                f"Unsupported tissue backend: {backend}. Registered backends: "
+                f"{', '.join(sorted(TISSUE_BACKENDS))}."
+            )
+        tissue_t1 = segment(config, subject, session, t1_path)
     tissue_mrsi = resample_tissue_to_mrsi(config, subject, session, tissue_t1, mrsi_reference, t1_to_mrsi_transforms)
     return TissueResult(t1=tissue_t1, mrsi=tissue_mrsi)
+
+
+def _segment_existing(config, subject, session, _t1_path):
+    """Reuse a CAT12 segmentation already present in the BIDS layout."""
+    return copy_tissue_to_derivatives(config, subject, session, load_existing_cat12(config, subject, session))
+
+
+def _segment_synthseg_fast(config, subject, session, t1_path):
+    """Run SynthSeg + FSL FAST on the skull-stripped T1w."""
+    return segment_t1_synthseg_fast(config, subject, session, t1_path)
+
+
+#: T1w-space tissue segmentation backends, keyed by ``--tissue-backend``.
+#: Each takes ``(config, subject, session, t1_path)`` and returns
+#: ``{label: path}`` of tissue-probability maps. Add an entry here to add a
+#: backend -- no dispatch code needs editing. See docs/extending.md.
+#: ("none" is absent by design: it means "no tissue segmentation at all", and
+#: is handled upstream by config forcing --no-pvc.)
+TISSUE_BACKENDS = {
+    "existing": _segment_existing,
+    "synthseg-fast": _segment_synthseg_fast,
+}

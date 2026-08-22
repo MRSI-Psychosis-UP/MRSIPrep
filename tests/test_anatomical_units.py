@@ -35,7 +35,11 @@ class PrepareAnatomicalFixture(unittest.TestCase):
             brain_mask=lambda *a, **k: brain_mask,
             cat12_probseg=lambda *a, **k: p3,
         )
-        return patch("mrsiprep.workflows.anatomical.BIDSLayout", return_value=mock_layout)
+        return patch(
+            "mrsiprep.workflows.anatomical.BIDSLayout",
+            return_value=mock_layout,
+            **{"from_config.return_value": mock_layout},
+        )
 
 
 class BrainTargetTests(PrepareAnatomicalFixture):

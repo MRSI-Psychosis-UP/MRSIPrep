@@ -86,7 +86,7 @@ def _validate_brain_csf_registration_target(config, layout, subject: str, sessio
 
 
 def validate_recording(config: MRSIPrepConfig, subject: str, session: str | None) -> tuple[Path, MRSIInputs]:
-    layout = BIDSLayout(config.bids_dir, filters=config.bids_filters)
+    layout = BIDSLayout.from_config(config)
     t1 = _validate_t1_reference(config, layout, subject, session)
 
     inputs = load_mrsi_inputs(layout, subject, session, config.metabolites)

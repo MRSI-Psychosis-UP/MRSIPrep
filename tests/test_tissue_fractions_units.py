@@ -37,7 +37,11 @@ class LoadExistingCat12Tests(unittest.TestCase):
     def _layout(self, mapping):
         """Fake BIDSLayout whose cat12_probseg returns mapping[index]."""
         layout = SimpleNamespace(cat12_probseg=lambda subject, session, index: mapping.get(index))
-        return patch("mrsiprep.tissue.fractions.BIDSLayout", return_value=layout)
+        return patch(
+            "mrsiprep.tissue.fractions.BIDSLayout",
+            return_value=layout,
+            **{"from_config.return_value": layout},
+        )
 
     def test_returns_all_three_maps_keyed_by_tissue_label(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -86,17 +90,23 @@ class LoadExistingCat12Tests(unittest.TestCase):
             for label in ("GM", "WM", "CSF"):
                 self.assertIn(label, message)
 
-    def test_bids_filters_are_forwarded_to_the_layout(self):
+    def test_layout_is_built_from_the_run_config(self):
+        # from_config() carries bids_filters *and* the nucleus's metabolite
+        # aliases, so passing the config through is what keeps both correct.
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             paths = {i: _save(root / f"p{i}.nii.gz") for i in (1, 2, 3)}
             layout = SimpleNamespace(cat12_probseg=lambda subject, session, index: paths.get(index))
-            filters = {"acquisition": "highres"}
+            config = _config(root, bids_filters={"acquisition": "highres"})
 
-            with patch("mrsiprep.tissue.fractions.BIDSLayout", return_value=layout) as layout_cls:
-                load_existing_cat12(_config(root, bids_filters=filters), "S001", "V1")
+            with patch(
+                "mrsiprep.tissue.fractions.BIDSLayout",
+                return_value=layout,
+                **{"from_config.return_value": layout},
+            ) as layout_cls:
+                load_existing_cat12(config, "S001", "V1")
 
-            self.assertEqual(layout_cls.call_args.kwargs["filters"], filters)
+            layout_cls.from_config.assert_called_once_with(config)
 
 
 class CopyTissueToDerivativesTests(unittest.TestCase):
