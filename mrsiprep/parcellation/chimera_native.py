@@ -27,7 +27,7 @@ def run_chimera_parcellation(config, subject: str, session: str | None, mrsi_ref
         see :func:`mrsiprep.interfaces.chimera.run_chimera`.
     """
     debug = Debug(verbose=config.verbose)
-    layout = BIDSLayout(config.bids_dir, filters=config.bids_filters)
+    layout = BIDSLayout.from_config(config)
     rerun_chimera = config.overwrite or config.overwrite_chimera
     schemes = config.chimera_schemes()
     scales = config.chimera_scales()

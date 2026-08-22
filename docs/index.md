@@ -210,6 +210,8 @@ cross_sequence_benchmark
 :caption: 'Developer Reference:'
 :hidden:
 
+architecture
+extending
 api
 ```
 

@@ -78,7 +78,7 @@ class _Harness:
 
     def __enter__(self):
         self.patches = [
-            patch(f"{MODULE}.BIDSLayout", return_value=self.layout),
+            patch(f"{MODULE}.BIDSLayout", return_value=self.layout, **{"from_config.return_value": self.layout}),
             patch(f"{MODULE}.subject_dir_valid", return_value=self.dir_valid),
             patch(f"{MODULE}.freesurfer_subject_id", return_value="sub-S001"),
             patch(f"{MODULE}.run_recon_all"),

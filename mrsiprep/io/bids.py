@@ -68,10 +68,23 @@ def load_bids_filters(path: str | Path | None) -> dict:
 class BIDSLayout:
     """Minimal path resolver for the MRSI-Metabolic-Connectome derivative layout."""
 
-    def __init__(self, bids_dir: str | Path, filters: dict | None = None):
+    def __init__(self, bids_dir: str | Path, filters: dict | None = None, metabolite_aliases: dict | None = None):
         self.bids_dir = Path(bids_dir).resolve()
         self.derivatives = self.bids_dir / "derivatives"
         self.filters = filters or {}
+        # Alias spellings tried when a metabolite's map isn't found under its
+        # requested name. Nucleus-dependent, so callers with a config should
+        # use from_config(); the proton table is the standalone default.
+        self.metabolite_aliases = METABOLITE_ALIASES if metabolite_aliases is None else metabolite_aliases
+
+    @classmethod
+    def from_config(cls, config) -> "BIDSLayout":
+        """Build a layout from a run config, carrying its nucleus's aliases."""
+        return cls(
+            config.bids_dir,
+            filters=config.bids_filters,
+            metabolite_aliases=config.nucleus_metabolite_aliases(),
+        )
 
     def discover_recordings(self) -> list[Recording]:
         participants = self.bids_dir / "participants_allsessions.tsv"
@@ -188,7 +201,7 @@ class BIDSLayout:
             if direct.exists() or (construct and root is roots[0]):
                 return direct
             if met:
-                for alias in METABOLITE_ALIASES.get(met, [met]):
+                for alias in self.metabolite_aliases.get(met, [met]):
                     alias_filename = self._mrsi_filename(subject, session, desc, alias, option, space, res)
                     path = root / alias_filename
                     if path.exists():
