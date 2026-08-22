@@ -30,7 +30,7 @@ docker run --rm \
   --session-label V1 \
   --metabolites CrPCr,GPCPCh,NAANAAG \
   --ref-met CrPCr \
-  --mode parc-con \
+  --parcellation-mode chimera \
   --t1-correction literature \
   --t1-correction-water-status unknown \
   --nthreads 16

@@ -1,6 +1,6 @@
 # Runtime Benchmarks
 
-Wall-clock timing for MRSIPrep's `mni-norm` mode (default settings, ANTs
+Wall-clock timing for a default MRSIPrep run (`--parcellation-mode synthseg`, ANTs
 registration backend) across a range of `--nthreads` values, on two
 subjects acquired at different field strengths, to give a sense of how
 runtime scales with acquisition resolution as well as thread count.
@@ -13,7 +13,7 @@ runtime scales with acquisition resolution as well as thread count.
 |---|---|
 | CPU | Intel Core i9-14900K, 24 cores / 32 threads, up to 6.0 GHz |
 | RAM | 125 GB |
-| GPU | NVIDIA RTX 5000 Ada Generation, 32 GB VRAM (not used by `mni-norm` mode; SynthSeg here ran CPU-only) |
+| GPU | NVIDIA RTX 5000 Ada Generation, 32 GB VRAM (not used by this configuration; SynthSeg here ran CPU-only) |
 | OS | Linux 5.15 (Ubuntu) |
 | Docker | 29.4.1 |
 | MRSIPrep image | `mrsiup/mrsiprep:cpu` |
@@ -89,7 +89,7 @@ out cross-run resource contention affecting the timings.
 - **7 Tesla subject**: a real MRSI acquisition with an MP2RAGE
   anatomical.
 
-Both runs: `--mode mni-norm --metabolites NAANAAG,GPCPCh,CrPCr,GluGln,Ins
+Both runs: `--metabolites NAANAAG,GPCPCh,CrPCr,GluGln,Ins
 --ref-met CrPCr`, default `--synthseg-mode robust`, default ANTs
 registration backend.
 
@@ -169,7 +169,7 @@ just position.
 
 ### Method
 
-Full `mrsiprep --mode mni-norm` runs (not isolated registration calls) on
+Full `mrsiprep` runs with the default synthseg parcellation (not isolated registration calls) on
 the same 3 Tesla and 7 Tesla subjects used above, varying
 `--registration-backend`/`--fsl-deformable` and
 `--registration-t1-target` (4 configurations × 2 targets × 2 subjects =
@@ -230,17 +230,17 @@ for both FSL variants and, most noticeably, for ANTs (Rigid+Affine) at
 both field strengths, which shows the coarsest, most scalloped outer edge
 of any of the four configurations.
 
-**Signal-weighted MNI-space leakage and total `mni-norm` wall-clock
+**Signal-weighted MNI-space leakage and total default-configuration wall-clock
 runtime, by backend** (brain target; brain+CSF leakage is within ±0.3
 points of these and shows the same pattern, not shown). Runtime is
 averaged across the `brain`/`brain+CSF` targets; **ANTs (Rigid+Affine)**'s
 bar reports registration-only wall-clock time (both stages combined,
 timed directly via `mrsiprep.interfaces.ants.register()`, `nthreads=16`
 matching the other runs' default, hatched in the figure), since a full
-`mni-norm` run for this configuration was not executed (see Method
+full run for this configuration was not executed (see Method
 above):
 
-![Two-panel bar chart: (left) percentage of resampled CrPCr signal mass outside the MNI152 brain mask, by registration backend, faceted by 3 Tesla vs 7 Tesla; (right) total mni-norm runtime in minutes, by registration backend (ANTs Rigid+SyN, ANTs Rigid+Affine, FSL FLIRT, FSL FLIRT+FNIRT), for 3 Tesla vs 7 Tesla](figures/registration_backend_leakage_runtime.png)
+![Two-panel bar chart: (left) percentage of resampled CrPCr signal mass outside the MNI152 brain mask, by registration backend, faceted by 3 Tesla vs 7 Tesla; (right) total runtime in minutes, by registration backend (ANTs Rigid+SyN, ANTs Rigid+Affine, FSL FLIRT, FSL FLIRT+FNIRT), for 3 Tesla vs 7 Tesla](figures/registration_backend_leakage_runtime.png)
 
 ### Conclusions
 * **ANTs (Rigid+SyN), the mrsiprep default, produced the lowest signal-weighted leakage** at both 3T and 7T (0.34% and 0.44%), clearly outperforming FSL FLIRT-only (2.1% and 0.97%) and FLIRT+FNIRT (5.4% and 2.7%). This agrees with the visual overlays, where ANTs yielded the sharpest anatomical alignment.

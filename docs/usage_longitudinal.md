@@ -18,7 +18,6 @@ docker run --rm \
   --session-label V1 V2 V3 \
   --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \
   --ref-met CrPCr \
-  --mode mni-norm \
   --longitudinal \
   --nthreads 16
 ```
