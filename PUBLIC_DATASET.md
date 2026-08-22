@@ -78,7 +78,6 @@ docker run --rm \
   mrsiup/mrsiprep:cpu \
   /data /out participant \
   --session-label 01 \
-  --mode mni-norm \
   --t1 acq-mprage_T1w \
   --metabolites NAANAAG,GPCPCh,CrPCr,GluGln,Ins \
   --ref-met CrPCr \

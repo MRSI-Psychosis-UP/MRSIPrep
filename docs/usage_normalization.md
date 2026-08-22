@@ -13,7 +13,6 @@ docker run --rm \
   --session-label V1 \
   --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \
   --ref-met CrPCr \
-  --mode mni-norm \
   --output-spaces MNI152NLin2009cAsym \
   --mni-resolution origres \
   --nthreads 16
@@ -50,7 +49,6 @@ docker run --rm \
   --session-label V1 \
   --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \
   --ref-met CrPCr \
-  --mode mni-norm \
   --output-mrsi-t1w \
   --nthreads 16
 ```
@@ -79,7 +77,7 @@ docker run --rm \
   --session-label V1 \
   --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \
   --ref-met CrPCr \
-  --mode parc-con \
+  --parcellation-mode chimera \
   --normalization ants-syn \
   --output-spaces MNI152NLin2009cAsym \
   --nthreads 16
