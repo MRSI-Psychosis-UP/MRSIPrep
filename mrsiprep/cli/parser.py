@@ -97,7 +97,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--crlb-max",
         type=float,
         default=None,
-        help=f"Maximum per-voxel Cramér-Rao lower bound (%%%%) to include a voxel, when 'crlb' is in --quality-metrics. "
+        help=f"Maximum per-voxel Cramér-Rao lower bound (%%) to include a voxel, when 'crlb' is in --quality-metrics. "
         f"Defaults to the acquired nucleus's curated value (--nucleus; {QUALITY_DEFAULTS['crlb_max']} for 1H).",
     )
 
