@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.12.0
 
 - **Nucleus is now explicit, and non-proton MRSI is a first-class case.**
   New `--nucleus` (or a `Nucleus` field in `mrsinmrs.json`'s
