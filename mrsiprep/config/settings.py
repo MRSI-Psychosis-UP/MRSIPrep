@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-from .defaults import QUALITY_DEFAULTS
+from .nuclei import DEFAULT_NUCLEUS, canonical_nucleus, metabolite_aliases, quality_defaults
 
 
 @dataclass
@@ -19,9 +19,15 @@ class MRSIPrepConfig:
     bids_filter_file: Path | None = None
     metabolites: list[str] | None = None
     quality_metrics: list[str] = field(default_factory=lambda: ["snr", "linewidth", "crlb"])
-    snr_min: float = QUALITY_DEFAULTS["snr_min"]
-    linewidth_max: float = QUALITY_DEFAULTS["linewidth_max"]
-    crlb_max: float = QUALITY_DEFAULTS["crlb_max"]
+    # Acquired nucleus. None means "resolve it": --nucleus wins, else
+    # mrsinmrs.json's Nucleus field, else 1H. See config/nuclei.json.
+    nucleus: str | None = None
+    # None means "take this nucleus's default"; an explicit CLI flag or a
+    # preset value arrives non-None and is left alone. Same None-sentinel
+    # idiom as registration_t1_target below.
+    snr_min: float | None = None
+    linewidth_max: float | None = None
+    crlb_max: float | None = None
     tissue_backend: str = "synthseg-fast"
     registration_backend: str = "ants"
     ants_mrsi_to_t1_transform: str = "sr"
@@ -173,6 +179,42 @@ class MRSIPrepConfig:
         if self.fsl_t1_to_mni_dof not in {6, 7, 9, 12}:
             raise ValueError("--fsl-t1-to-mni-dof must be one of 6, 7, 9, or 12.")
 
+    def _resolve_nucleus(self) -> None:
+        """Settle which nucleus this run is processing.
+
+        Precedence: explicit ``--nucleus`` > ``mrsinmrs.json``'s ``Nucleus``
+        (part of the MRSinMRS standard; already loaded into ``self.mrsinmrs``
+        by :meth:`_resolve_paths`) > ``1H``.
+
+        Read from ``CommonMetadata`` rather than a per-recording entry: the
+        nucleus is a property of the acquisition protocol, and this config is
+        run-wide, so a per-recording override would have nowhere to apply.
+        """
+        declared = self.nucleus
+        if declared is None and isinstance(self.mrsinmrs, dict):
+            declared = (self.mrsinmrs.get("CommonMetadata") or {}).get("Nucleus")
+        self.nucleus = canonical_nucleus(declared) if declared else DEFAULT_NUCLEUS
+
+    def _resolve_quality_defaults(self) -> None:
+        """Fill unset voxel-quality thresholds from the nucleus table.
+
+        Only the thresholds left as None are touched, so an explicit CLI flag
+        or a --config-preset value always wins. Precedence overall:
+        explicit CLI > preset > nucleus defaults.
+        """
+        unset = [name for name in ("snr_min", "linewidth_max", "crlb_max") if getattr(self, name) is None]
+        if not unset:
+            return
+        # Raises for a nucleus with uncurated thresholds, naming nuclei.json --
+        # deliberately louder than silently applying proton values.
+        defaults = quality_defaults(self.nucleus)
+        for name in unset:
+            setattr(self, name, defaults[name])
+
+    def nucleus_metabolite_aliases(self) -> dict[str, list[str]]:
+        """Alias spellings used when locating this nucleus's metabolite maps."""
+        return metabolite_aliases(self.nucleus)
+
     def _resolve_derived_defaults(self) -> None:
         if self.tissue_backend == "none":
             self.no_pvc = True
@@ -192,6 +234,10 @@ class MRSIPrepConfig:
     def __post_init__(self) -> None:
         self._validate_required_fields()
         self._resolve_paths()
+        # Nucleus first: it seeds the quality-threshold defaults below, and
+        # _resolve_paths() has just loaded the mrsinmrs.json it may come from.
+        self._resolve_nucleus()
+        self._resolve_quality_defaults()
         self._validate_enum_choices()
         self._validate_registration_backend()
         self._resolve_derived_defaults()

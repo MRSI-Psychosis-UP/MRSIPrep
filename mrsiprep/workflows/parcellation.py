@@ -44,33 +44,57 @@ def run_parcellation_workflow(config, subject, session, mrsi_reference, registra
     :raises ValueError: If ``"atlas"`` is selected without ``t1_reference``,
         or ``config.parcellation_mode`` isn't a supported value.
     """
-    if config.parcellation_mode == "synthseg":
-        if raw_t1 is None:
-            raise FileNotFoundError("SynthSeg parcellation requires a raw T1w image.")
-        return [
-            run_synthseg_parcellation(
-                config,
-                subject,
-                session,
-                raw_t1,
-                mrsi_reference,
-                registration_result.mrsi_to_t1.inverse,
-            )
-        ]
-    if config.parcellation_mode == "chimera":
-        return run_chimera_parcellation(config, subject, session, mrsi_reference, registration_result.mrsi_to_t1.inverse)
-    if config.parcellation_mode == "atlas":
-        if registration_result.t1_to_mni is None:
-            raise RuntimeError("Atlas parcellation requires T1-to-MNI normalization.")
-        if t1_reference is None:
-            raise ValueError("Atlas parcellation requires a T1 reference image.")
-        return run_mni_parcellation(
+    backend = PARCELLATION_BACKENDS.get(config.parcellation_mode)
+    if backend is None:
+        raise ValueError(
+            f"Unsupported parcellation mode: {config.parcellation_mode}. "
+            f"Registered modes: {', '.join(sorted(PARCELLATION_BACKENDS))}."
+        )
+    return backend(config, subject, session, mrsi_reference, registration_result, raw_t1, t1_reference)
+
+
+def _parcellate_synthseg(config, subject, session, mrsi_reference, registration_result, raw_t1, _t1_reference):
+    if raw_t1 is None:
+        raise FileNotFoundError("SynthSeg parcellation requires a raw T1w image.")
+    return [
+        run_synthseg_parcellation(
             config,
             subject,
             session,
+            raw_t1,
             mrsi_reference,
-            t1_reference,
-            registration_result.t1_to_mni.inverse,
             registration_result.mrsi_to_t1.inverse,
         )
-    raise ValueError(f"Unsupported parcellation mode: {config.parcellation_mode}")
+    ]
+
+
+def _parcellate_chimera(config, subject, session, mrsi_reference, registration_result, _raw_t1, _t1_reference):
+    return run_chimera_parcellation(config, subject, session, mrsi_reference, registration_result.mrsi_to_t1.inverse)
+
+
+def _parcellate_atlas(config, subject, session, mrsi_reference, registration_result, _raw_t1, t1_reference):
+    if registration_result.t1_to_mni is None:
+        raise RuntimeError("Atlas parcellation requires T1-to-MNI normalization.")
+    if t1_reference is None:
+        raise ValueError("Atlas parcellation requires a T1 reference image.")
+    return run_mni_parcellation(
+        config,
+        subject,
+        session,
+        mrsi_reference,
+        t1_reference,
+        registration_result.t1_to_mni.inverse,
+        registration_result.mrsi_to_t1.inverse,
+    )
+
+
+#: Parcellation backends, keyed by ``--parcellation-mode``. Each takes
+#: ``(config, subject, session, mrsi_reference, registration_result, raw_t1,
+#: t1_reference)`` and returns a list of
+#: :class:`~mrsiprep.parcellation.base.ParcellationResult`. Add an entry to add
+#: a backend -- no dispatch code needs editing. See docs/extending.md.
+PARCELLATION_BACKENDS = {
+    "synthseg": _parcellate_synthseg,
+    "chimera": _parcellate_chimera,
+    "atlas": _parcellate_atlas,
+}

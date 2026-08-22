@@ -29,7 +29,7 @@ def step_prepare(config, subject, session, ctx):
     from mrsiprep.io.validators import validate_recording
 
     t1_path, inputs = validate_recording(config, subject, session)
-    layout = BIDSLayout(config.bids_dir, filters=config.bids_filters)
+    layout = BIDSLayout.from_config(config)
     raw_t1 = layout.raw_t1(subject, session)
     if raw_t1 is None:
         raise FileNotFoundError(f"Missing raw T1w required for MRSIPrep: sub-{subject} ses-{session}")
