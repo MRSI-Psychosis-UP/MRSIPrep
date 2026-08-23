@@ -110,7 +110,7 @@ class TransformMrsiMapsSpaceSelectionTests(unittest.TestCase):
         )
         params.update(kwargs)
         with patch("mrsiprep.mrsi.resampling.apply_image_transform", side_effect=_fake_apply), patch(
-            "mrsiprep.mrsi.resampling.datasets.load_mni152_template", return_value="TEMPLATE"
+            "mrsiprep.mrsi.resampling.template_t1w", return_value="TEMPLATE"
         ), patch("mrsiprep.mrsi.resampling.resolve_mni_resolution", return_value=2):
             return transform_mrsi_maps(config, "S001", "V1", **params)
 
@@ -146,7 +146,7 @@ class TransformMrsiMapsSpaceSelectionTests(unittest.TestCase):
             t1_to_mni = [Path("/x/t2m.mat")]
 
             with patch("mrsiprep.mrsi.resampling.apply_image_transform", side_effect=_fake_apply) as apply_mock, patch(
-                "mrsiprep.mrsi.resampling.datasets.load_mni152_template", return_value="TEMPLATE"
+                "mrsiprep.mrsi.resampling.template_t1w", return_value="TEMPLATE"
             ), patch("mrsiprep.mrsi.resampling.resolve_mni_resolution", return_value=2):
                 transform_mrsi_maps(
                     _config(Path(tmpdir)), "S001", "V1",
@@ -159,7 +159,7 @@ class TransformMrsiMapsSpaceSelectionTests(unittest.TestCase):
     def test_mni_resampling_targets_the_template_at_the_resolved_resolution(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch("mrsiprep.mrsi.resampling.apply_image_transform", side_effect=_fake_apply) as apply_mock, patch(
-                "mrsiprep.mrsi.resampling.datasets.load_mni152_template", return_value="TEMPLATE"
+                "mrsiprep.mrsi.resampling.template_t1w", return_value="TEMPLATE"
             ) as template_mock, patch("mrsiprep.mrsi.resampling.resolve_mni_resolution", return_value=3):
                 transform_mrsi_maps(
                     _config(Path(tmpdir)), "S001", "V1",
