@@ -58,7 +58,7 @@ def _fetch(space: str, resolution: int, desc: str | None, suffix: str) -> Path:
     """Locate one TemplateFlow file, at TemplateFlow's own native resolutions."""
     _check_supported(space)
     try:
-        import templateflow.api as api
+        from templateflow import api
     except ImportError as exc:  # pragma: no cover - templateflow ships in the image
         raise TemplateError(
             "templateflow is required to resolve reference templates but is not installed."
