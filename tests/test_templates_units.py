@@ -122,9 +122,9 @@ class ProviderTests(unittest.TestCase):
         )
 
     def test_t1w_target_is_brain_extracted(self):
-        head = _img(value=100.0)
-        mask = nib.Nifti1Image(np.array([[[1, 0], [0, 0]]] * 2, dtype=np.float32) * 1.0, np.eye(4))
-        f, l = self._patched(head=_img(shape=(2, 2, 2), value=100.0), mask=mask)
+        head = _img(shape=(2, 2, 2), value=100.0)
+        mask = nib.Nifti1Image(np.array([[[1, 0], [0, 0]]] * 2, dtype=np.float32), np.eye(4))
+        f, l = self._patched(head=head, mask=mask)
         with f, l:
             brain = T.template_t1w(1)
         data = np.asarray(brain.dataobj)
