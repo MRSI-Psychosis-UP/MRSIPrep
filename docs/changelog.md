@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.14.0
 
 - **Breaking: `--mni-resolution` is removed; resolution is now a modifier
   on `--output-spaces`.** Following fMRIPrep's convention, each requested
