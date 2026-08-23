@@ -74,9 +74,9 @@ class RegistrationBackendTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "--fsl-mrsi-to-t1-dof"):
             _config(fsl_mrsi_to_t1_dof=8)
 
-    def test_invalid_fsl_t1_to_mni_dof_raises(self):
-        with self.assertRaisesRegex(ValueError, "--fsl-t1-to-mni-dof"):
-            _config(fsl_t1_to_mni_dof=8)
+    def test_invalid_fsl_t1_to_template_dof_raises(self):
+        with self.assertRaisesRegex(ValueError, "--fsl-t1-to-template-dof"):
+            _config(fsl_t1_to_template_dof=8)
 
     def test_invalid_fsl_mrsi_to_t1_init_raises(self):
         with self.assertRaisesRegex(ValueError, "--fsl-mrsi-to-t1-init"):
@@ -102,6 +102,74 @@ class NumericClampingTests(unittest.TestCase):
         cfg = _config(nproc=0, nthreads=-5)
         self.assertEqual(cfg.nproc, 1)
         self.assertEqual(cfg.nthreads, 1)
+
+
+class OutputSpaceResolutionTests(unittest.TestCase):
+    """--output-spaces' space[:res-...] syntax, which replaced --mni-resolution."""
+
+    def _t1(self, tmpdir, zoom=1.0):
+        import nibabel as nib
+        import numpy as np
+
+        path = Path(tmpdir) / "t1.nii.gz"
+        nib.save(nib.Nifti1Image(np.zeros((4, 4, 4), dtype="float32"), np.diag([zoom] * 3 + [1.0])), path)
+        return path
+
+    def test_bare_space_defaults_to_origres(self):
+        cfg = _config(output_spaces=["MNI152NLin2009cAsym"])
+        self.assertEqual(cfg.space_resolutions["MNI152NLin2009cAsym"], "origres")
+
+    def test_res_modifier_is_parsed(self):
+        cfg = _config(output_spaces=["MNI152NLin2009cAsym:res-2"])
+        self.assertEqual(cfg.space_resolutions["MNI152NLin2009cAsym"], "2mm")
+
+    def test_each_space_carries_its_own_resolution(self):
+        # The reason a single global flag could not survive multi-template:
+        # two spaces, two different resolutions.
+        cfg = _config(output_spaces=["MNI152NLin2009cAsym:res-2", "T1w:res-1"])
+        self.assertEqual(cfg.space_resolutions["MNI152NLin2009cAsym"], "2mm")
+        self.assertEqual(cfg.space_resolutions["T1w"], "1mm")
+
+    def test_aliases_still_work_with_modifiers(self):
+        cfg = _config(output_spaces=["mni:res-t1wres"])
+        self.assertEqual(cfg.output_spaces, ["MNI152NLin2009cAsym"])
+        self.assertEqual(cfg.space_resolutions["MNI152NLin2009cAsym"], "t1wres")
+
+    def test_unknown_modifier_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "Unsupported modifier"):
+            _config(output_spaces=["mni:bogus-2"])
+
+    def test_non_numeric_resolution_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "Unsupported resolution"):
+            _config(output_spaces=["mni:res-abc"])
+
+    def test_unknown_space_is_still_rejected(self):
+        with self.assertRaisesRegex(ValueError, "Unsupported output space"):
+            _config(output_spaces=["notaspace"])
+
+    def test_resolution_for_resolves_explicit_millimetres(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cfg = _config(output_spaces=["mni:res-5"])
+            self.assertEqual(cfg.resolution_for("MNI152NLin2009cAsym", self._t1(tmpdir)), 5)
+
+    def test_resolution_for_prefers_t1w_over_origres_when_asked(self):
+        # Used where the MRSI grid is the wrong reference (subject templates,
+        # the registration target); origres has no single answer there.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            t1 = self._t1(tmpdir, zoom=2.0)
+            cfg = _config(output_spaces=["mni"])  # origres
+            self.assertEqual(cfg.resolution_for("MNI152NLin2009cAsym", t1, prefer_t1w=True), 2)
+
+    def test_prefer_t1w_leaves_an_explicit_choice_alone(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cfg = _config(output_spaces=["mni:res-5"])
+            self.assertEqual(cfg.resolution_for("MNI152NLin2009cAsym", self._t1(tmpdir), prefer_t1w=True), 5)
+
+    def test_unrequested_space_falls_back_to_the_default(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cfg = _config(output_spaces=["mni:res-5"])
+            t1 = self._t1(tmpdir, zoom=3.0)
+            self.assertEqual(cfg.resolution_for("T1w", t1, prefer_t1w=True), 3)
 
 
 class NucleusResolutionTests(unittest.TestCase):

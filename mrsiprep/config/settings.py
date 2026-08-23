@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -31,10 +32,10 @@ class MRSIPrepConfig:
     tissue_backend: str = "synthseg-fast"
     registration_backend: str = "ants"
     ants_mrsi_to_t1_transform: str = "sr"
-    ants_t1_to_mni_transform: str = "s"
+    ants_t1_to_template_transform: str = "s"
     fsl_mrsi_to_t1_dof: int = 6
     fsl_mrsi_to_t1_init: str = "flirt"
-    fsl_t1_to_mni_dof: int = 12
+    fsl_t1_to_template_dof: int = 12
     fsl_cost: str = "corratio"
     fsl_deformable: bool = True
     fsl_fnirt_warpres: tuple[int, int, int] | None = None
@@ -42,7 +43,10 @@ class MRSIPrepConfig:
     normalization: str = "simple"
     output_spaces: list[str] = field(default_factory=lambda: ["MNI152NLin2009cAsym"])
     output_mrsi_t1w: bool = False
-    mni_resolution: str = "origres"
+    # Per-space resolution, parsed from --output-spaces' res- modifiers
+    # (e.g. "MNI152NLin2009cAsym:res-2"). Populated in __post_init__; read it
+    # through resolution_for() rather than directly.
+    space_resolutions: dict = field(default_factory=dict)
     registration_t1_target: str | None = None
     csf_pv_threshold: float = 0.95
     parcellation_mode: str = "synthseg"
@@ -87,7 +91,7 @@ class MRSIPrepConfig:
     overwrite_seg: bool = False
     overwrite_pve: bool = False
     overwrite_t1_reg: bool = False
-    overwrite_mni_reg: bool = False
+    overwrite_template_reg: bool = False
     overwrite_transform: bool = False
     overwrite_chimera: bool = False
     work_dir: Path | None = None
@@ -115,7 +119,15 @@ class MRSIPrepConfig:
             self.bids_filter_file = Path(self.bids_filter_file).resolve()
         self.bids_filters = load_bids_filters(self.bids_filter_file)
         self.mrsinmrs = load_mrsinmrs(self.bids_dir)
-        self.output_spaces = _normalize_output_spaces(self.output_spaces)
+        self.output_spaces, parsed_resolutions = _normalize_output_spaces(self.output_spaces)
+        # Precedence: an explicit res- modifier > a --config-preset's
+        # space_resolutions > the default. A parsed value equal to the default
+        # means the space was requested bare, so it must not mask a preset.
+        merged = dict(self.space_resolutions or {})
+        for space, resolution in parsed_resolutions.items():
+            if resolution != DEFAULT_SPACE_RESOLUTION or space not in merged:
+                merged[space] = resolution
+        self.space_resolutions = merged
         self.work_dir = Path(self.work_dir).resolve() if self.work_dir is not None else self.output_dir / "work"
         if self.fs_subjects_dir is not None:
             self.fs_subjects_dir = Path(self.fs_subjects_dir).resolve()
@@ -176,8 +188,8 @@ class MRSIPrepConfig:
             raise ValueError("--fsl-mrsi-to-t1-dof must be one of 6, 7, 9, or 12.")
         if self.fsl_mrsi_to_t1_init not in {"flirt", "usesqform"}:
             raise ValueError("--fsl-mrsi-to-t1-init must be 'flirt' or 'usesqform'.")
-        if self.fsl_t1_to_mni_dof not in {6, 7, 9, 12}:
-            raise ValueError("--fsl-t1-to-mni-dof must be one of 6, 7, 9, or 12.")
+        if self.fsl_t1_to_template_dof not in {6, 7, 9, 12}:
+            raise ValueError("--fsl-t1-to-template-dof must be one of 6, 7, 9, or 12.")
 
     def _resolve_nucleus(self) -> None:
         """Settle which nucleus this run is processing.
@@ -210,6 +222,22 @@ class MRSIPrepConfig:
         defaults = quality_defaults(self.nucleus)
         for name in unset:
             setattr(self, name, defaults[name])
+
+    def resolution_for(self, space: str, t1_path, mrsi_path=None, prefer_t1w: bool = False) -> int:
+        """Resolve a space's ``res-`` modifier to integer millimetres.
+
+        :param prefer_t1w: Substitute ``t1wres`` for ``origres``. Used where
+            the MRSI grid is the wrong reference -- building a subject-level
+            T1w template, or choosing the T1w-to-template registration target
+            -- which previously read as an inline ``"t1wres" if ... ==
+            "origres"`` conditional at each of those call sites.
+        """
+        from mrsiprep.utils.images import resolve_mni_resolution
+
+        choice = self.space_resolutions.get(space, DEFAULT_SPACE_RESOLUTION)
+        if prefer_t1w and str(choice).lower() == "origres":
+            choice = "t1wres"
+        return resolve_mni_resolution(choice, t1_path, mrsi_path)
 
     def nucleus_metabolite_aliases(self) -> dict[str, list[str]]:
         """Alias spellings used when locating this nucleus's metabolite maps."""
@@ -330,23 +358,77 @@ def _parse_scale_token(value) -> int:
     return int(text)
 
 
-def _normalize_output_spaces(spaces: list[str]) -> list[str]:
-    aliases = {
-        "mrsi": "MRSI",
-        "orig": "MRSI",
-        "t1": "T1w",
-        "t1w": "T1w",
-        "mni": "MNI152NLin2009cAsym",
-        "mni152": "MNI152NLin2009cAsym",
-        "mni152nlin2009casym": "MNI152NLin2009cAsym",
-    }
-    normalized = []
+_OUTPUT_SPACE_ALIASES = {
+    "mrsi": "MRSI",
+    "orig": "MRSI",
+    "t1": "T1w",
+    "t1w": "T1w",
+    "mni": "MNI152NLin2009cAsym",
+    "mni152": "MNI152NLin2009cAsym",
+    "mni152nlin2009casym": "MNI152NLin2009cAsym",
+}
+
+#: Resolution used when a space is requested without an explicit ``res-``
+#: modifier: the MRSI acquisition's own native resolution.
+DEFAULT_SPACE_RESOLUTION = "origres"
+
+
+def _normalize_output_spaces(spaces: list[str]) -> tuple[list[str], dict[str, str]]:
+    """Parse ``--output-spaces`` entries of the form ``space[:res-<value>]``.
+
+    Follows fMRIPrep's convention of qualifying a space with modifiers rather
+    than carrying a separate global resolution flag -- which would be
+    ambiguous as soon as two spaces are requested at once.
+
+    ``res-`` accepts an integer millimetre value (``res-2``), or MRSIPrep's
+    own ``res-origres``/``res-t1wres`` for "match the MRSI grid" and "match
+    the T1w grid".
+
+    :returns: ``(canonical space names, {space: resolution choice})``.
+    """
+    normalized: list[str] = []
+    resolutions: dict[str, str] = {}
     for value in spaces:
-        key = str(value).strip().lower()
-        if key not in aliases:
-            supported = ", ".join(sorted(aliases))
-            raise ValueError(f"Unsupported output space '{value}'. Supported values: {supported}")
-        canonical = aliases[key]
+        space, _, modifiers = str(value).strip().partition(":")
+        key = space.strip().lower()
+        if key not in _OUTPUT_SPACE_ALIASES:
+            supported = ", ".join(sorted(_OUTPUT_SPACE_ALIASES))
+            raise ValueError(f"Unsupported output space '{space}'. Supported values: {supported}")
+        canonical = _OUTPUT_SPACE_ALIASES[key]
+
+        resolution = DEFAULT_SPACE_RESOLUTION
+        for modifier in (m for m in modifiers.split(":") if m):
+            name, _, setting = modifier.partition("-")
+            if name.strip().lower() != "res" or not setting:
+                raise ValueError(
+                    f"Unsupported modifier '{modifier}' on output space '{value}'. "
+                    "Only 'res-<N>mm', 'res-origres' and 'res-t1wres' are supported, "
+                    "e.g. 'MNI152NLin2009cAsym:res-2'."
+                )
+            resolution = _normalize_space_resolution(setting.strip(), value)
+
         if canonical not in normalized:
             normalized.append(canonical)
-    return normalized
+        resolutions[canonical] = resolution
+    return normalized, resolutions
+
+
+def _normalize_space_resolution(resolution: str, source: str) -> str:
+    """Validate a ``res-`` value and normalize it to a self-describing form.
+
+    fMRIPrep writes a bare number (``res-2``) for millimetres; it is stored as
+    ``"2mm"`` so the value reads unambiguously in ``provenance.json`` and is
+    accepted directly by :func:`mrsiprep.utils.images.resolve_mni_resolution`.
+    Fails at config time rather than mid-run.
+    """
+    text = str(resolution).strip().lower()
+    if text in {"origres", "t1wres"}:
+        return text
+    match = re.fullmatch(r"(\d+)(mm)?", text)
+    if match:
+        return f"{int(match.group(1))}mm"
+    raise ValueError(
+        f"Unsupported resolution '{resolution}' on output space '{source}'. "
+        "Use an integer millimetre value (e.g. 'res-2'), 'res-origres' (the MRSI "
+        "grid) or 'res-t1wres' (the T1w grid)."
+    )

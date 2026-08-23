@@ -11,7 +11,7 @@ abnormality via a standard voxel-based-analysis (VBA) group comparison
 configurations compared here are not simply "with SyN" vs. "rigid+affine,
 without SyN":** mrsiprep's default ANTs transform codes are
 `ants-mrsi-to-t1-transform=sr` (Rigid + SyN, no separate Affine stage)
-for MRSI→T1w, and `ants-t1-to-mni-transform=s` (Rigid + Affine + SyN)
+for MRSI→T1w, and `ants-t1-to-template-transform=s` (Rigid + Affine + SyN)
 for T1w→MNI. **ANTs (R+SyN)** is this default, full pipeline. **ANTs
 (R+Aff)** drops only the deformable SyN warp from each stage while keeping
 everything else identical, which means, precisely, **Rigid-only**
