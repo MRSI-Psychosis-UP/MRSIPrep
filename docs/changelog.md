@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.13.0
 
 - **MNI outputs are now genuinely in the space their filenames claim.**
   MRSIPrep resampled into `nilearn.datasets.load_mni152_template()` --
