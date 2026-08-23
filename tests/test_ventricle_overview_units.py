@@ -132,8 +132,12 @@ class MniBrainMaskTests(unittest.TestCase):
             mask_path = Path(tmpdir) / "mask.nii.gz"
             nib.save(self._mask_img(), mask_path)
             with patch(
-                "mrsiprep.config.templates.template_brain_mask", side_effect=TemplateError("no cache")
-            ), patch("mrsiprep.reports.ventricle_overview._fsl_standard_path", return_value=mask_path):
+                "mrsiprep.config.templates.template_brain_mask",
+                side_effect=TemplateError("no cache"),
+            ), patch(
+                "mrsiprep.reports.ventricle_overview._fsl_standard_path",
+                return_value=mask_path,
+            ):
                 mask, _ = _mni_brain_mask()
         self.assertEqual(mask.dtype, np.bool_)
         self.assertTrue(mask[0, 0, 1])
