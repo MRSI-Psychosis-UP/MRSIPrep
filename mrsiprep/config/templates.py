@@ -78,7 +78,8 @@ def _fetch(space: str, resolution: int, desc: str | None, suffix: str) -> Path:
 def _to_resolution(img, resolution_mm: int | None, interpolation: str):
     """Resample an image to an isotropic ``resolution_mm`` grid.
 
-    TemplateFlow publishes only 1mm and 2mm, but ``--mni-resolution`` resolves
+    TemplateFlow publishes only 1mm and 2mm, but ``--output-spaces``' ``res-``
+    modifier resolves
     to arbitrary integer millimetres (commonly the MRSI native resolution, e.g.
     5mm), so anything else is resampled here. This mirrors what
     ``nilearn.load_mni152_template(resolution)`` did before, keeping the

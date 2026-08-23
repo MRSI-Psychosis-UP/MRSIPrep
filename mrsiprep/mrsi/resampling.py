@@ -8,7 +8,6 @@ from pathlib import Path
 from mrsiprep.io.naming import mrsi_derivative, resampling_work_path
 from mrsiprep.registration.transforms import apply_image_transform
 from mrsiprep.config.templates import template_t1w
-from mrsiprep.utils.images import resolve_mni_resolution
 
 
 def resample_ref_met_to_t1w(
@@ -85,7 +84,7 @@ def transform_mrsi_maps(
     if config.output_mrsi_t1w:
         outputs["T1w"] = _resample_space("T1w", t1_reference, mrsi_to_t1)
     if ("MNI152NLin2009cAsym" in config.output_spaces or "mni" in config.transform) and t1_to_mni:
-        resolution = resolve_mni_resolution(config.mni_resolution, t1_reference, mrsi_reference)
+        resolution = config.resolution_for("MNI152NLin2009cAsym", t1_reference, mrsi_reference)
         template = template_t1w(resolution)
         transforms = list(t1_to_mni) + list(mrsi_to_t1)
         outputs["MNI152NLin2009cAsym"] = _resample_space("MNI152NLin2009cAsym", template, transforms, res=resolution)

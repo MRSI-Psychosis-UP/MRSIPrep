@@ -13,19 +13,29 @@ docker run --rm \
   --session-label V1 \
   --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \
   --ref-met CrPCr \
-  --output-spaces MNI152NLin2009cAsym \
-  --mni-resolution origres \
+  --output-spaces MNI152NLin2009cAsym:res-origres \
   --nthreads 16
 ```
 
 `--output-spaces` (default `MNI152NLin2009cAsym` only) selects which
 space(s) the final MRSI maps are resampled into as permanent derivatives:
-`MRSI`, `MNI152NLin2009cAsym` (aliases `mrsi`, `mni` accepted). `--mni-resolution`
-selects the MNI template resolution used for both T1w→MNI registration and
-final resampling: `origres` (MRSI native resolution, **default**, avoids
+`MRSI`, `T1w`, `MNI152NLin2009cAsym` (aliases `mrsi`, `t1w`, `mni` accepted).
+
+Each space may be qualified with a `res-` modifier, following fMRIPrep's
+convention:
+
+```bash
+  --output-spaces MNI152NLin2009cAsym:res-2 T1w
+```
+
+`res-` accepts `origres` (MRSI native resolution, **default** — avoids
 implying spatial precision the MRSI acquisition never had, and matches the
 resolution mrsiprep's own spatial-smoothness benchmark evaluates at),
-`t1wres` (T1w resolution), or an explicit `<N>mm`. In `--longitudinal`
+`t1wres` (T1w resolution), or an integer millimetre value (`res-2`).
+Qualifying each space individually replaces the former global
+`--mni-resolution` flag, which could not express different resolutions for
+different spaces. The same resolution drives both T1w→template registration
+and final resampling. In `--longitudinal`
 mode, the shared subject-template-to-MNI registration stage always uses
 `t1wres` regardless of this flag, since the template spans multiple
 sessions that may have different native MRSI resolutions and there is no
@@ -94,6 +104,6 @@ directly.
 
 See [Basic Usage](usage_basic.md) for the full CLI
 reference, including `--registration-backend`, `--normalization`,
-`--output-spaces`, `--output-mrsi-t1w`, `--mni-resolution`, `--ref-met`,
+`--output-spaces`, `--output-mrsi-t1w`, `--ref-met`,
 `--registration-t1-target`, `--transform-spikemask`, `--overwrite-t1-reg`,
-`--overwrite-mni-reg`, and `--overwrite-transform`.
+`--overwrite-template-reg`, and `--overwrite-transform`.

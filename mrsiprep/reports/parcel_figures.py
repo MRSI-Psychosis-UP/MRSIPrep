@@ -83,13 +83,11 @@ def _resample_atlas_to_mni(config, subject: str, session: str | None, atlas_t1: 
     T1w->MNI transform used for MRSI outputs, so glass-brain projection (which
     assumes MNI space) is actually aligned with its silhouette."""
     import nibabel as nib
-    from nilearn import datasets
 
     from mrsiprep.registration.transforms import apply_image_transform
     from mrsiprep.config.templates import template_t1w
-    from mrsiprep.utils.images import resolve_mni_resolution
 
-    resolution = resolve_mni_resolution(config.mni_resolution, atlas_t1, mrsi_reference)
+    resolution = config.resolution_for("MNI152NLin2009cAsym", atlas_t1, mrsi_reference)
     template = template_t1w(resolution)
     # Subject/session-specific filename: this used to be one shared
     # `coverage_mni_atlas.nii.gz` path written by every recording, which
