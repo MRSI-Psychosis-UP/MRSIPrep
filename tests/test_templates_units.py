@@ -116,7 +116,10 @@ class ProviderTests(unittest.TestCase):
         def load(path):
             return mask if "mask" in str(path) else head
 
-        return patch.object(T, "_fetch", side_effect=fetch), patch.object(T.nib, "load", side_effect=load)
+        return (
+            patch.object(T, "_fetch", side_effect=fetch),
+            patch.object(T.nib, "load", side_effect=load),
+        )
 
     def test_t1w_target_is_brain_extracted(self):
         head = _img(value=100.0)
