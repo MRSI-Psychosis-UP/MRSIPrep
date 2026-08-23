@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import shutil
 import tempfile
-import time
 import os
 from contextlib import contextmanager
 from pathlib import Path
@@ -163,52 +162,6 @@ def apply_transforms(
         if out_path is None:
             raise ANTsError("ANTs CLI fallback requires an output path.")
         return apply_transforms_cli(fixed, moving, transforms, out_path, interpolation=interpolation, threads=threads)
-
-
-class Registration:
-    """Small ANTs registration facade matching the mrsitoolbox workflow API."""
-
-    def register(
-        self,
-        fixed_input,
-        moving_input,
-        fixed_mask=None,
-        moving_mask=None,
-        transform: str = "sr",
-        verbose: bool = False,
-        threads: int | None = None,
-    ):
-        ants = _import_ants()
-        fixed_image = _load_ants_image(fixed_input)
-        moving_image = _load_ants_image(moving_input)
-        fixed_mask_image = _load_ants_image(fixed_mask) if fixed_mask is not None else None
-        moving_mask_image = _load_ants_image(moving_mask) if moving_mask is not None else None
-        start = time.time()
-        with _itk_thread_env(threads):
-            tx = ants.registration(
-                fixed=fixed_image,
-                moving=moving_image,
-                fixed_mask=fixed_mask_image,
-                moving_mask=moving_mask_image,
-                verbose=verbose,
-                type_of_transform=f"antsRegistrationSyN[{transform}]",
-            )
-        return tx, round(time.time() - start, 1)
-
-    def transform(self, fixed_image, moving_image, transform, interpolator_mode: str = "linear", threads: int | None = None):
-        ants = _import_ants()
-        fixed = _load_ants_image(fixed_image)
-        moving = _load_ants_image(moving_image)
-        with _itk_thread_env(threads):
-            return ants.apply_transforms(
-                fixed=fixed,
-                moving=moving,
-                transformlist=[str(path) for path in transform],
-                interpolator=interpolator_mode,
-            )
-
-    def save_all_transforms(self, ants_transform_list: dict, dir_prefix_path: str | Path) -> dict[str, list[Path]]:
-        return save_all_transforms(ants_transform_list, dir_prefix_path)
 
 
 def require_cli(command: str) -> str:
