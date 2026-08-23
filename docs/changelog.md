@@ -1,5 +1,40 @@
 # Changelog
 
+## Unreleased
+
+- **MNI outputs are now genuinely in the space their filenames claim.**
+  MRSIPrep resampled into `nilearn.datasets.load_mni152_template()` --
+  ICBM152 2009 release *a*, per nilearn's own documentation -- while
+  labelling every output `space-MNI152NLin2009cAsym`, i.e. release *c*.
+  The reference template now comes from TemplateFlow, so the label is
+  correct and derivatives genuinely share a space with fMRIPrep outputs
+  and TemplateFlow atlases.
+
+  **This changes MNI-space output grids** (origin moves from
+  `(-98,-134,-72)` to `(-96,-132,-78)`, matching the 2009cAsym
+  reference). Regional values shift too, but by *less than the
+  pipeline's own run-to-run variation*: median 1.5% vs a 2.2% noise
+  floor measured by re-running the same image twice. Existing analyses
+  do not need re-running on account of this.
+
+  Also brought into line: the signal-leakage and ventricle QC masks,
+  which came from FSL's `$FSLDIR` standard directory -- the
+  MNI152NLin6Asym lineage, a different space again from the data being
+  checked. They now use the same template the run normalizes into, with
+  the FSL copy kept only as a fallback.
+
+- **A single template provider** (`mrsiprep/config/templates.py`)
+  replaces six scattered `load_mni152_template()` calls, so the target
+  space is decided in one place -- the hook a non-MNI template would
+  need. Templates are pre-fetched at image build time with
+  `TEMPLATEFLOW_HOME` pinned, so runs remain fully offline (verified
+  with `docker run --network none`).
+
+- **Removed the dead `Registration` facade** from
+  `interfaces/ants.py`. Nothing instantiated it, and it behaved
+  differently from the live module-level functions (always wrapping
+  `type_of_transform` in `antsRegistrationSyN[...]`, no CLI fallback).
+
 ## 1.12.0
 
 - **Nucleus is now explicit, and non-proton MRSI is a first-class case.**

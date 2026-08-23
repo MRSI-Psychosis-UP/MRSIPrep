@@ -22,6 +22,10 @@ dependencies = [
   "scikit-image",
   "rich",
   "nipype>=1.8",
+  # Reference templates (see mrsiprep/config/templates.py). Also arrives
+  # transitively via chimera in the container, but MRSIPrep imports it
+  # directly, so it is declared here rather than relied on second-hand.
+  "templateflow",
 ]
 classifiers = [
   "Development Status :: 3 - Alpha",

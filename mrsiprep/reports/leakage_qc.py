@@ -12,7 +12,7 @@ artifacts while still flagging real signal displaced outside the brain.
 Computed against whichever resampled space(s) the run actually produced:
 T1w (opt-in, ``--output-mrsi-t1w``) against the T1w reference brain mask,
 and/or MNI152 (the default ``--output-spaces`` target) against
-nilearn's standard MNI152 brain mask, resampled onto the transformed
+the reference template's own brain mask, resampled onto the transformed
 maps' own grid.
 """
 
@@ -27,6 +27,7 @@ from nibabel.processing import resample_from_to
 from mrsiprep.io.naming import mrsi_derivative
 from mrsiprep.utils.images import load_3d_data
 from mrsiprep.utils.tables import write_tsv
+from mrsiprep.config.templates import template_brain_mask
 
 _CRLB_PREFIX = "crlb-"
 _NON_METABOLITE_KEYS = {"snr", "fwhm"}
@@ -54,10 +55,11 @@ def write_signal_leakage_qc(
     if mni_maps:
         reference_met = next(iter(_metabolites(mni_maps)), None)
         if reference_met is not None:
-            from nilearn import datasets
 
             mni_img = nib.load(str(mni_maps[reference_met]))
-            mni_brain_mask = resample_from_to(datasets.load_mni152_brain_mask(), mni_img, order=0)
+            # Same template the data was resampled into, so "outside the
+            # brain" is measured in the space the maps are actually in.
+            mni_brain_mask = resample_from_to(template_brain_mask(), mni_img, order=0)
             outside_mni = ~(np.asarray(mni_brain_mask.dataobj) > 0.5)
             rows.extend(_leakage_rows("MNI152NLin2009cAsym", mni_maps, outside_mni, config.crlb_max))
 

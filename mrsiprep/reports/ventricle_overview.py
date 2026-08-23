@@ -66,11 +66,28 @@ def _lateral_ventricle_prior() -> tuple[np.ndarray, np.ndarray] | None:
 
 
 def _mni_brain_mask() -> tuple[np.ndarray, np.ndarray] | None:
-    mask_path = _fsl_standard_path(_MNI_BRAIN_MASK_RELATIVE)
-    if mask_path is None:
-        return None
-    data, affine = _load_canonical(mask_path)
-    return data > 0, affine
+    """Brain mask of the run's reference template.
+
+    Taken from the same template the pipeline normalizes into
+    (:mod:`mrsiprep.config.templates`) rather than from FSL's ``$FSLDIR``
+    standard directory: FSL ships the MNI152NLin6Asym lineage, so the old
+    source described a different space than the data being checked. Falls back
+    to FSL's copy only if TemplateFlow cannot provide one, so the QC section
+    degrades rather than disappearing.
+    """
+    import nibabel as nib
+
+    from mrsiprep.config.templates import TemplateError, template_brain_mask
+
+    try:
+        img = nib.as_closest_canonical(template_brain_mask())
+        return np.asarray(img.get_fdata()) > 0, img.affine
+    except (TemplateError, OSError):
+        mask_path = _fsl_standard_path(_MNI_BRAIN_MASK_RELATIVE)
+        if mask_path is None:
+            return None
+        data, affine = _load_canonical(mask_path)
+        return data > 0, affine
 
 
 def _world_bbox_center_and_extent(mask: np.ndarray, affine: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
