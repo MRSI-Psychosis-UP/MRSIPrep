@@ -108,11 +108,14 @@ def _resampled(path: Path, resolution_mm: int | None, interpolation: str = "cont
 def template_t1w(resolution_mm: int | None = None, space: str = DEFAULT_TEMPLATE):
     """Skull-stripped template brain: the registration and resampling target."""
     _check_supported(space)
-    head = _fetch(space, 1, None, "T1w")
-    mask = _fetch(space, 1, "brain", "mask")
-    from nilearn import image
+    head_img = nib.load(str(_fetch(space, 1, None, "T1w")))
+    mask_img = nib.load(str(_fetch(space, 1, "brain", "mask")))
 
-    brain = image.math_img("a * (b > 0)", a=nib.load(str(head)), b=nib.load(str(mask)))
+    # Plain array maths rather than nilearn's math_img(): that takes the
+    # expression as a string and evaluates it, which is both harder to read
+    # here and flagged by static analysis as dynamic-code evaluation.
+    data = np.asarray(head_img.dataobj, dtype=np.float32) * (np.asarray(mask_img.dataobj) > 0)
+    brain = nib.Nifti1Image(data, head_img.affine, head_img.header)
     return _to_resolution(brain, resolution_mm, "continuous")
 
 
