@@ -18,10 +18,15 @@ def _config(root: Path, **overrides):
         output_spaces=["MNI152NLin2009cAsym"],
         transform="",
         transform_spikemask=False,
-        mni_resolution="origres",
+        space_resolutions={"MNI152NLin2009cAsym": "origres"},
     )
     base.update(overrides)
-    return SimpleNamespace(**base)
+    config = SimpleNamespace(**base)
+    # Resolution now comes from the config rather than a module-level helper,
+    # so the fixture supplies it the way MRSIPrepConfig does.
+    resolution = base.pop("_resolution", 2)
+    config.resolution_for = lambda *a, **k: resolution
+    return config
 
 
 def _touch(path: Path):
@@ -111,7 +116,7 @@ class TransformMrsiMapsSpaceSelectionTests(unittest.TestCase):
         params.update(kwargs)
         with patch("mrsiprep.mrsi.resampling.apply_image_transform", side_effect=_fake_apply), patch(
             "mrsiprep.mrsi.resampling.template_t1w", return_value="TEMPLATE"
-        ), patch("mrsiprep.mrsi.resampling.resolve_mni_resolution", return_value=2):
+        ):
             return transform_mrsi_maps(config, "S001", "V1", **params)
 
     def test_t1w_space_is_opt_in(self):
@@ -147,7 +152,7 @@ class TransformMrsiMapsSpaceSelectionTests(unittest.TestCase):
 
             with patch("mrsiprep.mrsi.resampling.apply_image_transform", side_effect=_fake_apply) as apply_mock, patch(
                 "mrsiprep.mrsi.resampling.template_t1w", return_value="TEMPLATE"
-            ), patch("mrsiprep.mrsi.resampling.resolve_mni_resolution", return_value=2):
+            ):
                 transform_mrsi_maps(
                     _config(Path(tmpdir)), "S001", "V1",
                     maps={"CrPCr": Path("/x/cr.nii.gz")},
@@ -160,13 +165,16 @@ class TransformMrsiMapsSpaceSelectionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch("mrsiprep.mrsi.resampling.apply_image_transform", side_effect=_fake_apply) as apply_mock, patch(
                 "mrsiprep.mrsi.resampling.template_t1w", return_value="TEMPLATE"
-            ) as template_mock, patch("mrsiprep.mrsi.resampling.resolve_mni_resolution", return_value=3):
+            ) as template_mock:
+                config = _config(Path(tmpdir))
+                config.resolution_for = lambda *a, **k: 3
                 transform_mrsi_maps(
-                    _config(Path(tmpdir)), "S001", "V1",
+                    config, "S001", "V1",
                     maps={"CrPCr": Path("/x/cr.nii.gz")},
                     mrsi_to_t1=[], t1_to_mni=[Path("/x/t2m.mat")], t1_reference=Path("/x/t1.nii.gz"),
                 )
 
+            # The template is fetched at whatever resolution the config resolved.
             template_mock.assert_called_once_with(3)
             self.assertEqual(apply_mock.call_args.args[0], "TEMPLATE")
 

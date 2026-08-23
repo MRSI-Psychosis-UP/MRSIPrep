@@ -1,5 +1,37 @@
 # Changelog
 
+## Unreleased
+
+- **Breaking: `--mni-resolution` is removed; resolution is now a modifier
+  on `--output-spaces`.** Following fMRIPrep's convention, each requested
+  space may be qualified individually:
+
+  ```bash
+  --output-spaces MNI152NLin2009cAsym:res-2 T1w
+  ```
+
+  `res-` accepts an integer millimetre value, `res-origres` (MRSI native,
+  the default) or `res-t1wres`. A single global flag could not express
+  different resolutions for different spaces, which became a real
+  limitation now that the template is no longer hard-wired to MNI.
+
+  Migration: `--mni-resolution 2mm` becomes
+  `--output-spaces MNI152NLin2009cAsym:res-2`; `--mni-resolution origres`
+  is the default and can simply be dropped.
+
+- **Breaking: three flags renamed** from MNI-specific to template-generic,
+  since the target space is no longer necessarily MNI:
+
+  | old | new |
+  | --- | --- |
+  | `--ants-t1-to-mni-transform` | `--ants-t1-to-template-transform` |
+  | `--fsl-t1-to-mni-dof` | `--fsl-t1-to-template-dof` |
+  | `--overwrite-mni-reg` | `--overwrite-template-reg` |
+
+  No aliases are kept, matching how `--mode` and `--parcellation-mode mni`
+  were handled. The built-in `imaging-neurosci-2026` preset is updated;
+  custom preset JSON files using the old keys will need the same edit.
+
 ## 1.13.0
 
 - **MNI outputs are now genuinely in the space their filenames claim.**

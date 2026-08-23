@@ -87,7 +87,11 @@ def round_mm_resolution(value: float) -> int:
 
 
 def resolve_mni_resolution(choice: str, t1_path: str | Path, mrsi_path: str | Path | None = None) -> int:
-    """Resolve ``--mni-resolution`` (origres/t1wres/<N>mm) to an integer mm resolution."""
+    """Resolve a resolution choice (origres/t1wres/<N>mm) to integer millimetres.
+
+    Fed by --output-spaces' ``res-`` modifiers via
+    :meth:`mrsiprep.config.settings.MRSIPrepConfig.resolution_for`.
+    """
     choice = str(choice).strip().lower()
     if choice == "t1wres":
         return round_mm_resolution(mean_resolution(t1_path))
@@ -98,4 +102,4 @@ def resolve_mni_resolution(choice: str, t1_path: str | Path, mrsi_path: str | Pa
     match = re.search(r"(\d+)mm", choice)
     if match:
         return int(match.group(1))
-    raise ValueError(f"Unsupported --mni-resolution value: {choice!r}. Use 'origres', 't1wres', or '<N>mm'.")
+    raise ValueError(f"Unsupported resolution value: {choice!r}. Use 'origres', 't1wres', or '<N>mm'.")

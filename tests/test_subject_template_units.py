@@ -23,12 +23,15 @@ class BuildSubjectTemplateFixture(unittest.TestCase):
         self.tmp = Path(self._tmpdir.name)
         self.config = SimpleNamespace(
             derivative_dir=self.tmp / "derivatives",
-            overwrite_mni_reg=False,
+            overwrite_template_reg=False,
             overwrite=False,
             verbose=0,
             nthreads=2,
-            mni_resolution="t1wres",
+            space_resolutions={"MNI152NLin2009cAsym": "t1wres"},
         )
+        # MRSIPrepConfig exposes this; the fixture stands in for it so tests
+        # can assert on how the resolution was requested.
+        self.config.resolution_for = MagicMock(return_value=2)
         self.session_t1_paths = {}
         for session in ("01", "02"):
             t1 = self.tmp / f"ses-{session}_T1w.nii.gz"
@@ -102,9 +105,9 @@ class BuildSubjectTemplateCacheHitTests(BuildSubjectTemplateFixture):
 
         run_cli_mock.assert_called_once()
 
-    def test_overwrite_mni_reg_flag_also_forces_rebuild(self):
+    def test_overwrite_template_reg_flag_also_forces_rebuild(self):
         self._touch_all_cached_outputs()
-        self.config.overwrite_mni_reg = True
+        self.config.overwrite_template_reg = True
 
         with patch("mrsiprep.registration.subject_template.require_cli"), patch(
             "mrsiprep.registration.subject_template.run_cli"
@@ -165,16 +168,13 @@ class BuildSubjectTemplateFullBuildTests(BuildSubjectTemplateFixture):
         with patch("mrsiprep.registration.subject_template.require_cli") as require_cli_mock, patch(
             "mrsiprep.registration.subject_template.run_cli", side_effect=self._fake_run_cli
         ) as run_cli_mock, patch(
-            "mrsiprep.registration.subject_template.resolve_mni_resolution", return_value=2
-        ) as resolve_mock, patch(
             "mrsiprep.registration.subject_template.template_t1w", return_value=mni_template_mock
         ) as load_template_mock:
             result = build_subject_template(self.config, "01", self.session_t1_paths)
 
         self.assertEqual(require_cli_mock.call_count, 2)
         self.assertEqual(run_cli_mock.call_count, 2)
-        resolve_mock.assert_called_once()
-        self.assertEqual(resolve_mock.call_args[0][0], "t1wres")
+        self.config.resolution_for.assert_called_once()
         load_template_mock.assert_called_once_with(2)
         mni_template_mock.to_filename.assert_called_once()
 
@@ -190,28 +190,18 @@ class BuildSubjectTemplateFullBuildTests(BuildSubjectTemplateFixture):
             for path in paths:
                 self.assertTrue(path.exists())
 
-    def test_origres_mni_resolution_choice_falls_back_to_t1wres_for_the_template(self):
+    def test_template_resolution_asks_the_config_to_prefer_t1w(self):
         """The unbiased template spans multiple sessions at possibly
         different native MRSI resolutions, so 'origres' has no single
-        well-defined answer -- falls back to the template's own resolution."""
-        self.config.mni_resolution = "origres"
+        well-defined answer -- prefer_t1w=True makes the config substitute
+        the T1w resolution for it. (The substitution itself is covered in
+        tests/test_settings_validation.py.)"""
+        self.config.resolution_for = MagicMock(return_value=2)
         with patch("mrsiprep.registration.subject_template.require_cli"), patch(
             "mrsiprep.registration.subject_template.run_cli", side_effect=self._fake_run_cli
-        ), patch("mrsiprep.registration.subject_template.resolve_mni_resolution", return_value=2) as resolve_mock, patch(
-            "mrsiprep.registration.subject_template.template_t1w", return_value=MagicMock()
-        ):
+        ), patch("mrsiprep.registration.subject_template.template_t1w", return_value=MagicMock()):
             build_subject_template(self.config, "01", self.session_t1_paths)
-        self.assertEqual(resolve_mock.call_args[0][0], "t1wres")
-
-    def test_explicit_mm_resolution_choice_is_honored_verbatim(self):
-        self.config.mni_resolution = "2mm"
-        with patch("mrsiprep.registration.subject_template.require_cli"), patch(
-            "mrsiprep.registration.subject_template.run_cli", side_effect=self._fake_run_cli
-        ), patch("mrsiprep.registration.subject_template.resolve_mni_resolution", return_value=2) as resolve_mock, patch(
-            "mrsiprep.registration.subject_template.template_t1w", return_value=MagicMock()
-        ):
-            build_subject_template(self.config, "01", self.session_t1_paths)
-        self.assertEqual(resolve_mock.call_args[0][0], "2mm")
+        self.assertTrue(self.config.resolution_for.call_args.kwargs["prefer_t1w"])
 
 
 if __name__ == "__main__":

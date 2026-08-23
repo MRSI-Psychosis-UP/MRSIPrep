@@ -35,7 +35,6 @@ from mrsiprep.tissue.synthseg_fast import (
     synthseg_fast_brain_path,
     synthseg_fast_csf_probseg_path,
 )
-from mrsiprep.utils.images import resolve_mni_resolution
 from mrsiprep.workflows.anatomical import prepare_anatomical
 from mrsiprep.workflows.connectivity import run_connectivity_workflow
 from mrsiprep.workflows.mrsi import run_mrsi_workflow
@@ -155,7 +154,11 @@ def _step_resampling(config, subject, session, anat, mrsi, registration, correct
             snr_map=mrsi.snr_map,
             linewidth_map=mrsi.linewidth_map,
         )
-        mni_resolution = resolve_mni_resolution(config.mni_resolution, anat.registration_t1w, mrsi.reference) if registration.t1_to_mni else None
+        mni_resolution = (
+            config.resolution_for("MNI152NLin2009cAsym", anat.registration_t1w, mrsi.reference)
+            if registration.t1_to_mni
+            else None
+        )
         qc_sections_t1w_alignment = build_t1w_alignment_sections(
             config,
             subject,
