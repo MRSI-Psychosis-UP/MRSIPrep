@@ -14,6 +14,7 @@ def _config(root: Path, **overrides):
         ref_met="CrPCr",
         nthreads=4,
         overwrite_transform=False,
+        overwrite=False,
         output_mrsi_t1w=False,
         output_spaces=["MNI152NLin2009cAsym"],
         transform="",
@@ -265,6 +266,37 @@ class TransformMrsiMapsContentTests(unittest.TestCase):
             self.assertIn("genericLabel", interpolations)
             # The signal map itself still resamples linearly.
             self.assertIn("linear", interpolations)
+
+    def test_global_overwrite_also_forces_resampling(self):
+        """--overwrite means "recompute everything"; every other cached step
+        (pvc, filtering, tissue, registration) already falls back to it, and
+        resampling was the lone exception."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            config = _config(root, output_mrsi_t1w=True, output_spaces=["T1w"])
+            params = dict(
+                maps={"CrPCr": Path("/x/cr.nii.gz")}, mrsi_to_t1=[], t1_to_mni=None,
+                t1_reference=Path("/x/t1.nii.gz"),
+            )
+            with patch("mrsiprep.mrsi.resampling.apply_image_transform", side_effect=_fake_apply):
+                transform_mrsi_maps(config, "S001", "V1", **params)
+
+            config.overwrite = True
+            with patch("mrsiprep.mrsi.resampling.apply_image_transform", side_effect=_fake_apply) as apply_mock:
+                transform_mrsi_maps(config, "S001", "V1", **params)
+            apply_mock.assert_called_once()
+
+    def test_global_overwrite_also_forces_the_reference_map(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            config = _config(root)
+            with patch("mrsiprep.mrsi.resampling.apply_image_transform", side_effect=_fake_apply):
+                resample_ref_met_to_t1w(config, "S001", "V1", root / "ref.nii.gz", [], root / "t1.nii.gz")
+
+            config.overwrite = True
+            with patch("mrsiprep.mrsi.resampling.apply_image_transform", side_effect=_fake_apply) as apply_mock:
+                resample_ref_met_to_t1w(config, "S001", "V1", root / "ref.nii.gz", [], root / "t1.nii.gz")
+            apply_mock.assert_called_once()
 
     def test_existing_outputs_are_reused_unless_overwrite_transform(self):
         with tempfile.TemporaryDirectory() as tmpdir:
