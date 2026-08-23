@@ -9,7 +9,6 @@ from mrsiprep.interfaces.ants import register
 from mrsiprep.interfaces.fsl import register_flirt
 from mrsiprep.registration.transforms import all_exist, ants_transform_prefix, transform_paths
 from mrsiprep.config.templates import template_t1w
-from mrsiprep.utils.images import resolve_mni_resolution
 
 
 @dataclass
@@ -26,9 +25,9 @@ def run_t1_to_mni(config, subject: str, session: str | None, t1_path: Path, mrsi
     prefix = ants_transform_prefix(config.derivative_dir, subject, session, "anat", backend=backend)
     forward = transform_paths(prefix, "forward", backend=backend)
     inverse = transform_paths(prefix, "inverse", backend=backend)
-    resolution = resolve_mni_resolution(config.mni_resolution, t1_path, mrsi_reference)
+    resolution = config.resolution_for("MNI152NLin2009cAsym", t1_path, mrsi_reference, prefer_t1w=True)
     template = template_t1w(resolution)
-    if all_exist(forward) and all_exist(inverse) and not (config.overwrite_mni_reg or config.overwrite):
+    if all_exist(forward) and all_exist(inverse) and not (config.overwrite_template_reg or config.overwrite):
         return T1ToMNIResult(forward, inverse, prefix, template)
     if config.normalization == "existing":
         raise FileNotFoundError(
@@ -42,12 +41,12 @@ def run_t1_to_mni(config, subject: str, session: str | None, t1_path: Path, mrsi
             template,
             t1_path,
             prefix,
-            flirt_dof=config.fsl_t1_to_mni_dof,
+            flirt_dof=config.fsl_t1_to_template_dof,
             flirt_cost=config.fsl_cost,
             verbose=config.verbose >= 3,
         )
     else:
-        register(template, t1_path, prefix, transform=config.ants_t1_to_mni_transform, verbose=config.verbose >= 3, threads=config.nthreads)
+        register(template, t1_path, prefix, transform=config.ants_t1_to_template_transform, verbose=config.verbose >= 3, threads=config.nthreads)
     return T1ToMNIResult(
         transform_paths(prefix, "forward", backend=backend, include_missing=False),
         transform_paths(prefix, "inverse", backend=backend, include_missing=False),
@@ -81,8 +80,7 @@ def compose_longitudinal_t1_to_mni(config, subject: str, session: str, template_
     # native MRSI resolutions, so 'origres' has no single well-defined answer
     # for the shared template-to-MNI stage specifically, even though this
     # session's own mrsi_reference is available.
-    resolution_choice = "t1wres" if config.mni_resolution == "origres" else config.mni_resolution
-    resolution = resolve_mni_resolution(resolution_choice, t1_path, mrsi_reference)
+    resolution = config.resolution_for("MNI152NLin2009cAsym", t1_path, mrsi_reference, prefer_t1w=True)
     template = template_t1w(resolution)
     prefix = ants_transform_prefix(config.derivative_dir, subject, session, "anat")
     return T1ToMNIResult(forward, inverse, prefix, template)

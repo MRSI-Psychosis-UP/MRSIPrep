@@ -154,7 +154,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="ANTs transform preset/code for MRSI-to-T1w registration. Default matches the previous implementation: 'sr'.",
     )
     registration.add_argument(
-        "--ants-t1-to-mni-transform",
+        "--ants-t1-to-template-transform",
         default="s",
         help="ANTs transform preset/code for T1w-to-MNI registration. Default matches the previous implementation: 's'.",
     )
@@ -177,7 +177,7 @@ def build_parser() -> argparse.ArgumentParser:
         "on MRSI-reference-vs-T1w registration and is not offered.",
     )
     registration.add_argument(
-        "--fsl-t1-to-mni-dof",
+        "--fsl-t1-to-template-dof",
         type=int,
         choices=[6, 7, 9, 12],
         default=12,
@@ -239,10 +239,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--output-spaces",
         nargs="+",
         default=["MNI152NLin2009cAsym"],
-        help="One or more target spaces to resample final MRSI derivatives into. Accepts case-insensitive "
-        "aliases: 'mni'/'mni152'/'mni152nlin2009casym' (MNI152NLin2009cAsym, default), 't1'/'t1w' (T1w space, "
-        "equivalent to also passing --output-mrsi-t1w), 'mrsi'/'orig' (native MRSI grid). See "
-        "docs/usage_normalization.md.",
+        help="One or more target spaces to resample final MRSI derivatives into, each optionally qualified "
+        "with a resolution, e.g. 'MNI152NLin2009cAsym:res-2 T1w'. Accepts case-insensitive aliases: "
+        "'mni'/'mni152'/'mni152nlin2009casym' (MNI152NLin2009cAsym, default), 't1'/'t1w' (T1w space, "
+        "equivalent to also passing --output-mrsi-t1w), 'mrsi'/'orig' (native MRSI grid). The 'res-' "
+        "modifier takes an integer millimetre value ('res-2'), 'res-origres' (MRSI native -- the default, "
+        "since it avoids implying spatial precision the acquisition never had) or 'res-t1wres' (T1w "
+        "native). Qualifying each space individually replaces the old global --mni-resolution flag, which "
+        "could not express different resolutions for different spaces. See docs/usage_normalization.md.",
     )
     registration.add_argument(
         "--output-mrsi-t1w",
@@ -250,13 +254,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Also resample all metabolite (and CRLB/SNR/FWHM/spikemask) maps into T1w space as permanent "
         "derivatives (mrsi-t1w/). Off by default; the registration-overview report generates its own single "
         "reference-metabolite T1w map in the work directory regardless of this flag.",
-    )
-    registration.add_argument(
-        "--mni-resolution",
-        default="origres",
-        help="MNI template resolution: 'origres' (MRSI native, default -- avoids implying spatial precision "
-        "the MRSI acquisition never had, and matches the resolution mrsiprep's own spatial-smoothness "
-        "benchmark evaluates), 't1wres' (T1w native), or '<N>mm' (e.g. '2mm').",
     )
     registration.add_argument(
         "--registration-t1-target",
@@ -519,7 +516,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Force recompute of MRSI-to-T1w registration, even if a cached transform exists.",
     )
     overwrite.add_argument(
-        "--overwrite-mni-reg",
+        "--overwrite-template-reg",
         action="store_true",
         help="Force recompute of T1w-to-MNI registration, even if a cached transform exists.",
     )
@@ -528,7 +525,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Force recompute of resampling MRSI maps through existing transforms into output spaces, even "
         "if cached resampled maps exist. Does not itself force-recompute the transforms -- see "
-        "--overwrite-t1-reg/--overwrite-mni-reg.",
+        "--overwrite-t1-reg/--overwrite-template-reg.",
     )
     overwrite.add_argument("--overwrite-chimera", action="store_true", help="Force re-run Chimera parcellation even if the output dseg file already exists.")
 
@@ -662,18 +659,21 @@ def parse_args(argv: list[str] | None = None) -> MRSIPrepConfig:
         tissue_backend=args.tissue_backend,
         registration_backend=args.registration_backend,
         ants_mrsi_to_t1_transform=args.ants_mrsi_to_t1_transform,
-        ants_t1_to_mni_transform=args.ants_t1_to_mni_transform,
+        ants_t1_to_template_transform=args.ants_t1_to_template_transform,
         fsl_mrsi_to_t1_dof=args.fsl_mrsi_to_t1_dof,
         fsl_mrsi_to_t1_init=args.fsl_mrsi_to_t1_init,
-        fsl_t1_to_mni_dof=args.fsl_t1_to_mni_dof,
+        fsl_t1_to_template_dof=args.fsl_t1_to_template_dof,
         fsl_cost=args.fsl_cost,
         fsl_deformable=args.fsl_deformable,
         fsl_fnirt_warpres=tuple(args.fsl_fnirt_warpres) if args.fsl_fnirt_warpres else None,
         fsl_fnirt_lambda=args.fsl_fnirt_lambda,
         normalization=args.normalization,
         output_spaces=args.output_spaces,
+        # Not a CLI flag -- resolutions normally arrive as --output-spaces
+        # res- modifiers. Forwarded so a --config-preset can still set
+        # them directly (the preset loader injects them via set_defaults).
+        space_resolutions=getattr(args, "space_resolutions", None) or {},
         output_mrsi_t1w=args.output_mrsi_t1w,
-        mni_resolution=args.mni_resolution,
         registration_t1_target=args.registration_t1_target,
         csf_pv_threshold=args.csf_pv_threshold,
         ref_met=args.ref_met,
@@ -715,7 +715,7 @@ def parse_args(argv: list[str] | None = None) -> MRSIPrepConfig:
         overwrite_seg=args.overwrite_seg,
         overwrite_pve=args.overwrite_pve,
         overwrite_t1_reg=args.overwrite_t1_reg,
-        overwrite_mni_reg=args.overwrite_mni_reg,
+        overwrite_template_reg=args.overwrite_template_reg,
         overwrite_transform=args.overwrite_transform,
         overwrite_chimera=args.overwrite_chimera,
         validate_only=args.validate_only,
