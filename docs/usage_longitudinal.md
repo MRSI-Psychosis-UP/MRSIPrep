@@ -67,7 +67,7 @@ The template and its MNI registration are cached the same way as every other
 registration stage in MRSIPrep: on a rerun, if the subject template image and
 every expected transform file already exist on disk, the whole
 construction+registration step is skipped. Pass `--overwrite` or
-`--overwrite-mni-reg` to force it to rerun (e.g. after adding a new session
+`--overwrite-template-reg` to force it to rerun (e.g. after adding a new session
 for a subject that was previously built with fewer sessions).
 
 `--verbose 1` and above show a `Building subject template (sub-<label>, N
@@ -107,4 +107,4 @@ See [Basic Usage](usage_basic.md) for the full CLI reference, and
 [MNI Normalization Usage](usage_normalization.md) for the non-longitudinal
 (direct per-session) T1w→MNI registration options
 (`--normalization`, `--output-spaces`, `--output-mrsi-t1w`,
-`--mni-resolution`, `--registration-t1-target`).
+`--output-spaces` `res-` modifiers, `--registration-t1-target`).

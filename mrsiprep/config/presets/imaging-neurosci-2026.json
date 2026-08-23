@@ -13,10 +13,10 @@
   "tissue_backend": "existing",
   "registration_backend": "ants",
   "ants_mrsi_to_t1_transform": "sr",
-  "ants_t1_to_mni_transform": "s",
+  "ants_t1_to_template_transform": "s",
   "ref_met": "CrPCr",
   "spike_percentile": 99.0,
   "registration_t1_target": "brain",
   "csf_pv_threshold": 0.95,
-  "mni_resolution": "5mm"
+  "space_resolutions": {"MNI152NLin2009cAsym": "5mm"}
 }

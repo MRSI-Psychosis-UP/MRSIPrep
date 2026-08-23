@@ -34,7 +34,7 @@ class CLITests(unittest.TestCase):
         cfg = parse_args(["/tmp/bids", "/tmp/out", "participant"])
         self.assertEqual(cfg.registration_backend, "ants")
         self.assertEqual(cfg.ants_mrsi_to_t1_transform, "sr")
-        self.assertEqual(cfg.ants_t1_to_mni_transform, "s")
+        self.assertEqual(cfg.ants_t1_to_template_transform, "s")
 
     def test_cli_accepts_flirt_fnirt_registration_backend(self):
         cfg = parse_args([
@@ -45,7 +45,7 @@ class CLITests(unittest.TestCase):
             "flirt-fnirt",
             "--fsl-mrsi-to-t1-dof",
             "12",
-            "--fsl-t1-to-mni-dof",
+            "--fsl-t1-to-template-dof",
             "12",
         ])
         self.assertEqual(cfg.registration_backend, "fsl")
@@ -179,8 +179,8 @@ class ConfigPresetTests(unittest.TestCase):
         ])
         self.assertEqual(cfg.parcellation_mode, "synthseg")
         self.assertEqual(cfg.tissue_backend, "existing")
-        self.assertEqual(cfg.ants_t1_to_mni_transform, "s")
-        self.assertEqual(cfg.mni_resolution, "5mm")
+        self.assertEqual(cfg.ants_t1_to_template_transform, "s")
+        self.assertEqual(cfg.space_resolutions["MNI152NLin2009cAsym"], "5mm")
         self.assertIsNotNone(cfg.preset_citation)
         self.assertEqual(cfg.preset_citation["doi"], "10.1162/imag.a.1276")
 
@@ -191,10 +191,10 @@ class ConfigPresetTests(unittest.TestCase):
             "participant",
             "--config-preset",
             "imaging-neurosci-2026",
-            "--mni-resolution",
-            "2mm",
+            "--output-spaces",
+            "mni:res-2",
         ])
-        self.assertEqual(cfg.mni_resolution, "2mm")
+        self.assertEqual(cfg.space_resolutions["MNI152NLin2009cAsym"], "2mm")
 
     def test_no_preset_leaves_preset_citation_none(self):
         cfg = parse_args(["/tmp/bids", "/tmp/out", "participant"])

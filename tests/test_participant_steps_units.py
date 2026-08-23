@@ -244,17 +244,17 @@ class StepResamplingTests(unittest.TestCase):
 
     def test_with_mni_registration_resolves_resolution_and_uses_its_forward_transform(self):
         anat, mrsi, registration = self._args(SimpleNamespace(forward="mni_fwd"))
-        config = make_config(["/tmp/bids", "/tmp/out", "participant"], mni_resolution="native")
+        config = make_config(["/tmp/bids", "/tmp/out", "participant"])
+        config.resolution_for = lambda *a, **k: 2.0
         transformed = {"T1w": {"CrPCr": Path("t1w_map")}, "MNI152NLin2009cAsym": {"CrPCr": Path("mni_map")}}
+        config.resolution_for = MagicMock(return_value=2.0)
         with patch("mrsiprep.workflows.steps.transform_mrsi_maps", return_value=transformed) as tmm, patch(
-            "mrsiprep.workflows.steps.resolve_mni_resolution", return_value=2.0
-        ) as resolve_res, patch(
             "mrsiprep.workflows.steps.build_t1w_alignment_sections", return_value=["t1w-qc"]
         ) as t1w_qc, patch(
             "mrsiprep.workflows.steps.build_mni_alignment_sections", return_value=["mni-qc"]
         ) as mni_qc:
             result = P._step_resampling(config, "01", "01", anat, mrsi, registration, {"CrPCr": Path("orig")}, Path("raw_t1"), _debug())
-        resolve_res.assert_called_once_with("native", Path("t1"), Path("ref"))
+        config.resolution_for.assert_called_once_with("MNI152NLin2009cAsym", Path("t1"), Path("ref"))
         self.assertEqual(tmm.call_args.args[5], "mni_fwd")
         t1w_qc.assert_called_once_with(
             config, "01", "01", Path("raw_t1"), Path("t1w_map"), orig_ref_map_path=Path("orig"), mrsi_to_t1_transforms="fwd"
@@ -264,15 +264,16 @@ class StepResamplingTests(unittest.TestCase):
 
     def test_without_mni_registration_skips_resolution_lookup(self):
         anat, mrsi, registration = self._args(None)
-        config = make_config(["/tmp/bids", "/tmp/out", "participant"], mni_resolution="native")
+        config = make_config(["/tmp/bids", "/tmp/out", "participant"])
+        config.resolution_for = lambda *a, **k: 2.0
         transformed = {"T1w": {}, "MNI152NLin2009cAsym": {}}
+        config.resolution_for = MagicMock(return_value=2.0)
         with patch("mrsiprep.workflows.steps.transform_mrsi_maps", return_value=transformed) as tmm, patch(
-            "mrsiprep.workflows.steps.resolve_mni_resolution"
-        ) as resolve_res, patch("mrsiprep.workflows.steps.build_t1w_alignment_sections"), patch(
+            "mrsiprep.workflows.steps.build_t1w_alignment_sections"), patch(
             "mrsiprep.workflows.steps.build_mni_alignment_sections"
         ) as mni_qc:
             P._step_resampling(config, "01", "01", anat, mrsi, registration, {}, Path("raw_t1"), _debug())
-        resolve_res.assert_not_called()
+        config.resolution_for.assert_not_called()
         self.assertIsNone(tmm.call_args.args[5])  # no t1_to_mni forward transform
         self.assertIsNone(mni_qc.call_args.kwargs["mni_resolution"])
 
