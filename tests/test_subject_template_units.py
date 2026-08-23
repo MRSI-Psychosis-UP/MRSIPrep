@@ -167,7 +167,7 @@ class BuildSubjectTemplateFullBuildTests(BuildSubjectTemplateFixture):
         ) as run_cli_mock, patch(
             "mrsiprep.registration.subject_template.resolve_mni_resolution", return_value=2
         ) as resolve_mock, patch(
-            "nilearn.datasets.load_mni152_template", return_value=mni_template_mock
+            "mrsiprep.registration.subject_template.template_t1w", return_value=mni_template_mock
         ) as load_template_mock:
             result = build_subject_template(self.config, "01", self.session_t1_paths)
 
@@ -198,7 +198,7 @@ class BuildSubjectTemplateFullBuildTests(BuildSubjectTemplateFixture):
         with patch("mrsiprep.registration.subject_template.require_cli"), patch(
             "mrsiprep.registration.subject_template.run_cli", side_effect=self._fake_run_cli
         ), patch("mrsiprep.registration.subject_template.resolve_mni_resolution", return_value=2) as resolve_mock, patch(
-            "nilearn.datasets.load_mni152_template", return_value=MagicMock()
+            "mrsiprep.registration.subject_template.template_t1w", return_value=MagicMock()
         ):
             build_subject_template(self.config, "01", self.session_t1_paths)
         self.assertEqual(resolve_mock.call_args[0][0], "t1wres")
@@ -208,7 +208,7 @@ class BuildSubjectTemplateFullBuildTests(BuildSubjectTemplateFixture):
         with patch("mrsiprep.registration.subject_template.require_cli"), patch(
             "mrsiprep.registration.subject_template.run_cli", side_effect=self._fake_run_cli
         ), patch("mrsiprep.registration.subject_template.resolve_mni_resolution", return_value=2) as resolve_mock, patch(
-            "nilearn.datasets.load_mni152_template", return_value=MagicMock()
+            "mrsiprep.registration.subject_template.template_t1w", return_value=MagicMock()
         ):
             build_subject_template(self.config, "01", self.session_t1_paths)
         self.assertEqual(resolve_mock.call_args[0][0], "2mm")

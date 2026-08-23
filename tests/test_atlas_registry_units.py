@@ -178,7 +178,7 @@ class LoadMniAtlasSchaeferFetchTests(unittest.TestCase):
         fetched = SimpleNamespace(maps="fake_maps", labels=[b"7Networks_1", b"7Networks_2", b"7Networks_3"])
 
         with patch("nilearn.datasets.fetch_atlas_schaefer_2018", return_value=fetched) as fetch_mock, patch(
-            "nilearn.datasets.load_mni152_template", return_value="mni_template"
+            "mrsiprep.parcellation.atlas_registry.template_t1w", return_value="mni_template"
         ), patch("nilearn.image.resample_to_img", return_value=atlas_img) as resample_mock, patch(
             "mrsiprep.parcellation.atlas_registry.write_labels"
         ) as write_labels_mock:
@@ -223,7 +223,7 @@ class LoadMniAtlasMistFetchTests(unittest.TestCase):
         config = SimpleNamespace(atlas="mist197", custom_atlas=None, custom_atlas_lut=None)
 
         with patch("nilearn.datasets.fetch_atlas_basc_multiscale_2015", return_value=fetched) as fetch_mock, patch(
-            "nilearn.datasets.load_mni152_template", return_value="mni_template"
+            "mrsiprep.parcellation.atlas_registry.template_t1w", return_value="mni_template"
         ), patch("nilearn.image.resample_to_img", return_value=atlas_img), patch(
             "mrsiprep.parcellation.atlas_registry.write_labels"
         ) as write_labels_mock:

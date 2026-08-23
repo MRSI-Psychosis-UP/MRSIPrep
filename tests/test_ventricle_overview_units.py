@@ -107,20 +107,44 @@ class LateralVentriclePriorTests(unittest.TestCase):
 
 
 class MniBrainMaskTests(unittest.TestCase):
-    def test_none_when_mask_unavailable(self):
-        with patch("mrsiprep.reports.ventricle_overview._fsl_standard_path", return_value=None):
-            self.assertIsNone(_mni_brain_mask())
+    """The mask now comes from the run's reference template, with FSL's copy
+    kept only as a fallback -- FSL ships the MNI152NLin6Asym lineage, so it
+    describes a different space than the data being checked."""
 
-    def test_thresholds_to_boolean(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            mask_path = Path(tmpdir) / "mask.nii.gz"
-            data = np.array([[[0.0, 1.0], [0.5, 0.0]]], dtype=np.float32)
-            nib.save(nib.Nifti1Image(data, np.eye(4)), mask_path)
-            with patch("mrsiprep.reports.ventricle_overview._fsl_standard_path", return_value=mask_path):
-                mask, _ = _mni_brain_mask()
+    def _mask_img(self):
+        data = np.array([[[0.0, 1.0], [0.5, 0.0]]], dtype=np.float32)
+        return nib.Nifti1Image(data, np.eye(4))
+
+    def test_prefers_the_reference_template(self):
+        with patch(
+            "mrsiprep.config.templates.template_brain_mask", return_value=self._mask_img()
+        ), patch("mrsiprep.reports.ventricle_overview._fsl_standard_path") as fsl:
+            mask, _ = _mni_brain_mask()
+        fsl.assert_not_called()
         self.assertEqual(mask.dtype, np.bool_)
         self.assertTrue(mask[0, 0, 1])
         self.assertFalse(mask[0, 0, 0])
+
+    def test_falls_back_to_fsl_when_the_template_is_unavailable(self):
+        from mrsiprep.config.templates import TemplateError
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mask_path = Path(tmpdir) / "mask.nii.gz"
+            nib.save(self._mask_img(), mask_path)
+            with patch(
+                "mrsiprep.config.templates.template_brain_mask", side_effect=TemplateError("no cache")
+            ), patch("mrsiprep.reports.ventricle_overview._fsl_standard_path", return_value=mask_path):
+                mask, _ = _mni_brain_mask()
+        self.assertEqual(mask.dtype, np.bool_)
+        self.assertTrue(mask[0, 0, 1])
+
+    def test_none_when_neither_source_is_available(self):
+        from mrsiprep.config.templates import TemplateError
+
+        with patch(
+            "mrsiprep.config.templates.template_brain_mask", side_effect=TemplateError("no cache")
+        ), patch("mrsiprep.reports.ventricle_overview._fsl_standard_path", return_value=None):
+            self.assertIsNone(_mni_brain_mask())
 
 
 class RenderVentricleMontageTests(unittest.TestCase):

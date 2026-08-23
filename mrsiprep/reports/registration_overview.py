@@ -16,6 +16,7 @@ import pandas as pd
 from mrsiprep.io.naming import coverage_report_dir, qc_report_derivative
 from mrsiprep.mrsi.resampling import resample_ref_met_to_t1w
 from mrsiprep.reports.slices import load_canonical_data, render_triplanar_png, triplanar_slices
+from mrsiprep.config.templates import template_head
 
 
 def leakage_table_html(leakage_df: pd.DataFrame | None, space: str) -> str:
@@ -119,14 +120,14 @@ def build_mni_alignment_sections(
 
 def _load_mni152_head_template(resolution: int | None):
     """Full-head (not skull-stripped) MNI152 T1 template, resampled to match
-    the grid used by `nilearn.datasets.load_mni152_template()` so it aligns
+    the grid used by the run's reference template (see config/templates.py) so it aligns
     with MNI-space outputs produced by `transform_mrsi_maps()`.
     """
     import numpy as np
-    from nilearn import datasets, image
+    from nilearn import image
 
     resolution = resolution or 1
-    head = image.load_img(datasets.fetch_icbm152_2009()["t1"])
+    head = template_head()
     if resolution != 1:
         head = image.resample_img(head, np.eye(3) * resolution)
     return head
