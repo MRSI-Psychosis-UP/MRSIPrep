@@ -7,6 +7,7 @@ image it resamples into really is that template.
 
 import unittest
 from pathlib import Path
+from types import ModuleType
 from unittest.mock import patch
 
 import nibabel as nib
@@ -66,9 +67,16 @@ class ResolutionTests(unittest.TestCase):
 
 class FetchTests(unittest.TestCase):
     def _api(self, result):
-        # templateflow really is installed in the image, so patch its own
-        # get() rather than faking the module.
-        return patch("templateflow.api.get", return_value=result)
+        """Stub templateflow without importing it.
+
+        Importing the real package can reach for its remote skeleton on a
+        cold cache, which would make these unit tests network-dependent.
+        """
+        pkg = ModuleType("templateflow")
+        api = ModuleType("templateflow.api")
+        api.get = lambda *a, **k: result
+        pkg.api = api
+        return patch.dict("sys.modules", {"templateflow": pkg, "templateflow.api": api})
 
     def test_single_path_result_is_accepted(self):
         T._fetch.cache_clear()
