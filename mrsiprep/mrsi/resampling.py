@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from nilearn import datasets
 
 from mrsiprep.io.naming import mrsi_derivative, resampling_work_path
 from mrsiprep.registration.transforms import apply_image_transform
+from mrsiprep.config.templates import template_t1w
 from mrsiprep.utils.images import resolve_mni_resolution
 
 
@@ -86,7 +86,7 @@ def transform_mrsi_maps(
         outputs["T1w"] = _resample_space("T1w", t1_reference, mrsi_to_t1)
     if ("MNI152NLin2009cAsym" in config.output_spaces or "mni" in config.transform) and t1_to_mni:
         resolution = resolve_mni_resolution(config.mni_resolution, t1_reference, mrsi_reference)
-        template = datasets.load_mni152_template(resolution)
+        template = template_t1w(resolution)
         transforms = list(t1_to_mni) + list(mrsi_to_t1)
         outputs["MNI152NLin2009cAsym"] = _resample_space("MNI152NLin2009cAsym", template, transforms, res=resolution)
     return outputs
