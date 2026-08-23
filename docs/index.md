@@ -73,7 +73,9 @@ output):
 - **[PETPVC](https://github.com/UCL/PETPVC)** for partial-volume correction of MRSI maps.
 - **[Chimera](https://github.com/connectomicslab/chimera)** (v0.3.1) for multi-atlas cortical/subcortical parcellation
   fusion.
-- **[TemplateFlow](https://www.templateflow.org/)** for the bundled MNI152 reference templates and atlases.
+- **[TemplateFlow](https://www.templateflow.org/)** for the
+  MNI152NLin2009cAsym reference template MRSIPrep normalizes into
+  (pre-fetched into the container, so runs stay offline).
 
 ## Pipelines
 

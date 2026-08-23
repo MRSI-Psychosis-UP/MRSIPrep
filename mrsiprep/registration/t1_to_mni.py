@@ -8,6 +8,7 @@ from pathlib import Path
 from mrsiprep.interfaces.ants import register
 from mrsiprep.interfaces.fsl import register_flirt
 from mrsiprep.registration.transforms import all_exist, ants_transform_prefix, transform_paths
+from mrsiprep.config.templates import template_t1w
 from mrsiprep.utils.images import resolve_mni_resolution
 
 
@@ -20,14 +21,13 @@ class T1ToMNIResult:
 
 
 def run_t1_to_mni(config, subject: str, session: str | None, t1_path: Path, mrsi_reference: Path | None = None) -> T1ToMNIResult:
-    from nilearn import datasets
 
     backend = config.registration_backend
     prefix = ants_transform_prefix(config.derivative_dir, subject, session, "anat", backend=backend)
     forward = transform_paths(prefix, "forward", backend=backend)
     inverse = transform_paths(prefix, "inverse", backend=backend)
     resolution = resolve_mni_resolution(config.mni_resolution, t1_path, mrsi_reference)
-    template = datasets.load_mni152_template(resolution)
+    template = template_t1w(resolution)
     if all_exist(forward) and all_exist(inverse) and not (config.overwrite_mni_reg or config.overwrite):
         return T1ToMNIResult(forward, inverse, prefix, template)
     if config.normalization == "existing":
@@ -66,7 +66,6 @@ def compose_longitudinal_t1_to_mni(config, subject: str, session: str, template_
     template-to-MNI), matching the existing forward-transform-list convention
     used everywhere else in the codebase (see ``registration.transforms``).
     """
-    from nilearn import datasets
 
     session_forward = template_result.per_session_forward.get(session)
     if not session_forward or not all_exist(session_forward):
@@ -84,6 +83,6 @@ def compose_longitudinal_t1_to_mni(config, subject: str, session: str, template_
     # session's own mrsi_reference is available.
     resolution_choice = "t1wres" if config.mni_resolution == "origres" else config.mni_resolution
     resolution = resolve_mni_resolution(resolution_choice, t1_path, mrsi_reference)
-    template = datasets.load_mni152_template(resolution)
+    template = template_t1w(resolution)
     prefix = ants_transform_prefix(config.derivative_dir, subject, session, "anat")
     return T1ToMNIResult(forward, inverse, prefix, template)

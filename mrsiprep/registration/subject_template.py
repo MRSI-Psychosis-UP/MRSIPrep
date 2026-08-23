@@ -17,6 +17,7 @@ from pathlib import Path
 
 from mrsiprep.interfaces.ants import require_cli, run_cli
 from mrsiprep.registration.transforms import all_exist, ants_transform_prefix, transform_paths
+from mrsiprep.config.templates import template_t1w
 from mrsiprep.utils.images import resolve_mni_resolution
 
 
@@ -61,7 +62,6 @@ def build_subject_template(config, subject: str, session_t1_paths: dict[str, Pat
     require_cli("antsMultivariateTemplateConstruction2.sh")
     require_cli("antsRegistrationSyN.sh")
 
-    from nilearn import datasets
 
     with tempfile.TemporaryDirectory(prefix="mrsiprep_subject_template_") as tmpdir:
         tmp = Path(tmpdir)
@@ -128,7 +128,7 @@ def build_subject_template(config, subject: str, session_t1_paths: dict[str, Pat
         # 'NNmm', or 't1wres' itself) is honored as given.
         template_resolution_choice = "t1wres" if config.mni_resolution == "origres" else config.mni_resolution
         resolution = resolve_mni_resolution(template_resolution_choice, template_path)
-        mni_template = datasets.load_mni152_template(resolution)
+        mni_template = template_t1w(resolution)
         mni_template_path = tmp / "mni152_template.nii.gz"
         mni_template.to_filename(str(mni_template_path))
 
