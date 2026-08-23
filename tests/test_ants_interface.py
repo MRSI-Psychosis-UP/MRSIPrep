@@ -9,7 +9,6 @@ import numpy as np
 
 from mrsiprep.interfaces.ants import (
     ANTsError,
-    Registration,
     _as_image_path,
     _cli_interpolation,
     _cli_transform_code,
@@ -512,50 +511,6 @@ class ApplyTransformsAntspyxSuccessTests(unittest.TestCase):
         with patch("mrsiprep.interfaces.ants._import_ants", return_value=MagicMock()):
             with self.assertRaisesRegex(ANTsError, "requires an output path"):
                 apply_transforms("fixed.nii.gz", "moving.nii.gz", [missing], out_path=None)
-
-
-class RegistrationFacadeTests(unittest.TestCase):
-    """The Registration class is a facade "matching the mrsitoolbox workflow
-    API" -- not used anywhere in the pipeline itself (only the module-level
-    register()/apply_transforms() are), but still real, reachable code."""
-
-    def test_register_wraps_transform_verbatim_even_for_full_presets(self):
-        """Unlike the module-level register()/_resolve_type_of_transform(),
-        this facade always wraps transform in antsRegistrationSyN[...], even
-        for full preset names like "SyN" -- and has no try/except, so an
-        antspyx-missing failure propagates instead of falling back to CLI."""
-        fake_ants = MagicMock()
-        fake_ants.registration.return_value = "tx-result"
-        with patch("mrsiprep.interfaces.ants._import_ants", return_value=fake_ants), patch(
-            "mrsiprep.interfaces.ants._load_ants_image", side_effect=lambda img: f"loaded:{img}"
-        ):
-            tx, elapsed = Registration().register("fixed.nii.gz", "moving.nii.gz", transform="SyN")
-        self.assertEqual(fake_ants.registration.call_args.kwargs["type_of_transform"], "antsRegistrationSyN[SyN]")
-        self.assertEqual(tx, "tx-result")
-        self.assertIsInstance(elapsed, float)
-
-    def test_register_propagates_when_antspyx_missing(self):
-        with patch("mrsiprep.interfaces.ants._import_ants", side_effect=ANTsError("no antspyx")):
-            with self.assertRaises(ANTsError):
-                Registration().register("fixed.nii.gz", "moving.nii.gz")
-
-    def test_transform_delegates_to_antspyx_apply_transforms(self):
-        fake_ants = MagicMock()
-        fake_ants.apply_transforms.return_value = "warped"
-        with patch("mrsiprep.interfaces.ants._import_ants", return_value=fake_ants), patch(
-            "mrsiprep.interfaces.ants._load_ants_image", side_effect=lambda img: img
-        ):
-            result = Registration().transform("fixed.nii.gz", "moving.nii.gz", [Path("a.mat"), Path("b.mat")])
-        self.assertEqual(result, "warped")
-        kwargs = fake_ants.apply_transforms.call_args.kwargs
-        self.assertEqual(kwargs["transformlist"], ["a.mat", "b.mat"])
-        self.assertEqual(kwargs["interpolator"], "linear")
-
-    def test_save_all_transforms_delegates_to_module_level_function(self):
-        with patch("mrsiprep.interfaces.ants.save_all_transforms", return_value="saved") as save_fn:
-            result = Registration().save_all_transforms({"fwdtransforms": []}, "prefix")
-        save_fn.assert_called_once_with({"fwdtransforms": []}, "prefix")
-        self.assertEqual(result, "saved")
 
 
 class RunCliTests(unittest.TestCase):
