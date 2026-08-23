@@ -59,7 +59,9 @@ def load_mni_atlas(config, work_dir: str | Path, atlas_name: str | None = None) 
 
         n_rois = int(atlas.replace("schaefer", ""))
         fetched = datasets.fetch_atlas_schaefer_2018(n_rois=n_rois, yeo_networks=7, resolution_mm=1)
-        atlas_img = image.resample_to_img(fetched.maps, template_t1w(), interpolation="nearest", force_resample=True)
+        atlas_img = image.resample_to_img(
+            fetched.maps, template_t1w(), interpolation="nearest", force_resample=True
+        )
         _save_nifti_atomic(atlas_img, atlas_path)
         data = atlas_img.get_fdata().astype(int)
         indices = np.unique(data)
@@ -75,7 +77,9 @@ def load_mni_atlas(config, work_dir: str | Path, atlas_name: str | None = None) 
         from nilearn import datasets, image
 
         fetched = datasets.fetch_atlas_basc_multiscale_2015()
-        atlas_img = image.resample_to_img(fetched.scale197, template_t1w(), interpolation="nearest", force_resample=True)
+        atlas_img = image.resample_to_img(
+            fetched.scale197, template_t1w(), interpolation="nearest", force_resample=True
+        )
         _save_nifti_atomic(atlas_img, atlas_path)
         indices = np.unique(atlas_img.get_fdata().astype(int))
         indices = indices[indices != 0]
