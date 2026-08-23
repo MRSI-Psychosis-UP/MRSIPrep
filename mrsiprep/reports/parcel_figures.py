@@ -86,10 +86,11 @@ def _resample_atlas_to_mni(config, subject: str, session: str | None, atlas_t1: 
     from nilearn import datasets
 
     from mrsiprep.registration.transforms import apply_image_transform
+    from mrsiprep.config.templates import template_t1w
     from mrsiprep.utils.images import resolve_mni_resolution
 
     resolution = resolve_mni_resolution(config.mni_resolution, atlas_t1, mrsi_reference)
-    template = datasets.load_mni152_template(resolution)
+    template = template_t1w(resolution)
     # Subject/session-specific filename: this used to be one shared
     # `coverage_mni_atlas.nii.gz` path written by every recording, which
     # under `--nproc > 1` let two workers race on the same file mid-write
