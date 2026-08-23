@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- **`--overwrite` now forces MRSI resampling to recompute.** Every other
+  cached step (tissue segmentation, filtering, PVC, registration,
+  subject templates) already treated `--overwrite` as "recompute
+  everything" alongside its own specific flag; `mrsi/resampling.py` was
+  the sole exception, honouring only `--overwrite-transform`. A run with
+  `--overwrite` therefore kept stale resampled maps.
+
 ## 1.14.0
 
 - **Breaking: `--mni-resolution` is removed; resolution is now a modifier
