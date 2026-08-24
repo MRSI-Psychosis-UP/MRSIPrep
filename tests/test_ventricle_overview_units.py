@@ -9,7 +9,9 @@ import numpy as np
 
 from mrsiprep.reports.ventricle_overview import (
     MAX_MONTAGE_COLUMNS,
-    _best_slice_by_voxel_count,
+    _consensus_slice,
+    _prior_slice_bias,
+    _slice_counts,
     _fsl_standard_path,
     _load_canonical,
     _mni_brain_mask,
@@ -76,16 +78,71 @@ class WorldBboxCenterAndExtentTests(unittest.TestCase):
         np.testing.assert_allclose(extent, [2.0, 2.0, 2.0])  # 1 voxel of span * scale 2
 
 
-class BestSliceByVoxelCountTests(unittest.TestCase):
+def _flat_bias(n_slices):
+    """Neutral bias, for tests isolating the voting rule from the prior."""
+    return np.ones(n_slices, dtype=float)
+
+
+class ConsensusSliceTests(unittest.TestCase):
     def test_returns_slice_index_with_most_detected_voxels(self):
         detected = np.zeros((5, 5, 4), dtype=bool)
         detected[:, :, 2] = True  # every voxel in slice z=2
-        self.assertEqual(_best_slice_by_voxel_count(detected, min_voxels=3), 2)
+        counts = [_slice_counts(detected)]
+        self.assertEqual(_consensus_slice(counts, [_flat_bias(4)], min_voxels=3), 2)
 
     def test_returns_none_when_below_minimum(self):
         detected = np.zeros((5, 5, 4), dtype=bool)
         detected[0, 0, 1] = True  # only 1 voxel anywhere
-        self.assertIsNone(_best_slice_by_voxel_count(detected, min_voxels=3))
+        counts = [_slice_counts(detected)]
+        self.assertIsNone(_consensus_slice(counts, [_flat_bias(4)], min_voxels=3))
+
+    def test_returns_none_for_no_metabolites(self):
+        self.assertIsNone(_consensus_slice([], []))
+
+    def test_majority_outvotes_a_single_dissenting_metabolite(self):
+        """The reported bug: one noisy map landed on its own slice and the
+        montage rendered each metabolite somewhere different."""
+        agree_a = np.zeros(12, dtype=float); agree_a[7] = 10.0
+        agree_b = np.zeros(12, dtype=float); agree_b[7] = 8.0
+        dissent = np.zeros(12, dtype=float); dissent[2] = 40.0  # loudest in absolute terms
+        bias = [_flat_bias(12)] * 3
+        self.assertEqual(_consensus_slice([agree_a, agree_b, dissent], bias, min_voxels=3), 7)
+
+    def test_a_single_high_snr_metabolite_cannot_dominate(self):
+        # Per-metabolite peak normalisation is what makes this hold: without
+        # it the 500-voxel map would win on raw magnitude alone.
+        loud = np.zeros(10, dtype=float); loud[1] = 500.0
+        quiet_a = np.zeros(10, dtype=float); quiet_a[6] = 4.0
+        quiet_b = np.zeros(10, dtype=float); quiet_b[6] = 5.0
+        bias = [_flat_bias(10)] * 3
+        self.assertEqual(_consensus_slice([loud, quiet_a, quiet_b], bias, min_voxels=3), 6)
+
+    def test_bias_cannot_manufacture_a_detection(self):
+        # min_voxels is checked against raw counts, so a strong bias at a
+        # slice with almost nothing detected must still return None.
+        counts = [np.array([0.0, 1.0, 0.0, 0.0])]
+        bias = [np.array([0.0, 100.0, 0.0, 0.0])]
+        self.assertIsNone(_consensus_slice(counts, bias, min_voxels=3))
+
+
+class PriorSliceBiasTests(unittest.TestCase):
+    def test_peaks_at_the_priors_centre_of_mass(self):
+        prior = np.zeros((4, 4, 11), dtype=bool)
+        prior[:, :, 8] = True
+        self.assertEqual(int(np.argmax(_prior_slice_bias(prior))), 8)
+
+    def test_falls_back_to_the_array_middle_for_an_empty_prior(self):
+        prior = np.zeros((4, 4, 11), dtype=bool)
+        self.assertEqual(int(np.argmax(_prior_slice_bias(prior))), 5)
+
+    def test_downweights_slices_far_from_the_prior(self):
+        """Why the inferior-slice false positives went away: those slices
+        are many sigma from where the prior puts the ventricles."""
+        prior = np.zeros((4, 4, 20), dtype=bool)
+        prior[:, :, 11] = True
+        bias = _prior_slice_bias(prior)
+        self.assertGreater(bias[11], bias[6])
+        self.assertGreater(bias[10], bias[2])
 
 
 class LateralVentriclePriorTests(unittest.TestCase):
@@ -161,8 +218,8 @@ class RenderVentricleMontageTests(unittest.TestCase):
                 signal = np.ones((4, 4, 3), dtype=np.float32)
                 prior_roi = np.zeros((4, 4, 3), dtype=bool)
                 detected = np.zeros((4, 4, 3), dtype=bool)
-                panels.append((f"MET{i}", signal, prior_roi, detected, 1))
-            result = _render_ventricle_montage(panels, out_path)
+                panels.append((f"MET{i}", signal, prior_roi, detected))
+            result = _render_ventricle_montage(panels, 1, out_path)
             self.assertEqual(result, out_path)
             self.assertTrue(out_path.exists())
             self.assertGreater(out_path.stat().st_size, 0)
@@ -183,39 +240,60 @@ class BuildVentricleQcSectionsTests(unittest.TestCase):
         ), patch("mrsiprep.reports.ventricle_overview._mni_brain_mask", return_value=None):
             self.assertEqual(build_ventricle_qc_sections(config, "01", "01", {}), [])
 
-    def test_skips_metabolites_with_no_placement_or_detection_and_still_renders_others(self):
+    def test_skips_metabolites_without_a_placement_but_keeps_undetected_ones(self):
+        """Placement failure still drops a metabolite -- there is no sensible
+        slice to draw it at. A metabolite with a valid placement but no
+        detected ventricle voxels is now *kept* and drawn at the shared
+        slice: an empty red contour is the informative result, and dropping
+        it would leave the montage comparing different metabolite sets."""
         with tempfile.TemporaryDirectory() as tmpdir:
             config = SimpleNamespace(derivative_dir=Path(tmpdir) / "derivatives" / "mrsiprep")
             # sorted(raw_maps) iterates as ["Good", "NoDetection", "NoPlacement"];
-            # the three side_effect lists below are keyed to that exact order.
+            # the side_effect list below is keyed to that exact order.
             raw_maps = {"NoPlacement": Path("a.nii.gz"), "NoDetection": Path("b.nii.gz"), "Good": Path("c.nii.gz")}
             fake_signal = np.ones((4, 4, 3), dtype=np.float32)
             valid_placement = ("c", "c", np.array([1.0, 1.0, 1.0]))
+            good = np.zeros((4, 4, 3), dtype=bool)
+            good[:, :, 1] = True
+            empty = np.zeros((4, 4, 3), dtype=bool)
 
             with patch("mrsiprep.reports.ventricle_overview._lateral_ventricle_prior", return_value=(np.zeros((4, 4, 3)), np.eye(4))), \
                 patch("mrsiprep.reports.ventricle_overview._mni_brain_mask", return_value=(np.ones((4, 4, 3), dtype=bool), np.eye(4))), \
                 patch("mrsiprep.reports.ventricle_overview._load_canonical", side_effect=lambda p: (fake_signal, np.eye(4))), \
                 patch(
                     "mrsiprep.reports.ventricle_overview._mni_to_native_affine",
-                    # Good -> valid; NoDetection -> valid (fails later at best-slice); NoPlacement -> None.
+                    # Good -> valid; NoDetection -> valid; NoPlacement -> None.
                     side_effect=[valid_placement, valid_placement, None],
                 ), \
                 patch("mrsiprep.reports.ventricle_overview._warp_prior_to_native", return_value=np.ones((4, 4, 3), dtype=bool)), \
-                patch("mrsiprep.reports.ventricle_overview._detect_ventricle_mask", return_value=np.ones((4, 4, 3), dtype=bool)), \
-                patch(
-                    "mrsiprep.reports.ventricle_overview._best_slice_by_voxel_count",
-                    # Only called for the two metabolites with a valid placement: Good -> 1, NoDetection -> None.
-                    side_effect=[1, None],
-                ), \
+                patch("mrsiprep.reports.ventricle_overview._detect_ventricle_mask", side_effect=[good, empty]), \
                 patch("mrsiprep.reports.ventricle_overview._render_ventricle_montage", return_value=Path(tmpdir) / "out.png") as render:
                 sections = build_ventricle_qc_sections(config, "01", "01", raw_maps)
 
-        rendered_panels = render.call_args[0][0]
-        self.assertEqual([p[0] for p in rendered_panels], ["Good"])
+        rendered_panels, rendered_z, _ = render.call_args[0]
+        self.assertEqual([p[0] for p in rendered_panels], ["Good", "NoDetection"])
+        self.assertEqual(rendered_z, 1)
         self.assertEqual(len(sections), 1)
         title, body = sections[0]
         self.assertIn("Ventricle visibility", title)
+        self.assertIn("z=1", body)
         self.assertIn("<img", body)
+
+    def test_returns_empty_when_no_metabolite_yields_a_detection(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = SimpleNamespace(derivative_dir=Path(tmpdir) / "derivatives" / "mrsiprep")
+            fake_signal = np.ones((4, 4, 3), dtype=np.float32)
+            valid_placement = ("c", "c", np.array([1.0, 1.0, 1.0]))
+            with patch("mrsiprep.reports.ventricle_overview._lateral_ventricle_prior", return_value=(np.zeros((4, 4, 3)), np.eye(4))), \
+                patch("mrsiprep.reports.ventricle_overview._mni_brain_mask", return_value=(np.ones((4, 4, 3), dtype=bool), np.eye(4))), \
+                patch("mrsiprep.reports.ventricle_overview._load_canonical", side_effect=lambda p: (fake_signal, np.eye(4))), \
+                patch("mrsiprep.reports.ventricle_overview._mni_to_native_affine", return_value=valid_placement), \
+                patch("mrsiprep.reports.ventricle_overview._warp_prior_to_native", return_value=np.ones((4, 4, 3), dtype=bool)), \
+                patch("mrsiprep.reports.ventricle_overview._detect_ventricle_mask", return_value=np.zeros((4, 4, 3), dtype=bool)), \
+                patch("mrsiprep.reports.ventricle_overview._render_ventricle_montage") as render:
+                sections = build_ventricle_qc_sections(config, "01", "01", {"CrPCr": Path("c.nii.gz")})
+        self.assertEqual(sections, [])
+        render.assert_not_called()
 
 
 if __name__ == "__main__":

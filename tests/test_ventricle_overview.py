@@ -9,7 +9,9 @@ import numpy as np
 from mrsiprep.config.settings import MRSIPrepConfig
 from mrsiprep.io.naming import coverage_report_dir
 from mrsiprep.reports.ventricle_overview import (
-    _best_slice_by_voxel_count,
+    _consensus_slice,
+    _prior_slice_bias,
+    _slice_counts,
     _detect_ventricle_mask,
     _mni_to_native_affine,
     _warp_prior_to_native,
@@ -97,17 +99,28 @@ class DetectVentricleMaskTests(unittest.TestCase):
         self.assertFalse(detected.any())
 
 
-class BestSliceByVoxelCountTests(unittest.TestCase):
+class ConsensusSliceTests(unittest.TestCase):
     def test_picks_the_slice_with_the_most_detected_voxels(self):
         detected = np.zeros((5, 5, 4), dtype=bool)
         detected[:, :, 1] = True  # slice 1 has the most
         detected[0, 0, 2] = True
-        self.assertEqual(_best_slice_by_voxel_count(detected), 1)
+        prior = np.ones((5, 5, 4), dtype=bool)  # uniform prior -> flat bias
+        self.assertEqual(_consensus_slice([_slice_counts(detected)], [_prior_slice_bias(prior)]), 1)
 
     def test_returns_none_below_min_voxels(self):
         detected = np.zeros((5, 5, 4), dtype=bool)
         detected[0, 0, 2] = True  # only 1 voxel anywhere
-        self.assertIsNone(_best_slice_by_voxel_count(detected, min_voxels=3))
+        prior = np.ones((5, 5, 4), dtype=bool)
+        self.assertIsNone(_consensus_slice([_slice_counts(detected)], [_prior_slice_bias(prior)], min_voxels=3))
+
+    def test_all_metabolites_share_one_slice(self):
+        """Regression guard for the reported bug: the same recording used to
+        render CrPCr at z=11 and GPCPCh at z=6."""
+        near = np.zeros(14, dtype=float); near[9] = 12.0
+        far = np.zeros(14, dtype=float); far[9] = 6.0; far[3] = 9.0
+        prior = np.zeros((4, 4, 14), dtype=bool); prior[:, :, 9] = True
+        bias = _prior_slice_bias(prior)
+        self.assertEqual(_consensus_slice([near, far], [bias, bias], min_voxels=3), 9)
 
 
 class BuildVentricleQcSectionsTests(unittest.TestCase):
