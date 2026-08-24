@@ -341,7 +341,7 @@ def _render_ventricle_montage(
     panels: list[tuple[str, np.ndarray, np.ndarray, np.ndarray]],
     z: int,
     out_path: Path,
-    tissue: dict[str, tuple[np.ndarray, np.ndarray, float]] | None = None,
+    tissue: dict[str, tuple[np.ndarray, float]] | None = None,
 ) -> Path:
     """One combined figure, one subplot per metabolite, at most
     ``MAX_MONTAGE_COLUMNS`` per row -- e.g. 9 metabolites lays out as 5
@@ -354,7 +354,7 @@ def _render_ventricle_montage(
 
     When ``tissue`` is given it adds a second band of rows below the
     ventricle rows, at the same slice, keyed by metabolite name and holding
-    ``(wm_mask, boundary_prior, contrast_percent)``. Metabolites missing
+    ``(wm_mask, contrast_percent)``. Metabolites missing
     from the dict get an empty panel, so columns stay aligned between the
     two bands.
     """
@@ -400,8 +400,12 @@ def _render_ventricle_montage(
         if entry is None:
             tissue_ax.set_title("no tissue estimate", fontsize=8)
         else:
-            wm_mask, boundary_prior, contrast = entry
-            tissue_ax.contour(np.rot90(boundary_prior[:, :, z]), levels=[0.5], colors="white", linewidths=1.0, linestyles="dashed")
+            # Data-driven boundary only. The prior outline is deliberately not
+            # drawn here: it is a smooth, always-closed curve, and next to the
+            # blue outline it reads as the answer the data should have given,
+            # which is precisely the judgement the reader is meant to make
+            # unaided from the blue outline's own continuity.
+            wm_mask, contrast = entry
             tissue_ax.contour(np.rot90(wm_mask[:, :, z]), levels=[0.5], colors="deepskyblue", linewidths=1.6)
             tissue_ax.set_title(f"GM/WM  ({contrast:.0f}%)", fontsize=8)
         if col == 0:
@@ -449,7 +453,7 @@ def build_ventricle_qc_sections(config, subject: str, session: str | None, raw_m
     panels: list[tuple[str, np.ndarray, np.ndarray, np.ndarray]] = []
     counts: list[np.ndarray] = []
     biases: list[np.ndarray] = []
-    tissue: dict[str, tuple[np.ndarray, np.ndarray, float]] = {}
+    tissue: dict[str, tuple[np.ndarray, float]] = {}
     for met in sorted(raw_maps):
         signal, affine = _load_canonical(raw_maps[met])
         brainmask = np.isfinite(signal) & (signal > 0)
@@ -472,11 +476,7 @@ def build_ventricle_qc_sections(config, subject: str, session: str | None, raw_m
         wm_prob = _sample_prior_to_native(wm_mni, tissue_affine, *warp)
         estimate = _estimate_wm_mask(signal, gm_prob, wm_prob, brainmask)
         if estimate is not None:
-            wm_mask, contrast = estimate
-            # Dashed reference is where the prior alone puts the GM/WM
-            # boundary, so the reader can see how far the data-driven
-            # outline departs from it.
-            tissue[met] = (wm_mask, (wm_prob >= gm_prob) & brainmask, contrast)
+            tissue[met] = estimate
 
     # Metabolites acquired on different grids cannot share a slice index;
     # this is not expected within one recording, but silently rendering
@@ -493,10 +493,10 @@ def build_ventricle_qc_sections(config, subject: str, session: str | None, raw_m
         "rigid-ish transform, its confident cores seed which side is which, and the boundary (blue) is then "
         "thresholded from each metabolite's own raw signal -- no smoothing, so the outline is not flattered. "
         "Read its <i>continuity</i>: a closed, anatomically shaped boundary attests to real GM/WM contrast in "
-        "that metabolite; a speckled or absent one means there is little tissue contrast to exploit. Dashed "
-        "white is where the prior alone puts the boundary; the percentage is the GM-to-WM difference between "
-        "the two prior cores. Polarity is measured per metabolite, since NAA and Cho run higher in white "
-        "matter while Ins runs higher in grey."
+        "that metabolite; a speckled or absent one means there is little tissue contrast to exploit. Only the "
+        "data-driven boundary is drawn, with no prior outline to compare against, so the judgement rests on "
+        "the outline itself. The percentage is the GM-to-WM difference between the two prior cores. Polarity "
+        "is measured per metabolite, since NAA and Cho run higher in white matter while Ins runs higher in grey."
         if tissue
         else ""
     )
