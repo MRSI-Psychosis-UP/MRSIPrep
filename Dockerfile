@@ -34,7 +34,9 @@ ENV TEMPLATEFLOW_HOME=/opt/templateflow
 RUN /usr/bin/python3 -c "\
 import templateflow.api as api; \
 [api.get('MNI152NLin2009cAsym', resolution=r, desc=d, suffix=s, extension='.nii.gz') \
- for r in (1, 2) for d, s in ((None, 'T1w'), ('brain', 'mask'))]" \
+ for r in (1, 2) for d, s in ((None, 'T1w'), ('brain', 'mask'))]; \
+[api.get('MNI152NLin2009cAsym', resolution=1, label=l, suffix='probseg', extension='.nii.gz') \
+ for l in ('GM', 'WM')]" \
     && chmod -R a+rX /opt/templateflow
 
 # nosemgrep: dockerfile.security.missing-user-entrypoint.missing-user-entrypoint

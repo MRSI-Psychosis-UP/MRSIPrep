@@ -54,8 +54,12 @@ def _check_supported(space: str) -> str:
 
 
 @lru_cache(maxsize=32)
-def _fetch(space: str, resolution: int, desc: str | None, suffix: str) -> Path:
-    """Locate one TemplateFlow file, at TemplateFlow's own native resolutions."""
+def _fetch(space: str, resolution: int, desc: str | None, suffix: str, label: str | None = None) -> Path:
+    """Locate one TemplateFlow file, at TemplateFlow's own native resolutions.
+
+    ``label`` selects tissue probability maps (``label-GM``/``label-WM``),
+    which TemplateFlow keys by ``label`` rather than by ``desc``.
+    """
     _check_supported(space)
     try:
         from templateflow import api
@@ -64,11 +68,11 @@ def _fetch(space: str, resolution: int, desc: str | None, suffix: str) -> Path:
             "templateflow is required to resolve reference templates but is not installed."
         ) from exc
 
-    result = api.get(space, resolution=resolution, desc=desc, suffix=suffix, extension=".nii.gz")
+    result = api.get(space, resolution=resolution, desc=desc, label=label, suffix=suffix, extension=".nii.gz")
     paths = [result] if isinstance(result, (str, Path)) else list(result)
     if not paths:
         raise TemplateError(
-            f"TemplateFlow has no {suffix} (desc={desc}) for {space} at res-{resolution:02d}. "
+            f"TemplateFlow has no {suffix} (desc={desc}, label={label}) for {space} at res-{resolution:02d}. "
             "If this image was built without pre-fetching it, rebuild with the Dockerfile's "
             "TemplateFlow step."
         )
@@ -136,3 +140,22 @@ def template_brain_mask(resolution_mm: int | None = None, space: str = DEFAULT_T
     # nearest: a brain mask is binary, and continuous interpolation would
     # produce fractional edge voxels that then threshold inconsistently.
     return _resampled(_fetch(_check_supported(space), 1, "brain", "mask"), resolution_mm, "nearest")
+
+
+TISSUE_LABELS = ("GM", "WM", "CSF")
+
+
+def template_tissue_probseg(label: str, resolution_mm: int | None = None, space: str = DEFAULT_TEMPLATE):
+    """Tissue probability map (0-1) for ``label``, from the same template.
+
+    Used by the native-space GM/WM contrast QC as its starting prior. Kept
+    here rather than read directly by the report so every reference image
+    still comes from one place, and so a future non-MNI template supplies
+    its tissue priors the same way it supplies its T1w and brain mask.
+
+    These are continuous probabilities, so they interpolate continuously --
+    unlike :func:`template_brain_mask`, which is binary and must not.
+    """
+    if label not in TISSUE_LABELS:
+        raise TemplateError(f"Unknown tissue label {label!r}. Supported: {', '.join(TISSUE_LABELS)}.")
+    return _resampled(_fetch(_check_supported(space), 1, None, "probseg", label), resolution_mm)

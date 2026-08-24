@@ -103,6 +103,33 @@ class FetchTests(unittest.TestCase):
             T._fetch("NotATemplate", 1, None, "T1w")
 
 
+class TissueProbsegTests(unittest.TestCase):
+    def test_unknown_label_is_rejected(self):
+        with self.assertRaises(T.TemplateError) as ctx:
+            T.template_tissue_probseg("BONE")
+        self.assertIn("BONE", str(ctx.exception))
+        self.assertIn("GM", str(ctx.exception))
+
+    def test_requests_templateflow_by_label_not_desc(self):
+        # TemplateFlow keys tissue maps by `label`, so passing GM as `desc`
+        # would silently resolve to the wrong file (or none at all).
+        with patch.object(T, "_fetch", return_value=Path("/tpl/gm.nii.gz")) as fetch, patch.object(
+            T.nib, "load", return_value=_img()
+        ):
+            T.template_tissue_probseg("GM")
+        self.assertEqual(fetch.call_args.args[3], "probseg")
+        self.assertEqual(fetch.call_args.args[4], "GM")
+
+    def test_interpolates_continuously_unlike_the_binary_mask(self):
+        # These are probabilities, not a binary mask: nearest-neighbour would
+        # throw away the partial-volume information the GM/WM QC compares.
+        with patch.object(T, "_fetch", return_value=Path("/tpl/gm.nii.gz")), patch.object(
+            T.nib, "load", return_value=_img()
+        ), patch.object(T, "_to_resolution") as to_res:
+            T.template_tissue_probseg("GM", 3)
+        self.assertEqual(to_res.call_args.args[2], "continuous")
+
+
 class ProviderTests(unittest.TestCase):
     """The three provider entry points, with TemplateFlow itself stubbed."""
 
