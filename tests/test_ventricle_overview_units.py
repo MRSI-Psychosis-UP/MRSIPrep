@@ -330,7 +330,7 @@ class RenderVentricleMontageTests(unittest.TestCase):
                 signal = np.ones((4, 4, 3), dtype=np.float32)
                 blank = np.zeros((4, 4, 3), dtype=bool)
                 panels.append((f"MET{i}", signal, blank, blank))
-                tissue[f"MET{i}"] = (blank, blank, 12.5)
+                tissue[f"MET{i}"] = (blank, 12.5)
             result = _render_ventricle_montage(panels, 1, out_path, tissue)
             self.assertEqual(result, out_path)
             self.assertGreater(out_path.stat().st_size, 0)
@@ -344,7 +344,7 @@ class RenderVentricleMontageTests(unittest.TestCase):
             signal = np.ones((4, 4, 3), dtype=np.float32)
             blank = np.zeros((4, 4, 3), dtype=bool)
             panels = [("HasTissue", signal, blank, blank), ("NoTissue", signal, blank, blank)]
-            tissue = {"HasTissue": (blank, blank, 8.0)}
+            tissue = {"HasTissue": (blank, 8.0)}
             _render_ventricle_montage(panels, 1, out_path, tissue)
             self.assertGreater(out_path.stat().st_size, 0)
 
@@ -433,10 +433,9 @@ class BuildVentricleQcSectionsTests(unittest.TestCase):
 
         _, _, _, rendered_tissue = render.call_args[0]
         self.assertIn("CrPCr", rendered_tissue)
-        wm_mask, boundary_prior, contrast = rendered_tissue["CrPCr"]
+        wm_mask, contrast = rendered_tissue["CrPCr"]
         self.assertTrue(wm_mask[3:].all())          # brighter side recovered as WM
         self.assertFalse(wm_mask[:3].any())
-        self.assertTrue(boundary_prior[3:].all())   # prior boundary on the WM side
         self.assertAlmostEqual(contrast, 100.0, places=4)
         title, body = sections[0]
         self.assertIn("GM/WM", title)
