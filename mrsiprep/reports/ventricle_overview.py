@@ -159,21 +159,92 @@ def _detect_ventricle_mask(
     return search_region & (signal <= threshold)
 
 
-def _best_slice_by_voxel_count(detected: np.ndarray, min_voxels: int = 3) -> int | None:
-    counts = detected.sum(axis=(0, 1))
-    if counts.max() < min_voxels:
+def _prior_slice_bias(prior_roi: np.ndarray) -> np.ndarray:
+    """Gaussian weight over z, peaked where the warped prior actually puts
+    the ventricles.
+
+    Detection can pick up dark voxels far from the ventricles -- the
+    inferior slices where the head leaves the excitation volume are the
+    usual culprit, and they can carry more sub-threshold voxels than the
+    ventricles themselves. Weighting by the prior's own centre of mass
+    keeps the search near the expected location. Anchoring to the prior
+    rather than to the middle of the array matters because the MRSI FOV is
+    routinely asymmetric about the brain, so "the middle slice" and "where
+    ventricles are" are not the same index.
+    """
+    counts = prior_roi.sum(axis=(0, 1)).astype(float)
+    n_slices = prior_roi.shape[2]
+    z = np.arange(n_slices, dtype=float)
+    total = counts.sum()
+    if total <= 0:
+        center = (n_slices - 1) / 2.0
+        sigma = max(n_slices / 6.0, 1.0)
+    else:
+        center = float((counts * z).sum() / total)
+        spread = float(np.sqrt((counts * (z - center) ** 2).sum() / total))
+        # Floor the width generously. The placement is a coarse bounding-box
+        # affine, so it can sit a couple of slices off; a narrow prior would
+        # otherwise turn this into a hard gate that pins the montage to a
+        # mis-placed centre. At sigma=2 a slice 2 away is only mildly
+        # penalised (x0.61) while one 5 away is strongly suppressed (x0.04),
+        # which is the intended shape: break ties, never override the data.
+        sigma = max(spread, 2.0)
+    return np.exp(-0.5 * ((z - center) / sigma) ** 2)
+
+
+def _slice_counts(detected: np.ndarray) -> np.ndarray:
+    """Raw detected-voxel count per axial slice."""
+    return detected.sum(axis=(0, 1)).astype(float)
+
+
+def _consensus_slice(counts: list[np.ndarray], biases: list[np.ndarray], min_voxels: int = 3) -> int | None:
+    """One slice index for the whole montage, agreed across metabolites.
+
+    Letting each metabolite pick its own argmax meant a single noisy map
+    could land on an unrelated slice, so panels that should be directly
+    comparable were not: the same recording rendered CrPCr at z=11 and
+    GPCPCh at z=6.
+
+    Each metabolite votes with its prior-biased profile normalised by its
+    own peak, so a high-SNR metabolite cannot outvote the rest and the
+    winner is the slice most metabolites agree on rather than the one with
+    the largest absolute count.
+
+    The ``min_voxels`` floor is applied to the *raw* counts, not the biased
+    ones, so the bias only ever reorders candidate slices -- it can never
+    manufacture a detection that isn't in the data. Returns ``None`` when no
+    metabolite reaches ``min_voxels`` at the winning slice, preserving the
+    previous "absent is itself informative" behaviour.
+    """
+    if not counts:
         return None
-    return int(np.argmax(counts))
+    votes = np.zeros(len(counts[0]), dtype=float)
+    for count, bias in zip(counts, biases):
+        weighted = count * bias
+        peak = weighted.max()
+        if peak > 0:
+            votes += weighted / peak
+    if votes.max() <= 0:
+        return None
+    best = int(np.argmax(votes))
+    if max(float(count[best]) for count in counts) < min_voxels:
+        return None
+    return best
 
 
 MAX_MONTAGE_COLUMNS = 5
 
 
-def _render_ventricle_montage(panels: list[tuple[str, np.ndarray, np.ndarray, np.ndarray, int]], out_path: Path) -> Path:
+def _render_ventricle_montage(panels: list[tuple[str, np.ndarray, np.ndarray, np.ndarray]], z: int, out_path: Path) -> Path:
     """One combined figure, one subplot per metabolite, at most
     ``MAX_MONTAGE_COLUMNS`` per row -- e.g. 9 metabolites lays out as 5
     columns x 2 rows -- rather than a separate standalone image per
-    metabolite."""
+    metabolite.
+
+    Every panel is drawn at the same slice ``z``, so the montage compares
+    metabolites rather than compares slices; the index is stated once in the
+    figure title instead of per panel.
+    """
     import math
 
     import matplotlib
@@ -187,15 +258,16 @@ def _render_ventricle_montage(panels: list[tuple[str, np.ndarray, np.ndarray, np
     n_rows = math.ceil(n / MAX_MONTAGE_COLUMNS)
 
     fig, axes = plt.subplots(n_rows, n_cols, figsize=(2.6 * n_cols, 2.6 * n_rows), constrained_layout=True, squeeze=False)
-    for index, (met, signal, prior_roi, detected, z) in enumerate(panels):
+    for index, (met, signal, prior_roi, detected) in enumerate(panels):
         ax = axes[index // n_cols][index % n_cols]
         finite = signal[np.isfinite(signal) & (signal > 0)]
         vmax = float(np.percentile(finite, 99)) if finite.size else float(np.nanmax(signal))
         ax.imshow(np.rot90(signal[:, :, z]), cmap="viridis", vmin=0, vmax=max(vmax, 1e-6))
         ax.contour(np.rot90(prior_roi[:, :, z]), levels=[0.5], colors="white", linewidths=1.0, linestyles="dashed")
         ax.contour(np.rot90(detected[:, :, z]), levels=[0.5], colors="red", linewidths=1.6)
-        ax.set_title(f"{met}  (z={z})", fontsize=9)
+        ax.set_title(met, fontsize=9)
         ax.axis("off")
+    fig.suptitle(f"consensus slice z={z}", fontsize=10)
 
     for index in range(n, n_rows * n_cols):
         axes[index // n_cols][index % n_cols].axis("off")
@@ -224,7 +296,9 @@ def build_ventricle_qc_sections(config, subject: str, session: str | None, raw_m
     out = qc_report_derivative(config.derivative_dir, subject, session, "mrsi-raw")
     figures_dir = coverage_report_dir(config.derivative_dir, subject, session) / "figures"
 
-    panels: list[tuple[str, np.ndarray, np.ndarray, np.ndarray, int]] = []
+    panels: list[tuple[str, np.ndarray, np.ndarray, np.ndarray]] = []
+    counts: list[np.ndarray] = []
+    biases: list[np.ndarray] = []
     for met in sorted(raw_maps):
         signal, affine = _load_canonical(raw_maps[met])
         brainmask = np.isfinite(signal) & (signal > 0)
@@ -235,19 +309,26 @@ def build_ventricle_qc_sections(config, subject: str, session: str | None, raw_m
         prior_roi = _warp_prior_to_native(mni_vent_prob, mni_vent_affine, signal.shape, affine, mni_center, native_center, scale)
         prior_roi &= brainmask
         detected = _detect_ventricle_mask(signal, prior_roi, brainmask)
-        best_z = _best_slice_by_voxel_count(detected)
-        if best_z is None:
-            continue
-        panels.append((met, signal, prior_roi, detected, best_z))
+        panels.append((met, signal, prior_roi, detected))
+        counts.append(_slice_counts(detected))
+        biases.append(_prior_slice_bias(prior_roi))
 
-    if not panels:
+    # Metabolites acquired on different grids cannot share a slice index;
+    # this is not expected within one recording, but silently rendering
+    # mismatched indices would be worse than skipping the check.
+    if panels and len({panel[1].shape for panel in panels}) > 1:
+        return []
+    consensus_z = _consensus_slice(counts, biases)
+    if not panels or consensus_z is None:
         return []
     png_path = figures_dir / f"{out.stem}_ventricle-qc.png"
-    _render_ventricle_montage(panels, png_path)
+    _render_ventricle_montage(panels, consensus_z, png_path)
     body = (
         "<p>Native-MRSI-space ventricle visibility, before any T1w coregistration: a cheap MNI-prior "
-        "placement (dashed white) and the resulting data-driven detection (red) on each metabolite's own "
-        "best-contrast slice. A clean, anatomically plausible outline indicates well-resolved ventricles; "
+        "placement (dashed white) and the resulting data-driven detection (red). All metabolites are shown "
+        f"at one consensus slice (z={consensus_z}), chosen by agreement across metabolites and biased toward "
+        "where the prior places the ventricles, so the panels compare metabolites rather than slices. "
+        "A clean, anatomically plausible outline indicates well-resolved ventricles; "
         "a ragged, offset, or absent one is worth a closer look before trusting downstream registration.</p>"
         f"<img src='figures/{png_path.name}'>"
     )
