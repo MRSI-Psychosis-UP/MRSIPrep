@@ -323,13 +323,23 @@ def build_ventricle_qc_sections(config, subject: str, session: str | None, raw_m
         return []
     png_path = figures_dir / f"{out.stem}_ventricle-qc.png"
     _render_ventricle_montage(panels, consensus_z, png_path)
+    # Legend, not prose: the reader needs to know what each colour is and
+    # which slice they are looking at. The interpretation ("a ragged outline
+    # means X") was several sentences of text that told an MRSI reader what
+    # the picture already shows.
+    # Swatches are CSS borders rather than box-drawing characters, which
+    # depend on the reader's font having them.
+    swatch = (
+        "display:inline-block;width:24px;height:0;vertical-align:middle;margin-right:4px;border-top:{}"
+    )
     body = (
-        "<p>Native-MRSI-space ventricle visibility, before any T1w coregistration: a cheap MNI-prior "
-        "placement (dashed white) and the resulting data-driven detection (red). All metabolites are shown "
-        f"at one consensus slice (z={consensus_z}), chosen by agreement across metabolites and biased toward "
-        "where the prior places the ventricles, so the panels compare metabolites rather than slices. "
-        "A clean, anatomically plausible outline indicates well-resolved ventricles; "
-        "a ragged, offset, or absent one is worth a closer look before trusting downstream registration.</p>"
+        "<p style='margin:0 0 0.6em'>"
+        f"<span style='{swatch.format('3px solid #d62728')}'></span>detected ventricle"
+        "<span style='display:inline-block;width:1.6em'></span>"
+        f"<span style='{swatch.format('2px dashed #bbb')}'></span>MNI prior"
+        "<span style='display:inline-block;width:1.6em'></span>"
+        f"<span style='color:#666'>native MRSI space, pre-coregistration &middot; all metabolites at z={consensus_z}</span>"
+        "</p>"
         f"<img src='figures/{png_path.name}'>"
     )
     return [("Ventricle visibility (pre-coregistration)", body)]
