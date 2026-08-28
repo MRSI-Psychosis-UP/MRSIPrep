@@ -13,6 +13,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from mrsiprep.reports.html import (
+    _bids_project_name,
     _citations_html,
     _outputs_html,
     _parcel_figures_html,
@@ -129,6 +130,51 @@ class ParcelFiguresHtmlTests(unittest.TestCase):
             html = _parcel_figures_html(Path(tmp))
         self.assertEqual(html.count("<img"), 1)
         self.assertNotIn("met-CrPCr", html)
+
+
+class BidsProjectNameTests(unittest.TestCase):
+    """The report title must never fail to render over dataset metadata."""
+
+    def _config(self, root):
+        return SimpleNamespace(bids_dir=root)
+
+    def test_uses_the_name_from_dataset_description(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "my-bids"
+            root.mkdir()
+            (root / "dataset_description.json").write_text('{"Name": "SynthMRSI-Project"}')
+            self.assertEqual(_bids_project_name(self._config(root)), "SynthMRSI-Project")
+
+    def test_falls_back_to_the_directory_name_when_absent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "my-bids"
+            root.mkdir()
+            self.assertEqual(_bids_project_name(self._config(root)), "my-bids")
+
+    def test_malformed_json_falls_back_rather_than_raising(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "my-bids"
+            root.mkdir()
+            (root / "dataset_description.json").write_text("{not json")
+            self.assertEqual(_bids_project_name(self._config(root)), "my-bids")
+
+    def test_blank_or_missing_name_falls_back(self):
+        for payload in ('{"Name": "   "}', '{"Name": null}', "{}"):
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp) / "my-bids"
+                root.mkdir()
+                (root / "dataset_description.json").write_text(payload)
+                self.assertEqual(_bids_project_name(self._config(root)), "my-bids", msg=payload)
+
+    def test_non_string_name_is_coerced_rather_than_discarded(self):
+        """A numeric Name is unusual but still a usable label; discarding it
+        for the folder name would lose information the dataset did provide."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "my-bids"
+            root.mkdir()
+            (root / "dataset_description.json").write_text('{"Name": 42}')
+            self.assertEqual(_bids_project_name(self._config(root)), "42")
+
 
 if __name__ == "__main__":
     unittest.main()

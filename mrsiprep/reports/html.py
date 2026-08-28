@@ -266,8 +266,11 @@ def _bids_project_name(config) -> str:
             name = json.loads(description.read_text()).get("Name")
             if str(name or "").strip():
                 return str(name).strip()
-    except Exception:
-        pass
+    except (OSError, json.JSONDecodeError, AttributeError, TypeError, ValueError):
+        # Unreadable, malformed, or non-string Name: fall through to the
+        # directory name. A report must never fail to generate over cosmetic
+        # metadata, and the folder name is a usable label either way.
+        return Path(config.bids_dir).name
     return Path(config.bids_dir).name
 
 

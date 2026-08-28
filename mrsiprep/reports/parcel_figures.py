@@ -246,6 +246,9 @@ def write_parcel_crlb_figures(config, subject: str, session: str | None, atlas_t
         if candidate.shape == atlas.shape:
             underlay = candidate
     except Exception:
+        # The underlay is decoration: if the template cannot be fetched or
+        # loaded for any reason, the quality overlay is still the point of the
+        # figure, so draw it on black rather than failing the report.
         underlay = None
 
     indices = _axial_slice_indices(atlas)
@@ -275,7 +278,11 @@ def write_parcel_crlb_figures(config, subject: str, session: str | None, atlas_t
         try:
             superseded.unlink()
         except OSError:
-            pass
+            # Best-effort cleanup: a file that cannot be removed (read-only
+            # mount, concurrent run holding it) is not a reason to fail the
+            # figure it is being replaced by. The narrowed glob in
+            # _parcel_figures_html keeps a survivor out of the report anyway.
+            continue
     return [
         _render_axial_grid(
             out,
