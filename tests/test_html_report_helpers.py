@@ -11,11 +11,9 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
 
 from mrsiprep.reports.html import (
     _citations_html,
-    _mrsinmrs_html,
     _outputs_html,
     _parcel_figures_html,
     _sections_html,
