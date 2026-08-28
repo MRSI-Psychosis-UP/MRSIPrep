@@ -100,7 +100,24 @@ def execute_recordings_nipype(config, ready: "list[Recording]", subject_template
                 for rec in ready
             }
             for future in as_completed(futures):
-                statuses.append(future.result())
+                status = future.result()
+                statuses.append(status)
+                # The worker's own FINISHED goes through a manager queue, so it
+                # can still be in flight when the future resolves -- and if the
+                # worker died it was never sent at all. The parent knows the
+                # real outcome here, so state it directly rather than leaving
+                # the row stuck on RUNNING.
+                recording = futures[future]
+                tag = f"sub-{recording.subject}" + (f" ses-{recording.session}" if recording.session else "")
+                outcome = "FINISHED" if getattr(status, "status", "") == "success" else "FAILED"
+                try:
+                    status_queue.put((tag, "always", outcome))
+                except (OSError, EOFError, BrokenPipeError, ValueError):
+                    # The manager may already be tearing down. The table is a
+                    # progress display, not a result: statuses is what the
+                    # caller acts on, so a lost render update is not worth
+                    # failing an otherwise complete run over.
+                    continue
     finally:
         stop_listener.set()
         listener_thread.join(timeout=5)
@@ -163,38 +180,57 @@ def _start_live_status_table(config, tags: "list[str]", status_queue):
         return table
 
     def _listen():
+        def _apply(tag, kind, message):
+            row = rows.setdefault(tag, {"step": "", "state": "running", "elapsed": None})
+            if kind == "always" and "START" in message:
+                row["state"] = "running"
+                row["step"] = "starting"
+                start_times[tag] = time.monotonic()
+            elif kind == "always" and "FINISHED" in message:
+                row["state"] = "done"
+                row["step"] = "finished"
+                if tag in start_times and row["elapsed"] is None:
+                    row["elapsed"] = time.monotonic() - start_times[tag]
+            elif kind == "always" and "FAILED" in message:
+                row["state"] = "failed"
+                row["step"] = message
+                if tag in start_times and row["elapsed"] is None:
+                    row["elapsed"] = time.monotonic() - start_times[tag]
+            # A late step message must not resurrect a row the parent has
+            # already marked terminal.
+            elif row["state"] in ("done", "failed"):
+                return
+            elif kind == "step":
+                row["state"] = "running"
+                row["step"] = message
+            elif kind == "step_done":
+                row["step"] = f"{message} (done)"
+            elif kind == "step_failed":
+                row["state"] = "failed"
+                row["step"] = f"{message} (failed)"
+            if tag in start_times and row["state"] == "running":
+                row["elapsed"] = time.monotonic() - start_times[tag]
+
         with Live(_render(), console=console, refresh_per_second=4) as live:
             while not stop_event.is_set():
                 try:
                     tag, kind, message = status_queue.get(timeout=0.2)
-                except Exception:
+                except (queue.Empty, OSError, EOFError, ValueError):
+                    # Empty is the normal case at this 0.2s poll; the rest mean
+                    # the manager is going away, and the stop_event check on the
+                    # next iteration handles that.
                     continue
-                row = rows.setdefault(tag, {"step": "", "state": "running", "elapsed": None})
-                if kind == "always" and "START" in message:
-                    row["state"] = "running"
-                    row["step"] = "starting"
-                    start_times[tag] = time.monotonic()
-                elif kind == "always" and "FINISHED" in message:
-                    row["state"] = "done"
-                    row["step"] = "finished"
-                    if tag in start_times:
-                        row["elapsed"] = time.monotonic() - start_times[tag]
-                elif kind == "always" and "FAILED" in message:
-                    row["state"] = "failed"
-                    row["step"] = message
-                    if tag in start_times:
-                        row["elapsed"] = time.monotonic() - start_times[tag]
-                elif kind == "step":
-                    row["state"] = "running"
-                    row["step"] = message
-                elif kind == "step_done":
-                    row["step"] = f"{message} (done)"
-                elif kind == "step_failed":
-                    row["state"] = "failed"
-                    row["step"] = f"{message} (failed)"
-                if tag in start_times and row["state"] == "running":
-                    row["elapsed"] = time.monotonic() - start_times[tag]
+                _apply(tag, kind, message)
                 live.update(_render())
+            # Drain what is still queued: stop_event is set as soon as the last
+            # future resolves, and without this the final FINISHED messages are
+            # discarded, leaving finished recordings displayed as RUNNING.
+            while True:
+                try:
+                    tag, kind, message = status_queue.get_nowait()
+                except (queue.Empty, OSError, EOFError, ValueError):
+                    break  # drained, or the manager is gone
+                _apply(tag, kind, message)
             live.update(_render())
 
     thread = threading.Thread(target=_listen, daemon=True)
