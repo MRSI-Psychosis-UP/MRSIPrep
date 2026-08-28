@@ -118,8 +118,16 @@ class GenerateSubjectReportTabsTests(unittest.TestCase):
             out = generate_subject_report(config, "S001", "V1", {"leakage_qc": leakage_qc}, _EMPTY_QC_SECTIONS)
             html = out.read_text()
 
-            t1_panel = html[html.index("id='t1w-alignment'") : html.index("id='coverage'")]
-            mni_panel = html[html.index("id='mni-alignment'") : html.index("id='parcellation'")]
+            # Bounded by the next panel div rather than by a named tab: the tab
+            # order is not this test's subject, and hard-coding a neighbour makes
+            # it fail on any reordering.
+            def _panel(tab_id):
+                start = html.index(f"id='{tab_id}'")
+                nxt = html.find("<div class='tab-panel'", start)
+                return html[start:nxt if nxt != -1 else len(html)]
+
+            t1_panel = _panel("t1w-alignment")
+            mni_panel = _panel("mni-alignment")
             self.assertIn("1.000", t1_panel)
             self.assertNotIn("5.000", t1_panel)
             self.assertIn("5.000", mni_panel)

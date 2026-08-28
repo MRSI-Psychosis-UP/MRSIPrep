@@ -130,6 +130,15 @@ def step_pvc(config, subject, session, ctx):
 
     debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""))
     corrected_maps, tissue_4d = _step_pvc(config, subject, session, ctx["mrsi"], ctx["tissue"], debug)
+    # Only when PVC actually ran: with --no-pvc the corrected maps are the
+    # preproc maps unchanged, and a tab of identical images is noise.
+    pvc_sections = None
+    preproc_maps = getattr(ctx.get("mrsi"), "preproc_maps", None)
+    if not getattr(config, "no_pvc", False) and corrected_maps is not None and corrected_maps is not preproc_maps:
+        from mrsiprep.reports.mrsi_pvc_overview import build_mrsi_pvc_sections
+
+        pvc_sections = build_mrsi_pvc_sections(config, subject, session, corrected_maps, preproc_maps)
+    ctx["qc_sections_mrsi_pvc"] = pvc_sections
     ctx = dict(ctx)
     ctx.update(corrected_maps=corrected_maps, tissue_4d=tissue_4d)
     return ctx
@@ -268,6 +277,7 @@ def step_reports(config, subject, session, ctx):
         "tissue": ctx["qc_sections_tissue"],
         "mrsi_raw": ctx["qc_sections_mrsi_raw"],
         "mrsi_preproc": ctx["qc_sections_mrsi_preproc"],
+        "mrsi_pvc": ctx.get("qc_sections_mrsi_pvc"),
         "t1_correction": ctx["qc_sections_t1_correction"],
         "t1w_alignment": ctx["qc_sections_t1w_alignment"],
         "mni_alignment": ctx["qc_sections_mni_alignment"],

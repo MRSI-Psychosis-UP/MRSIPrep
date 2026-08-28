@@ -46,7 +46,8 @@ class GenerateSubjectReportMinimalTests(GenerateSubjectReportFixture):
         out = generate_subject_report(self.config, "01", "01", outputs={})
         self.assertTrue(out.exists())
         html = out.read_text()
-        self.assertIn("<h1>MRSIPrep report: sub-01 ses-01</h1>", html)
+        self.assertIn("sub-01 ses-01</h1>", html)
+        self.assertIn("MRSIPrep report:", html)
         self.assertIn("No QC table available.", html)
         self.assertIn("preproc body", html)
         self.assertNotIn("id='t1-correction'", html)
@@ -58,8 +59,11 @@ class GenerateSubjectReportMinimalTests(GenerateSubjectReportFixture):
     def test_no_session_omits_ses_suffix(self):
         out = generate_subject_report(self.config, "01", None, outputs={})
         html = out.read_text()
-        self.assertIn("<title>MRSIPrep sub-01</title>", html)
-        self.assertIn("<h1>MRSIPrep report: sub-01</h1>", html)
+        # The BIDS project name now prefixes both, so assert on the
+        # subject/session part and on the absence of a ses- suffix.
+        self.assertIn("sub-01</title>", html)
+        self.assertIn("sub-01</h1>", html)
+        self.assertNotIn("ses-", html.split("</h1>")[0])
 
     def test_mrsi_raw_sections_appended_after_qc_table(self):
         out = generate_subject_report(
@@ -104,7 +108,7 @@ class GenerateSubjectReportRegionalTableTests(GenerateSubjectReportFixture):
 
 
 class GenerateSubjectReportParcelQcTests(GenerateSubjectReportFixture):
-    def test_summary_uses_first_per_parcel_coverage_but_raw_mean_crlb(self):
+    def test_coverage_tab_explains_qc_valid_fraction_instead_of_summarising_coverage(self):
         """anatomical_coverage_percent's mean is computed over the grouped
         (one-row-per-parcel) overview, while mean_crlb's mean is computed
         over the raw, ungrouped parcel_df -- two different populations when
@@ -118,10 +122,13 @@ class GenerateSubjectReportParcelQcTests(GenerateSubjectReportFixture):
         )
         out = generate_subject_report(self.config, "01", "01", outputs={"parcel_qc": parcel_qc_path})
         html = out.read_text()
-        # overview['anatomical_coverage_percent'].mean() over 2 unique parcels: (80+60)/2 = 70.0
-        self.assertIn("Mean anatomical MRSI coverage: <strong>70.0%</strong>", html)
-        # parcel_df['mean_crlb'].mean() over all 3 raw rows: (10+20+30)/3 = 20.0
-        self.assertIn("mean parcel CRLB: <strong>20.00</strong>", html)
+        # The coverage summary sentence was dropped; the tab now explains what
+        # qc_valid_fraction means instead, and ranks by it.
+        self.assertIn("qc_valid_fraction", html)
+        self.assertNotIn("Mean anatomical MRSI coverage", html)
+        self.assertNotIn("anatomical_coverage_percent", html)
+        # Worst-first ordering: the 0.700 parcel precedes the 0.850 one.
+        self.assertLess(html.index("Occipital"), html.index("Frontal"))
         self.assertIn("Frontal", html)
         self.assertIn("Occipital", html)
         self.assertNotIn("No parcelwise QC table available.", html)

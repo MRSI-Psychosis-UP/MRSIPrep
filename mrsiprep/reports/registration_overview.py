@@ -95,6 +95,14 @@ def build_mni_alignment_sections(
 
     if mni_ref_map_path is not None and Path(mni_ref_map_path).exists():
         template = _load_mni152_head_template(mni_resolution)
+        # Name the template and its resolution explicitly: "MNI152" alone spans
+        # several distinct templates, and the resolution decides what the
+        # overlay can actually show.
+        space_name = getattr(config, "output_spaces", None) or ["MNI152NLin2009cAsym"]
+        template_label = (
+            f"full-head <code>{space_name[0] if space_name else 'MNI152NLin2009cAsym'}</code> "
+            f"template at {mni_resolution} mm"
+        )
         template_data = np.squeeze(nib.as_closest_canonical(template).get_fdata())
         mni_data = np.squeeze(load_canonical_data(mni_ref_map_path))
         template_slices = triplanar_slices(template_data)
@@ -109,13 +117,13 @@ def build_mni_alignment_sections(
             colorbar_label=config.ref_met,
         )
         body = (
-            f"<p>Reference metabolite map (<code>{config.ref_met}</code>) overlaid on the full-head MNI152 template, "
-            f"opaque so placement inside the brain can be verified post-alignment.</p><img src='figures/{mni_png.name}'>"
+            f"<p>Reference metabolite map (<code>{config.ref_met}</code>) overlaid on the "
+            f"{template_label}.</p><img src='figures/{mni_png.name}'>"
         )
     else:
         body = "<p>MNI-space registration not available for this configuration.</p>"
 
-    return [("MNI-space alignment", body)]
+    return [("Template-space alignment", body)]
 
 
 def _load_mni152_head_template(resolution: int | None):
