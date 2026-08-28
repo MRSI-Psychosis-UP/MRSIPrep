@@ -11,6 +11,7 @@ STEP_SEQUENCE graph shape, not per-step argument wiring).
 """
 
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -163,13 +164,37 @@ class StepTissueQcTests(unittest.TestCase):
 class StepPvcTests(unittest.TestCase):
     def test_wires_ctx_in_and_out(self):
         ctx = {"mrsi": "mrsi_obj", "tissue": "tissue_obj"}
-        with patch("mrsiprep.workflows.participant._step_pvc", return_value=("corrected", "tissue_4d")) as step:
+        with patch("mrsiprep.workflows.participant._step_pvc", return_value=("corrected", "tissue_4d")) as step, patch(
+            "mrsiprep.reports.mrsi_pvc_overview.build_mrsi_pvc_sections", return_value=["pvc_qc"]
+        ):
             result = N.step_pvc(_fake_config(), _SUBJECT, _SESSION, ctx)
 
         self.assertEqual(step.call_args[0][3], "mrsi_obj")
         self.assertEqual(step.call_args[0][4], "tissue_obj")
         self.assertEqual(result["corrected_maps"], "corrected")
         self.assertEqual(result["tissue_4d"], "tissue_4d")
+
+    def test_pvc_qc_sections_are_built_when_pvc_ran(self):
+        ctx = {"mrsi": SimpleNamespace(preproc_maps={"CrPCr": Path("/x/pre.nii.gz")}), "tissue": "tissue_obj"}
+        corrected = {"CrPCr": Path("/x/pvc.nii.gz")}
+        with patch("mrsiprep.workflows.participant._step_pvc", return_value=(corrected, "tissue_4d")), patch(
+            "mrsiprep.reports.mrsi_pvc_overview.build_mrsi_pvc_sections", return_value=["pvc_qc"]
+        ) as build:
+            result = N.step_pvc(_fake_config(), _SUBJECT, _SESSION, ctx)
+        build.assert_called_once()
+        self.assertEqual(result["qc_sections_mrsi_pvc"], ["pvc_qc"])
+
+    def test_no_pvc_leaves_the_tab_out_entirely(self):
+        """--no-pvc returns the preproc maps unchanged, so a PVC tab would show
+        images identical to the ones already in MRSI Raw QC."""
+        preproc = {"CrPCr": Path("/x/pre.nii.gz")}
+        ctx = {"mrsi": SimpleNamespace(preproc_maps=preproc), "tissue": None}
+        with patch("mrsiprep.workflows.participant._step_pvc", return_value=(preproc, None)), patch(
+            "mrsiprep.reports.mrsi_pvc_overview.build_mrsi_pvc_sections"
+        ) as build:
+            result = N.step_pvc(_fake_config(), _SUBJECT, _SESSION, ctx)
+        build.assert_not_called()
+        self.assertIsNone(result["qc_sections_mrsi_pvc"])
 
 
 class StepResamplingTests(unittest.TestCase):

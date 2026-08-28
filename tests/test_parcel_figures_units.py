@@ -71,22 +71,23 @@ class WriteParcelCoverageFigureTests(unittest.TestCase):
         path = self._write_tsv({"parcel_id": [1], "anatomical_coverage_percent": [100.0]})
         config = MagicMock(derivative_dir=self.tmp / "derivatives")
         with patch("mrsiprep.reports.parcel_figures.coverage_figure_derivative", return_value=self.tmp / "out.png"), patch(
-            "mrsiprep.reports.parcel_figures.render_triplanar_png", return_value=self.tmp / "out.png"
+            "mrsiprep.reports.parcel_figures._render_axial_montage", return_value=self.tmp / "out.png"
         ) as render:
             write_parcel_coverage_figure(config, "01", "01", self.atlas_path, path)
         self.assertEqual(render.call_args.kwargs["vmin"], 0.0)
         self.assertEqual(render.call_args.kwargs["vmax"], 100.0)
 
-    def test_masks_zero_and_below_voxels(self):
+    def test_passes_the_coverage_volume_and_slice_indices(self):
         path = self._write_tsv({"parcel_id": [1], "anatomical_coverage_percent": [50.0]})
         config = MagicMock(derivative_dir=self.tmp / "derivatives")
         with patch("mrsiprep.reports.parcel_figures.coverage_figure_derivative", return_value=self.tmp / "out.png"), patch(
-            "mrsiprep.reports.parcel_figures.render_triplanar_png", return_value=self.tmp / "out.png"
+            "mrsiprep.reports.parcel_figures._render_axial_montage", return_value=self.tmp / "out.png"
         ) as render:
             write_parcel_coverage_figure(config, "01", "01", self.atlas_path, path)
-        masked_slices = render.call_args.kwargs["background_slices"]
-        for plane_data in masked_slices.values():
-            self.assertIsInstance(plane_data, np.ma.MaskedArray)
+        volume, indices = render.call_args.args[1], render.call_args.args[2]
+        self.assertEqual(volume.ndim, 3)
+        # Zero-valued voxels are masked inside the renderer, not by the caller.
+        self.assertEqual(len(indices), 10)
 
 
 class WriteParcelCrlbFiguresTests(unittest.TestCase):
@@ -117,7 +118,7 @@ class WriteParcelCrlbFiguresTests(unittest.TestCase):
         path = self._write_tsv({"parcel_id": [1], "mean_crlb": [5.0], "metabolite": ["CrPCr"]})
         self.assertEqual(write_parcel_crlb_figures(self.config, "01", "01", self.atlas_t1, path, t1_to_mni=None), [])
 
-    def test_writes_one_figure_per_metabolite_with_a_valid_crlb(self):
+    def test_writes_one_grid_with_a_row_per_metabolite(self):
         path = self._write_tsv(
             {
                 "parcel_id": [1, 2, 1, 2],
@@ -125,28 +126,48 @@ class WriteParcelCrlbFiguresTests(unittest.TestCase):
                 "metabolite": ["CrPCr", "CrPCr", "GluGln", "GluGln"],
             }
         )
-        fake_atlas = np.array([[1, 2]])
+        fake_atlas = np.zeros((2, 2, 3), dtype=int)
+        fake_atlas[0, 0, :] = 1
+        fake_atlas[1, 1, :] = 2
         with patch("mrsiprep.reports.parcel_figures._resample_atlas_to_mni", return_value=(fake_atlas, np.eye(4))), patch(
-            "mrsiprep.reports.parcel_figures.coverage_figure_derivative", side_effect=lambda *a, **k: self.tmp / f"{k['met']}.png"
-        ), patch("nibabel.Nifti1Image"), patch("nilearn.plotting.plot_glass_brain") as plot_glass_brain:
-            display = MagicMock()
-            plot_glass_brain.return_value = display
+            "mrsiprep.reports.parcel_figures.coverage_figure_derivative", side_effect=lambda *a, **k: self.tmp / f"{k.get('met', 'crlbgrid')}.png"
+        ), patch("mrsiprep.reports.parcel_figures._render_axial_grid") as grid:
             outputs = write_parcel_crlb_figures(self.config, "01", "01", self.atlas_t1, path, t1_to_mni=["x"])
 
-        self.assertEqual(len(outputs), 2)
-        self.assertEqual(plot_glass_brain.call_count, 2)
-        self.assertEqual(display.savefig.call_count, 2)
+        # A single figure with one row per metabolite, not one figure each:
+        # the panel exists to compare metabolites at identical anatomy.
+        self.assertEqual(len(outputs), 1)
+        grid.assert_called_once()
+        rows = grid.call_args.args[1]
+        self.assertEqual([label for label, _volume in rows], ["CrPCr", "GluGln"])
+        # Semi-transparent so the template underneath places each parcel.
+        self.assertLess(grid.call_args.kwargs["alpha"], 1.0)
+
+    def test_removes_superseded_per_metabolite_figures(self):
+        path = self._write_tsv({"parcel_id": [1], "mean_crlb": [5.0], "metabolite": ["CrPCr"]})
+        figures = self.tmp / "figures"
+        figures.mkdir(exist_ok=True)
+        stale = figures / "sub-01_met-CrPCr_desc-parcelcrlbquality.png"
+        stale.write_bytes(b"x")
+        fake_atlas = np.zeros((2, 2, 3), dtype=int)
+        fake_atlas[0, 0, :] = 1
+        with patch("mrsiprep.reports.parcel_figures._resample_atlas_to_mni", return_value=(fake_atlas, np.eye(4))), patch(
+            "mrsiprep.reports.parcel_figures.coverage_figure_derivative",
+            return_value=figures / "sub-01_desc-parcelcrlbquality.png",
+        ), patch("mrsiprep.reports.parcel_figures._render_axial_grid"):
+            write_parcel_crlb_figures(self.config, "01", "01", self.atlas_t1, path, t1_to_mni=["x"])
+        self.assertFalse(stale.exists(), "the grid replaces these, so they must not linger")
 
     def test_skips_metabolite_with_no_valid_crlb_values(self):
         path = self._write_tsv({"parcel_id": [1], "mean_crlb": [float("nan")], "metabolite": ["CrPCr"]})
         fake_atlas = np.array([[1]])
         with patch("mrsiprep.reports.parcel_figures._resample_atlas_to_mni", return_value=(fake_atlas, np.eye(4))), patch(
-            "nilearn.plotting.plot_glass_brain"
-        ) as plot_glass_brain:
+            "mrsiprep.reports.parcel_figures._render_axial_grid"
+        ) as montage:
             outputs = write_parcel_crlb_figures(self.config, "01", "01", self.atlas_t1, path, t1_to_mni=["x"])
 
         self.assertEqual(outputs, [])
-        plot_glass_brain.assert_not_called()
+        montage.assert_not_called()
 
     def test_thresholds_reliable_vs_unreliable_by_quality_threshold(self):
         path = self._write_tsv(
@@ -156,7 +177,9 @@ class WriteParcelCrlbFiguresTests(unittest.TestCase):
                 "metabolite": ["CrPCr", "CrPCr"],
             }
         )
-        fake_atlas = np.array([[1, 2]])
+        fake_atlas = np.zeros((2, 2, 3), dtype=int)
+        fake_atlas[0, 0, :] = 1
+        fake_atlas[1, 1, :] = 2
         captured = {}
 
         def fake_value_volume(atlas, mapping):
