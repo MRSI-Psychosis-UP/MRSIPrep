@@ -43,13 +43,13 @@ class WriteParcelCoverageFigureTests(unittest.TestCase):
             captured = {}
             from mrsiprep.reports import parcel_figures as parcel_figures_module
 
-            original = parcel_figures_module.render_triplanar_png
+            original = parcel_figures_module._render_axial_montage
 
             def _capture(*args, **kwargs):
                 captured.update(kwargs)
                 return original(*args, **kwargs)
 
-            with mock.patch.object(parcel_figures_module, "render_triplanar_png", side_effect=_capture):
+            with mock.patch.object(parcel_figures_module, "_render_axial_montage", side_effect=_capture):
                 write_parcel_coverage_figure(config, "S001", "V1", atlas_path, parcel_qc_tsv)
 
             self.assertEqual(captured.get("vmin"), 0.0)
