@@ -80,6 +80,55 @@ document.addEventListener('DOMContentLoaded', function () {
 """
 
 
+def _build_tabs(config, subject, session, out, outputs, qc_sections, mrsi_qc_body,
+                leakage_df, parcel_qc_summary, parcel_qc_html, regional_html):
+    """Assemble the (id, label, body) tabs in pipeline order.
+
+    Split out of generate_subject_report: the tab list is the part that
+    changes whenever the report is reorganised, and inlining it pushed that
+    function past the project's complexity limits.
+    """
+    pvc_sections = qc_sections.get("mrsi_pvc")
+    t1_correction_sections = qc_sections.get("t1_correction")
+    connectivity_sections = qc_sections.get("connectivity")
+
+    # Order is deliberate and follows the pipeline: raw signal, then what was
+    # done to it, then where it was put, then what was measured from it.
+    tabs: list[tuple[str, str, str]] = [
+        ("mrsi-raw-qc", "MRSI Raw QC", mrsi_qc_body),
+    ]
+    if pvc_sections is not None:
+        tabs.append(("mrsi-pvc", "MRSI PVC", _sections_html(pvc_sections)))
+    tabs.append(("spike-filter", "Spike Filter", _sections_html(qc_sections.get("mrsi_preproc"))))
+    if t1_correction_sections is not None:
+        tabs.append(("t1-correction", "T1 correction", _sections_html(t1_correction_sections)))
+    tabs.append(("anatomical", "Anatomical", _sections_html(qc_sections.get("tissue"))))
+    tabs.append((
+        "t1w-alignment",
+        "T1-space alignment",
+        _sections_html(qc_sections.get("t1w_alignment")) + leakage_table_html(leakage_df, "T1w"),
+    ))
+    tabs.append((
+        "mni-alignment",
+        "Template-space alignment",
+        _sections_html(qc_sections.get("mni_alignment")) + leakage_table_html(leakage_df, "MNI152NLin2009cAsym"),
+    ))
+    tabs.append((
+        "coverage",
+        "Coverage",
+        _parcel_figures_html(out.parent) + parcel_qc_summary
+        + (parcel_qc_html or "<p>No parcelwise QC table available.</p>"),
+    ))
+    tabs.append(("parcellation", "Parcellation", _sections_html(qc_sections.get("parcellation")) + regional_html))
+    if connectivity_sections is not None:
+        tabs.append(("connectivity", "Connectivity", _sections_html(connectivity_sections)))
+    tabs.append(("acquisition", "MRSinMRS", _mrsinmrs_html(config, subject, session)))
+    tabs.append(("preproc", "PrepParams", _sections_html(build_preproc_overview_sections(config))))
+    tabs.append(("runtime", "Runtime", _sections_html(qc_sections.get("runtime"))))
+    tabs.append(("outputs", "Outputs", _outputs_html(outputs, out.parent.parent.parent)))
+    return tabs
+
+
 def generate_subject_report(config, subject: str, session: str | None, outputs: dict, qc_sections: dict | None = None) -> Path:
     qc_sections = qc_sections or {}
     out = coverage_report_html(config.derivative_dir, subject, session)
@@ -124,45 +173,10 @@ def generate_subject_report(config, subject: str, session: str | None, outputs: 
         mrsi_qc_body += "<h3>Raw metabolite maps (pre-pipeline)</h3>" + _sections_html(mrsi_raw_sections)
 
     project_name = _bids_project_name(config)
-
-    pvc_sections = qc_sections.get("mrsi_pvc")
-    t1_correction_sections = qc_sections.get("t1_correction")
-    connectivity_sections = qc_sections.get("connectivity")
-
-    # Order is deliberate and follows the pipeline: raw signal, then what was
-    # done to it, then where it was put, then what was measured from it.
-    tabs: list[tuple[str, str, str]] = [
-        ("mrsi-raw-qc", "MRSI Raw QC", mrsi_qc_body),
-    ]
-    if pvc_sections is not None:
-        tabs.append(("mrsi-pvc", "MRSI PVC", _sections_html(pvc_sections)))
-    tabs.append(("spike-filter", "Spike Filter", _sections_html(qc_sections.get("mrsi_preproc"))))
-    if t1_correction_sections is not None:
-        tabs.append(("t1-correction", "T1 correction", _sections_html(t1_correction_sections)))
-    tabs.append(("anatomical", "Anatomical", _sections_html(qc_sections.get("tissue"))))
-    tabs.append((
-        "t1w-alignment",
-        "T1-space alignment",
-        _sections_html(qc_sections.get("t1w_alignment")) + leakage_table_html(leakage_df, "T1w"),
-    ))
-    tabs.append((
-        "mni-alignment",
-        "Template-space alignment",
-        _sections_html(qc_sections.get("mni_alignment")) + leakage_table_html(leakage_df, "MNI152NLin2009cAsym"),
-    ))
-    tabs.append((
-        "coverage",
-        "Coverage",
-        _parcel_figures_html(out.parent) + parcel_qc_summary
-        + (parcel_qc_html or "<p>No parcelwise QC table available.</p>"),
-    ))
-    tabs.append(("parcellation", "Parcellation", _sections_html(qc_sections.get("parcellation")) + regional_html))
-    if connectivity_sections is not None:
-        tabs.append(("connectivity", "Connectivity", _sections_html(connectivity_sections)))
-    tabs.append(("acquisition", "MRSinMRS", _mrsinmrs_html(config, subject, session)))
-    tabs.append(("preproc", "PrepParams", _sections_html(build_preproc_overview_sections(config))))
-    tabs.append(("runtime", "Runtime", _sections_html(qc_sections.get("runtime"))))
-    tabs.append(("outputs", "Outputs", _outputs_html(outputs, out.parent.parent.parent)))
+    tabs = _build_tabs(
+        config, subject, session, out, outputs, qc_sections, mrsi_qc_body,
+        leakage_df, parcel_qc_summary, parcel_qc_html, regional_html,
+    )
 
     lines = [
         "<!doctype html>",
