@@ -1,7 +1,41 @@
 # Changelog
 
-## Unreleased
+## 1.15.0
 
+### QC report
+
+- **Tabs reordered and renamed** to follow the pipeline: MRSI Raw QC,
+  MRSI PVC, Spike Filter, Anatomical, T1-space alignment, Template-space
+  alignment, Coverage, Parcellation, Connectivity, MRSinMRS, PrepParams,
+  Runtime, Outputs. `Preproc` is now **PrepParams**,
+  `Coverage & Alignment` is **Coverage**, and `MNI-space alignment` is
+  **Template-space alignment** (which now names the exact template and its
+  resolution in mm).
+- **New MRSI PVC tab**, when partial-volume correction ran: one
+  10-slice axial montage per metabolite, at the same slices as MRSI Raw
+  QC so the two can be compared by flipping between them. Omitted under
+  `--no-pvc`, where the maps are identical to the uncorrected ones.
+- **Coverage tab** is ranked by `qc_valid_fraction` (worst first) instead
+  of `anatomical_coverage_percent`, and states the per-voxel thresholds
+  actually in force for the run rather than a summary sentence.
+- **Anatomical coverage** is shown as 10 equally-spaced axial slices
+  instead of a triplanar view.
+- **Parcelwise CRLB quality** is one metabolite x slice grid over the
+  normalization template, semi-transparent so anatomy reads through. This
+  replaces the glass-brain projection, which collapsed the volume onto
+  three planes and so could not distinguish a deep unreliable parcel from
+  a superficial one.
+- **Outputs** is a `tree`-style listing of the recording's own derivative
+  directory, excluding `reports/`.
+- Tables sort on header click; the report title carries the BIDS dataset
+  name.
+
+### Fixes
+
+- **Finished recordings now display DONE rather than RUNNING** in the
+  parallel status table. The listener discarded messages still queued at
+  shutdown, and the worker's completion message could be lost in transit
+  entirely; the parent now asserts each outcome from its own future.
 - **`--overwrite` now forces MRSI resampling to recompute.** Every other
   cached step (tissue segmentation, filtering, PVC, registration,
   subject templates) already treated `--overwrite` as "recompute
