@@ -56,5 +56,38 @@ class DebugStepTimingTests(unittest.TestCase):
         self.assertEqual(collect_timings(), [], "a freshly armed sink should start empty")
 
 
+class StepOutcomeCaptureTests(unittest.TestCase):
+    """The Runtime report can only report an outcome the sink recorded."""
+
+    def setUp(self):
+        set_timing_sink(True)
+        self.addCleanup(set_timing_sink, False)
+
+    def test_successful_step_records_processed(self):
+        debug = Debug(verbose=0)
+        with debug.step("Tissue segmentation"):
+            pass
+        entry = collect_timings()[-1]
+        self.assertEqual(entry["outcome"], "processed")
+        self.assertEqual(entry["step"], "Tissue segmentation")
+
+    def test_raising_step_records_failed_and_still_times_it(self):
+        """A failed step keeps its duration: how long the run spent before
+        failing is the useful part."""
+        debug = Debug(verbose=0)
+        with self.assertRaises(ValueError):
+            with debug.step("Reports"):
+                raise ValueError("boom")
+        entry = collect_timings()[-1]
+        self.assertEqual(entry["outcome"], "failed")
+        self.assertGreaterEqual(entry["seconds"], 0.0)
+
+    def test_the_exception_still_propagates(self):
+        debug = Debug(verbose=0)
+        with self.assertRaisesRegex(RuntimeError, "propagated"):
+            with debug.step("X"):
+                raise RuntimeError("propagated")
+
+
 if __name__ == "__main__":
     unittest.main()

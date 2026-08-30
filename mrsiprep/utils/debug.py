@@ -251,6 +251,11 @@ class Debug:
         # (as _prepare_message's tag-prefixed form would) is pure noise there.
         message_for_timing = " ".join(str(item) for item in messages if str(item).strip()) or "(unnamed step)"
         start = time.monotonic()
+        # Set by the finally block from whether the body raised, so the Runtime
+        # report can say what happened to a step rather than only how long it
+        # took. A step that raised still gets a row: its duration is how long
+        # the run spent before failing, which is the useful part.
+        outcome = "processed"
         try:
             if self.verbose < 1:
                 yield
@@ -305,9 +310,18 @@ class Debug:
                     status.stop()
                     _logbook_write("DONE", message)
                     self.console.print(f"{prefix}{timestamp()} [success][   ✓    ][/success] {escaped}")
+        except BaseException:
+            outcome = "failed"
+            raise
         finally:
             if _TIMINGS is not None:
-                _TIMINGS.append({"step": message_for_timing or "(unnamed step)", "seconds": time.monotonic() - start})
+                _TIMINGS.append(
+                    {
+                        "step": message_for_timing or "(unnamed step)",
+                        "seconds": time.monotonic() - start,
+                        "outcome": outcome,
+                    }
+                )
 
     def separator(self):
         if self.verbose >= 1:

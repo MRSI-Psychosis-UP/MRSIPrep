@@ -22,23 +22,71 @@ def _format_seconds(seconds: float) -> str:
     return f"{int(hours)}h {int(minutes)}m {remainder:04.1f}s"
 
 
+_OUTCOME_STYLE = {
+    "processed": ("PROC", "#137333"),
+    "failed": ("FAILED", "#c5221f"),
+    "skipped": ("SKIPPED", "#8a8a8a"),
+}
+
+
+def _outcome_cell(outcome: str) -> str:
+    label, colour = _OUTCOME_STYLE.get(outcome, (outcome.upper(), "#8a8a8a"))
+    return f"<td style='color:{colour};font-weight:600'>{label}</td>"
+
+
+def _skipped_steps(config, timed_steps: set) -> list[dict]:
+    """Steps the config gated out, which therefore have no timing row.
+
+    A skipped step never enters ``Debug.step()``, so it is invisible to the
+    timing sink -- but "not in the table" and "ran instantly" look identical
+    to a reader. The provenance trace already derives what was gated and why,
+    so reuse it rather than threading state through the workflow.
+    """
+    try:
+        from mrsiprep.utils.provenance import pipeline_trace
+
+        trace = pipeline_trace(config)
+    except Exception:
+        # The trace is derived from config flags; if that cannot be built the
+        # timings are still worth showing on their own.
+        return []
+    return [
+        {"step": entry["step"], "seconds": None, "outcome": "skipped", "reason": entry.get("reason", "")}
+        for entry in trace
+        if not entry.get("ran", True) and entry["step"] not in timed_steps
+    ]
+
+
 def build_runtime_qc_sections(config, step_timings: list[dict]) -> list[tuple[str, str]]:
     """Returns the Runtime tab's (heading, body_html) sections: a table of
-    per-step wall-clock duration, the run's total so far, and the
+    per-step wall-clock duration and outcome, the run's total so far, and the
     nproc/nthreads context it ran under."""
     if not step_timings:
         return [("Runtime", "<p>No timing data recorded for this run.</p>")]
 
     total = sum(entry["seconds"] for entry in step_timings)
-    rows = "".join(
-        f"<tr><td>{entry['step']}</td><td>{_format_seconds(entry['seconds'])}</td>"
-        f"<td>{100 * entry['seconds'] / total:.1f}%</td></tr>"
-        for entry in step_timings
-    )
+    entries = list(step_timings) + _skipped_steps(config, {entry["step"] for entry in step_timings})
+
+    rows = ""
+    for entry in entries:
+        seconds = entry.get("seconds")
+        if seconds is None:
+            duration, share = "-", "-"
+        else:
+            duration = _format_seconds(seconds)
+            share = f"{100 * seconds / total:.1f}%" if total else "-"
+        reason = entry.get("reason") or ""
+        step = f"{entry['step']}<br><small style='color:#8a8a8a'>{reason}</small>" if reason else entry["step"]
+        rows += (
+            f"<tr><td>{step}</td>{_outcome_cell(entry.get('outcome', 'processed'))}"
+            f"<td>{duration}</td><td>{share}</td></tr>"
+        )
+
     table = (
-        "<table><tr><th>Step</th><th>Duration</th><th>% of total</th></tr>"
+        "<table><tr><th>Step</th><th>Outcome</th><th>Duration</th><th>% of total</th></tr>"
         + rows
-        + f"<tr><td><strong>Total (through report generation)</strong></td><td><strong>{_format_seconds(total)}</strong></td><td>100.0%</td></tr>"
+        + "<tr><td><strong>Total (through report generation)</strong></td><td></td>"
+        + f"<td><strong>{_format_seconds(total)}</strong></td><td>100.0%</td></tr>"
         + "</table>"
     )
     context = (

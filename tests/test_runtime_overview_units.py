@@ -123,5 +123,61 @@ class BuildRuntimeQcSectionsTests(unittest.TestCase):
             self.assertRegex(percent, r"^\d+\.\d$")
 
 
+class StepOutcomeTests(unittest.TestCase):
+    """Duration alone does not say whether a step worked, and a step that was
+    gated out is absent entirely -- which reads the same as 'ran instantly'."""
+
+    def _config(self, **overrides):
+        base = dict(
+            nproc=1, nthreads=8, parcellation_mode="synthseg", no_pvc=True,
+            t1_correction="none", write_connectivity=False,
+        )
+        base.update(overrides)
+        return SimpleNamespace(**base)
+
+    def test_processed_and_failed_steps_are_labelled(self):
+        timings = [
+            {"step": "Tissue segmentation", "seconds": 10.0, "outcome": "processed"},
+            {"step": "Reports", "seconds": 2.0, "outcome": "failed"},
+        ]
+        _, body = build_runtime_qc_sections(self._config(), timings)[0]
+        self.assertIn("PROC", body)
+        self.assertIn("FAILED", body)
+
+    def test_outcome_defaults_to_processed_for_older_timing_entries(self):
+        # Entries recorded before the outcome field existed must still render.
+        _, body = build_runtime_qc_sections(self._config(), [{"step": "X", "seconds": 1.0}])[0]
+        self.assertIn("PROC", body)
+
+    def test_gated_steps_appear_as_skipped_with_their_reason(self):
+        timings = [{"step": "Tissue segmentation", "seconds": 10.0, "outcome": "processed"}]
+        _, body = build_runtime_qc_sections(self._config(), timings)[0]
+        self.assertIn("SKIPPED", body)
+        self.assertIn("Partial volume correction", body)
+        self.assertIn("--no-pvc", body)
+
+    def test_a_step_that_ran_is_not_also_listed_as_skipped(self):
+        """PVC ran here, so it must appear once with its duration, not twice."""
+        timings = [{"step": "Partial volume correction", "seconds": 5.0, "outcome": "processed"}]
+        _, body = build_runtime_qc_sections(self._config(no_pvc=False), timings)[0]
+        self.assertEqual(body.count("Partial volume correction"), 1)
+        self.assertNotIn("SKIPPED", body.split("Partial volume correction")[1][:80])
+
+    def test_skipped_rows_carry_no_duration_or_share(self):
+        timings = [{"step": "Tissue segmentation", "seconds": 10.0, "outcome": "processed"}]
+        _, body = build_runtime_qc_sections(self._config(), timings)[0]
+        skipped_row = [row for row in body.split("<tr>") if "SKIPPED" in row][0]
+        self.assertIn("<td>-</td>", skipped_row)
+
+    def test_percentages_still_sum_over_timed_steps_only(self):
+        timings = [
+            {"step": "A", "seconds": 30.0, "outcome": "processed"},
+            {"step": "B", "seconds": 10.0, "outcome": "processed"},
+        ]
+        _, body = build_runtime_qc_sections(self._config(), timings)[0]
+        self.assertIn("75.0%", body)
+        self.assertIn("25.0%", body)
+
+
 if __name__ == "__main__":
     unittest.main()
