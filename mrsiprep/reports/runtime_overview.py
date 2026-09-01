@@ -71,10 +71,12 @@ def _skipped_steps(config, timed_steps: set) -> list[dict]:
         from mrsiprep.utils.provenance import pipeline_trace
 
         trace = pipeline_trace(config)
-    except Exception:
-        # The trace is derived from config flags; if that cannot be built the
-        # timings are still worth showing on their own.
-        return []
+    except (ImportError, AttributeError, TypeError) as exc:
+        # The trace is derived from config flags, so a config missing one is
+        # the only realistic failure. Surface it in the report rather than
+        # silently dropping every N/A row -- when this except was broad it hid
+        # a genuine breakage and the rows just vanished.
+        return [{"step": f"(pipeline trace unavailable: {exc})", "seconds": None, "outcome": "not_applied", "reason": ""}]
     return [
         {"step": entry["step"], "seconds": None, "outcome": "not_applied", "reason": entry.get("reason", "")}
         for entry in trace

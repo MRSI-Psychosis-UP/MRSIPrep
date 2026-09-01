@@ -173,7 +173,8 @@ class StepRegistrationTests(unittest.TestCase):
         with patch("mrsiprep.workflows.steps.run_registration_workflow", return_value="reg-result") as reg:
             result = P._step_registration(SimpleNamespace(), "01", "01", mrsi, anat, _debug())
         reg.assert_called_once_with(
-            unittest.mock.ANY, "01", "01", Path("ref"), Path("t1"), Path("anat_mask"), mrsi_mask=Path("mask"), subject_template=None
+            unittest.mock.ANY, "01", "01", Path("ref"), Path("t1"), Path("anat_mask"),
+            mrsi_mask=Path("mask"), subject_template=None, debug=unittest.mock.ANY
         )
         self.assertEqual(result, "reg-result")
 

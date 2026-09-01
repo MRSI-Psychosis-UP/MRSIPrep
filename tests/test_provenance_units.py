@@ -179,7 +179,7 @@ class PipelineTraceTests(unittest.TestCase):
                 "Tissue segmentation",
                 "Anatomical preparation",
                 "MRSI preprocessing",
-                "MRSI-T1w-MNI registration",
+                "MRSI-to-T1w registration",
                 "Resampling MRSI maps to T1w/MNI space",
                 "SynthSeg parcellation and QC",
                 "Regional metabolite extraction",

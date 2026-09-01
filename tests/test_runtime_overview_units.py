@@ -35,7 +35,15 @@ class FormatSecondsTests(unittest.TestCase):
 
 class BuildRuntimeQcSectionsTests(unittest.TestCase):
     def _config(self, **overrides):
-        base = dict(nproc=4, nthreads=8)
+        # Everything enabled, so pipeline_trace adds no "not applied" rows and
+        # these tests measure only the timed-step rendering. A config missing
+        # these fields is a programming error the report now surfaces, so the
+        # fixture has to be realistic rather than minimal.
+        base = dict(
+            nproc=4, nthreads=8, parcellation_mode="atlas", no_pvc=False,
+            t1_correction="literature", write_connectivity=True,
+            output_spaces=["MNI152NLin2009cAsym"], transform="mni",
+        )
         base.update(overrides)
         return SimpleNamespace(**base)
 
