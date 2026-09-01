@@ -18,6 +18,7 @@ from scipy import ndimage
 from scipy.ndimage import generic_filter
 from skimage.restoration import inpaint_biharmonic
 
+from mrsiprep.utils.debug import note_cache_hit, note_computed
 from mrsiprep.io.naming import mrsi_derivative
 from mrsiprep.utils.images import load_3d_data, save_nifti
 
@@ -31,8 +32,10 @@ def filter_metabolite_maps(config, subject: str, session: str | None, metabolite
     for met, path in metabolite_maps.items():
         out = mrsi_derivative(config.derivative_dir, subject, session, space="MRSI", met=met, desc="signalspikefilt", suffix_override="mrsi")
         if out.exists() and not (config.overwrite_filt or config.overwrite):
+            note_cache_hit()
             filtered[met] = out
             continue
+        note_computed()
         img, data = load_3d_data(path, dtype=np.float32, label=f"{met} map")
         data = np.nan_to_num(data, nan=0.0)
         max_cluster = config.spike_max_cluster_voxels

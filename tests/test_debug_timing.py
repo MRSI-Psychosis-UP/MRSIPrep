@@ -1,6 +1,12 @@
 import unittest
 
-from mrsiprep.utils.debug import Debug, collect_timings, set_timing_sink
+from mrsiprep.utils.debug import (
+    Debug,
+    collect_timings,
+    note_cache_hit,
+    note_computed,
+    set_timing_sink,
+)
 
 
 class DebugStepTimingTests(unittest.TestCase):
@@ -81,6 +87,30 @@ class StepOutcomeCaptureTests(unittest.TestCase):
         entry = collect_timings()[-1]
         self.assertEqual(entry["outcome"], "failed")
         self.assertGreaterEqual(entry["seconds"], 0.0)
+
+    def test_a_step_that_only_reused_outputs_is_marked_cached(self):
+        debug = Debug(verbose=0)
+        with debug.step("MRSI-T1w-MNI registration"):
+            note_cache_hit()
+            note_cache_hit()
+        self.assertEqual(collect_timings()[-1]["outcome"], "cached")
+
+    def test_a_step_that_computed_anything_is_not_cached(self):
+        """Partial reuse is still real work; calling it cached would understate
+        what the run did."""
+        debug = Debug(verbose=0)
+        with debug.step("Resampling"):
+            note_cache_hit()
+            note_computed()
+        self.assertEqual(collect_timings()[-1]["outcome"], "processed")
+
+    def test_a_failed_step_is_failed_even_if_it_reused_outputs_first(self):
+        debug = Debug(verbose=0)
+        with self.assertRaises(ValueError):
+            with debug.step("PVC"):
+                note_cache_hit()
+                raise ValueError("boom")
+        self.assertEqual(collect_timings()[-1]["outcome"], "failed")
 
     def test_the_exception_still_propagates(self):
         debug = Debug(verbose=0)

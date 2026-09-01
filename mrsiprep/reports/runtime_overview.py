@@ -22,11 +22,30 @@ def _format_seconds(seconds: float) -> str:
     return f"{int(hours)}h {int(minutes)}m {remainder:04.1f}s"
 
 
+#: Four distinct things a step can have done, which "skipped" conflated:
+#:   processed  - work was done this run
+#:   cached     - every output already existed and was reused (no --overwrite)
+#:   not applied- the configuration never asked for this step at all
+#:   failed     - the step raised
+#: "Cached" and "not applied" are different questions for the reader: one is
+#: "why was this run fast", the other is "why is this output missing".
 _OUTCOME_STYLE = {
     "processed": ("PROC", "#137333"),
+    "cached": ("REUSED", "#1a73e8"),
     "failed": ("FAILED", "#c5221f"),
-    "skipped": ("SKIPPED", "#8a8a8a"),
+    "not_applied": ("N/A", "#8a8a8a"),
 }
+
+
+_OUTCOME_LEGEND = (
+    "<p><small>"
+    "<b style='color:#137333'>PROC</b> computed this run &nbsp;&middot;&nbsp; "
+    "<b style='color:#1a73e8'>REUSED</b> existing outputs reused (re-run with "
+    "<code>--overwrite</code> to recompute) &nbsp;&middot;&nbsp; "
+    "<b style='color:#8a8a8a'>N/A</b> not requested by this configuration &nbsp;&middot;&nbsp; "
+    "<b style='color:#c5221f'>FAILED</b> raised an error"
+    "</small></p>"
+)
 
 
 def _outcome_cell(outcome: str) -> str:
@@ -35,9 +54,15 @@ def _outcome_cell(outcome: str) -> str:
 
 
 def _skipped_steps(config, timed_steps: set) -> list[dict]:
-    """Steps the config gated out, which therefore have no timing row.
+    """Steps the configuration never asked for, which have no timing row.
 
-    A skipped step never enters ``Debug.step()``, so it is invisible to the
+    Deliberately *not* called "skipped": a step can be absent from a run for
+    two unrelated reasons, and conflating them hides the one the reader
+    usually cares about. This function covers only the configuration case
+    (``--no-pvc``, ``--t1-correction none``); a step whose outputs already
+    existed did run, is timed, and is reported as REUSED instead.
+
+    Such a step never enters ``Debug.step()``, so it is invisible to the
     timing sink -- but "not in the table" and "ran instantly" look identical
     to a reader. The provenance trace already derives what was gated and why,
     so reuse it rather than threading state through the workflow.
@@ -51,7 +76,7 @@ def _skipped_steps(config, timed_steps: set) -> list[dict]:
         # timings are still worth showing on their own.
         return []
     return [
-        {"step": entry["step"], "seconds": None, "outcome": "skipped", "reason": entry.get("reason", "")}
+        {"step": entry["step"], "seconds": None, "outcome": "not_applied", "reason": entry.get("reason", "")}
         for entry in trace
         if not entry.get("ran", True) and entry["step"] not in timed_steps
     ]
@@ -98,4 +123,4 @@ def build_runtime_qc_sections(config, step_timings: list[dict]) -> list[tuple[st
         "and any time spent before this recording's pipeline started (e.g. queued behind other recordings "
         "under <code>--nproc</code>).</p>"
     )
-    return [("Per-step duration", context + note + table)]
+    return [("Per-step duration", context + note + _OUTCOME_LEGEND + table)]

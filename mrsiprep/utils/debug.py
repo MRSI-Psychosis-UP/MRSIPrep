@@ -36,6 +36,22 @@ _STATUS_QUEUE = None
 # recording" works exactly like the logbook path does).
 _TIMINGS: list[dict] | None = None
 
+# Per-process tally of work done inside the current step, so a step that only
+# reused existing outputs can be reported as such. Every cache short-circuit
+# calls note_cache_hit(); every path that actually does the work calls
+# note_computed(). Debug.step() reads the delta across its own body.
+_WORK = {"cached": 0, "computed": 0}
+
+
+def note_cache_hit() -> None:
+    """An output already existed and was reused instead of recomputed."""
+    _WORK["cached"] += 1
+
+
+def note_computed() -> None:
+    """An output was actually produced by this run."""
+    _WORK["computed"] += 1
+
 
 def timestamp() -> str:
     """Day/month-hour:minute, e.g. 06/07-10:54."""
@@ -256,6 +272,7 @@ class Debug:
         # took. A step that raised still gets a row: its duration is how long
         # the run spent before failing, which is the useful part.
         outcome = "processed"
+        work_at_start = dict(_WORK)
         try:
             if self.verbose < 1:
                 yield
@@ -314,6 +331,14 @@ class Debug:
             outcome = "failed"
             raise
         finally:
+            if outcome != "failed":
+                cached = _WORK["cached"] - work_at_start["cached"]
+                computed = _WORK["computed"] - work_at_start["computed"]
+                # Only "cached" when nothing at all was recomputed. A step that
+                # reused some outputs and computed others did real work, and
+                # calling that cached would understate what the run did.
+                if cached and not computed:
+                    outcome = "cached"
             if _TIMINGS is not None:
                 _TIMINGS.append(
                     {

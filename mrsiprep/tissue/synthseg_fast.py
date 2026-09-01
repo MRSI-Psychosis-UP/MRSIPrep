@@ -9,6 +9,7 @@ from pathlib import Path
 import nibabel as nib
 import numpy as np
 from nibabel.processing import resample_from_to
+from mrsiprep.utils.debug import note_cache_hit, note_computed
 from mrsiprep.interfaces.fsl import run_fast
 from mrsiprep.io.naming import anat_derivative
 from mrsiprep.utils.images import save_nifti
@@ -116,8 +117,10 @@ def segment_t1_synthseg_fast(config, subject: str, session: str | None, t1_path:
     brain_out = synthseg_fast_brain_path(config, subject, session)
     brain_mask_out = synthseg_fast_brain_mask_path(config, subject, session)
     if all(path.exists() for path in [*outputs.values(), brain_out, brain_mask_out]) and not (config.overwrite_seg or config.overwrite):
+        note_cache_hit()
         return outputs
 
+    note_computed()
     t1_img = nib.load(str(t1_path))
     labels_native = _run_or_load_synthseg(config, t1_path, work_dir, subject, session)
     fast_mask = _write_synthseg_brain(
@@ -144,8 +147,10 @@ def _run_or_load_synthseg(config, t1_path: Path, work_dir: Path, subject: str, s
     mode = getattr(config, "synthseg_mode", "fast")
     native_labels = synthseg_native_labels_path(config, subject, session)
     if native_labels.exists() and not (config.overwrite_seg or config.overwrite):
+        note_cache_hit()
         return _load_labels(native_labels)
 
+    note_computed()
     synthseg_labels = work_dir / f"synthseg_parc-{mode}_labels.nii.gz"
     if not synthseg_labels.exists() or config.overwrite_seg or config.overwrite:
         synthseg_cmd = _find_mri_synthseg()

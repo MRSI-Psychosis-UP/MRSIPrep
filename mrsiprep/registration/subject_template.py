@@ -15,6 +15,7 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
+from mrsiprep.utils.debug import note_cache_hit, note_computed
 from mrsiprep.interfaces.ants import require_cli, run_cli
 from mrsiprep.registration.transforms import all_exist, ants_transform_prefix, transform_paths
 from mrsiprep.config.templates import template_t1w
@@ -56,8 +57,10 @@ def build_subject_template(config, subject: str, session_t1_paths: dict[str, Pat
         and all(all_exist(paths) for paths in per_session_forward.values())
     )
     if already_built and not (config.overwrite_template_reg or config.overwrite):
+        note_cache_hit()
         return SubjectTemplateResult(template_path, per_session_forward, mni_forward, mni_inverse)
 
+    note_computed()
     require_cli("antsMultivariateTemplateConstruction2.sh")
     require_cli("antsRegistrationSyN.sh")
 

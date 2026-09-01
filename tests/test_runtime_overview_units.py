@@ -149,24 +149,43 @@ class StepOutcomeTests(unittest.TestCase):
         _, body = build_runtime_qc_sections(self._config(), [{"step": "X", "seconds": 1.0}])[0]
         self.assertIn("PROC", body)
 
-    def test_gated_steps_appear_as_skipped_with_their_reason(self):
+    def test_config_gated_steps_read_as_not_applied_not_skipped(self):
+        """'Skipped' conflates two unrelated things. A step the config never
+        asked for is N/A; a step whose outputs already existed is REUSED."""
         timings = [{"step": "Tissue segmentation", "seconds": 10.0, "outcome": "processed"}]
         _, body = build_runtime_qc_sections(self._config(), timings)[0]
-        self.assertIn("SKIPPED", body)
+        self.assertIn("N/A", body)
+        self.assertNotIn("SKIPPED", body)
         self.assertIn("Partial volume correction", body)
         self.assertIn("--no-pvc", body)
+
+    def test_reused_outputs_are_distinguished_from_freshly_computed(self):
+        timings = [
+            {"step": "Tissue segmentation", "seconds": 40.0, "outcome": "processed"},
+            {"step": "MRSI-T1w-MNI registration", "seconds": 0.2, "outcome": "cached"},
+        ]
+        _, body = build_runtime_qc_sections(self._config(), timings)[0]
+        self.assertIn("REUSED", body)
+        self.assertIn("PROC", body)
+
+    def test_legend_explains_how_to_force_recomputation(self):
+        _, body = build_runtime_qc_sections(self._config(), [{"step": "X", "seconds": 1.0}])[0]
+        self.assertIn("--overwrite", body)
 
     def test_a_step_that_ran_is_not_also_listed_as_skipped(self):
         """PVC ran here, so it must appear once with its duration, not twice."""
         timings = [{"step": "Partial volume correction", "seconds": 5.0, "outcome": "processed"}]
         _, body = build_runtime_qc_sections(self._config(no_pvc=False), timings)[0]
         self.assertEqual(body.count("Partial volume correction"), 1)
-        self.assertNotIn("SKIPPED", body.split("Partial volume correction")[1][:80])
+        table = body[body.index("<table>"):]
+        self.assertNotIn("N/A", table.split("Partial volume correction")[1][:80])
 
     def test_skipped_rows_carry_no_duration_or_share(self):
         timings = [{"step": "Tissue segmentation", "seconds": 10.0, "outcome": "processed"}]
         _, body = build_runtime_qc_sections(self._config(), timings)[0]
-        skipped_row = [row for row in body.split("<tr>") if "SKIPPED" in row][0]
+        # Scope to the table: the legend also mentions N/A.
+        table = body[body.index("<table>"):]
+        skipped_row = [row for row in table.split("<tr>") if "N/A" in row][0]
         self.assertIn("<td>-</td>", skipped_row)
 
     def test_percentages_still_sum_over_timed_steps_only(self):
