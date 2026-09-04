@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from mrsiprep.utils.debug import note_cache_hit, note_computed
 from mrsiprep.interfaces.ants import register
 from mrsiprep.interfaces.fsl import default_fnirt_warpres, register_fnirt, register_flirt
 from mrsiprep.registration.transforms import all_exist, ants_transform_prefix, transform_paths
@@ -32,7 +33,9 @@ def run_mrsi_to_t1(
     forward = transform_paths(prefix, "forward", backend=backend, deformable=deformable)
     inverse = transform_paths(prefix, "inverse", backend=backend, deformable=deformable)
     if all_exist(forward) and all_exist(inverse) and not (config.overwrite_t1_reg or config.overwrite):
+        note_cache_hit()
         return MRSIToT1Result(forward, inverse, prefix)
+    note_computed()
     if backend == "fsl" and deformable:
         if moving_mask is None:
             raise ValueError("--fsl-deformable (FNIRT) requires an MRSI brainmask (moving_mask) but none was provided.")
