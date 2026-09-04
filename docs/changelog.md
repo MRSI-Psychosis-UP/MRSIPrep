@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.15.1
+
+### Runtime tab
+
+- **Each step now reports an outcome beside its duration**, which a
+  duration alone could not convey:
+  - `PROC` -- computed during this run.
+  - `REUSED` -- every output already existed and was reused because
+    `--overwrite` was not passed. The step ran but did no work.
+  - `N/A` -- the configuration never requested this step
+    (`--no-pvc`, `--t1-correction none`, `--write-connectivity` unset),
+    shown with the reason.
+  - `FAILED` -- the step raised.
+
+  "Skipped" previously conflated the middle two, which answer different
+  questions: one is "why was this run fast", the other "why is this
+  output missing".
+- **MRSI-to-T1w and T1w-to-template registration are reported
+  separately**, in the console step list and in the Runtime tab. They are
+  independent registrations with different failure modes and very
+  different costs, and one combined line hid which of the two a slow run
+  was spending its time in.
+
 ## 1.15.0
 
 ### QC report
