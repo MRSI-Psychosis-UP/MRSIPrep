@@ -1,6 +1,12 @@
 import unittest
 
-from mrsiprep.utils.debug import Debug, collect_timings, set_timing_sink
+from mrsiprep.utils.debug import (
+    Debug,
+    collect_timings,
+    note_cache_hit,
+    note_computed,
+    set_timing_sink,
+)
 
 
 class DebugStepTimingTests(unittest.TestCase):
@@ -54,6 +60,63 @@ class DebugStepTimingTests(unittest.TestCase):
         self.assertEqual(collect_timings(), [])
         set_timing_sink(True)
         self.assertEqual(collect_timings(), [], "a freshly armed sink should start empty")
+
+
+class StepOutcomeCaptureTests(unittest.TestCase):
+    """The Runtime report can only report an outcome the sink recorded."""
+
+    def setUp(self):
+        set_timing_sink(True)
+        self.addCleanup(set_timing_sink, False)
+
+    def test_successful_step_records_processed(self):
+        debug = Debug(verbose=0)
+        with debug.step("Tissue segmentation"):
+            pass
+        entry = collect_timings()[-1]
+        self.assertEqual(entry["outcome"], "processed")
+        self.assertEqual(entry["step"], "Tissue segmentation")
+
+    def test_raising_step_records_failed_and_still_times_it(self):
+        """A failed step keeps its duration: how long the run spent before
+        failing is the useful part."""
+        debug = Debug(verbose=0)
+        with self.assertRaises(ValueError):
+            with debug.step("Reports"):
+                raise ValueError("boom")
+        entry = collect_timings()[-1]
+        self.assertEqual(entry["outcome"], "failed")
+        self.assertGreaterEqual(entry["seconds"], 0.0)
+
+    def test_a_step_that_only_reused_outputs_is_marked_cached(self):
+        debug = Debug(verbose=0)
+        with debug.step("MRSI-T1w-MNI registration"):
+            note_cache_hit()
+            note_cache_hit()
+        self.assertEqual(collect_timings()[-1]["outcome"], "cached")
+
+    def test_a_step_that_computed_anything_is_not_cached(self):
+        """Partial reuse is still real work; calling it cached would understate
+        what the run did."""
+        debug = Debug(verbose=0)
+        with debug.step("Resampling"):
+            note_cache_hit()
+            note_computed()
+        self.assertEqual(collect_timings()[-1]["outcome"], "processed")
+
+    def test_a_failed_step_is_failed_even_if_it_reused_outputs_first(self):
+        debug = Debug(verbose=0)
+        with self.assertRaises(ValueError):
+            with debug.step("PVC"):
+                note_cache_hit()
+                raise ValueError("boom")
+        self.assertEqual(collect_timings()[-1]["outcome"], "failed")
+
+    def test_the_exception_still_propagates(self):
+        debug = Debug(verbose=0)
+        with self.assertRaisesRegex(RuntimeError, "propagated"):
+            with debug.step("X"):
+                raise RuntimeError("propagated")
 
 
 if __name__ == "__main__":

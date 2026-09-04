@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 
+from mrsiprep.utils.debug import note_cache_hit, note_computed
 from mrsiprep.io.naming import mrsi_derivative, resampling_work_path
 from mrsiprep.registration.transforms import apply_image_transform
 from mrsiprep.config.templates import template_t1w
@@ -24,7 +25,9 @@ def resample_ref_met_to_t1w(
     consumes it (full T1w-space resampling is opt-in via --output-mrsi-t1w)."""
     out = resampling_work_path(config.work_dir, subject, session, space="T1w", met=config.ref_met, desc="signal")
     if out.exists() and not (config.overwrite_transform or config.overwrite):
+        note_cache_hit()
         return out
+    note_computed()
     return apply_image_transform(t1_reference, ref_map, mrsi_to_t1, out, interpolation="linear", threads=config.nthreads)
 
 

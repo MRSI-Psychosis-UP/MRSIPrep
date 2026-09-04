@@ -8,6 +8,7 @@ from pathlib import Path
 import nibabel as nib
 import numpy as np
 
+from mrsiprep.utils.debug import note_cache_hit, note_computed
 from mrsiprep.io.naming import mrsi_derivative
 from mrsiprep.utils.images import load_3d_data, mean_resolution, save_nifti
 from mrsiprep.utils.subprocess_utils import run_checked
@@ -23,7 +24,9 @@ def create_tissue_4d(config, subject: str, session: str | None, tissue_mrsi: dic
     files, so it's a --work-dir scratch file rather than a derivative."""
     out = config.work_dir / f"sub-{subject}" / (f"ses-{session}" if session else "ses-none") / "pvc" / f"sub-{subject}_desc-4Dtissue_mrsi.nii.gz"
     if out.exists() and not (config.overwrite_pve or config.overwrite):
+        note_cache_hit()
         return out
+    note_computed()
     out.parent.mkdir(parents=True, exist_ok=True)
     ref_img = nib.load(str(reference))
     data = np.stack([load_3d_data(tissue_mrsi[label], dtype=np.float32, label=f"{label} tissue map")[1] for label in ("GM", "WM", "CSF")], axis=-1)
@@ -54,8 +57,10 @@ def run_pvc(
     for met, path in metabolite_maps.items():
         out = mrsi_derivative(config.derivative_dir, subject, session, space="MRSI", met=met, desc="signalpvc", suffix_override="mrsi")
         if out.exists() and not (config.overwrite_pve or config.overwrite):
+            note_cache_hit()
             out_maps[met] = out
             continue
+        note_computed()
         out.parent.mkdir(parents=True, exist_ok=True)
         # PETPVC's own direct RBV output, before mrsiprep's own overshoot/
         # negative-value clipping below -- a --work-dir scratch file (not a

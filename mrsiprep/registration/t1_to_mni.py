@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from mrsiprep.utils.debug import note_cache_hit, note_computed
 from mrsiprep.interfaces.ants import register
 from mrsiprep.interfaces.fsl import register_flirt
 from mrsiprep.registration.transforms import all_exist, ants_transform_prefix, transform_paths
@@ -28,7 +29,9 @@ def run_t1_to_mni(config, subject: str, session: str | None, t1_path: Path, mrsi
     resolution = config.resolution_for("MNI152NLin2009cAsym", t1_path, mrsi_reference, prefer_t1w=True)
     template = template_t1w(resolution)
     if all_exist(forward) and all_exist(inverse) and not (config.overwrite_template_reg or config.overwrite):
+        note_cache_hit()
         return T1ToMNIResult(forward, inverse, prefix, template)
+    note_computed()
     if config.normalization == "existing":
         raise FileNotFoundError(
             f"--normalization existing requires precomputed T1-to-MNI transforms at {prefix} "

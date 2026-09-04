@@ -211,5 +211,50 @@ class ReadRuntimeMetricsTests(unittest.TestCase):
             self.assertIsNone(read_runtime_metrics(config, "S001", "V1"))
 
 
+class RegistrationStageReportingTests(unittest.TestCase):
+    """The two registrations are timed separately.
+
+    They are independent, have different failure modes, and cost very
+    differently -- one combined figure hid which of the two a slow run was
+    actually spending its time in.
+    """
+
+    def _debug(self):
+        from contextlib import contextmanager
+
+        labels = []
+
+        class _Debug:
+            @contextmanager
+            def step(self, label):
+                labels.append(label)
+                yield
+
+        return _Debug(), labels
+
+    def test_both_stages_are_reported_when_the_template_stage_runs(self):
+        debug, labels = self._debug()
+        with patch(f"{MODULE}.run_mrsi_to_t1", return_value="m2t"), patch(
+            f"{MODULE}.run_t1_to_mni", return_value="t2m"
+        ):
+            run_registration_workflow(_config(), "S001", "V1", "REF", "T1", debug=debug)
+        self.assertEqual(labels, ["MRSI-to-T1w registration", "T1w-to-template registration"])
+
+    def test_only_the_mrsi_stage_is_reported_when_the_template_stage_is_gated_out(self):
+        debug, labels = self._debug()
+        with patch(f"{MODULE}.run_mrsi_to_t1", return_value="m2t"), patch(f"{MODULE}.run_t1_to_mni"):
+            run_registration_workflow(_config(output_spaces=["T1w"]), "S001", "V1", "REF", "T1", debug=debug)
+        self.assertEqual(labels, ["MRSI-to-T1w registration"])
+
+    def test_omitting_debug_still_runs_both_stages(self):
+        """Other callers pass no Debug; the workflow must not require one."""
+        with patch(f"{MODULE}.run_mrsi_to_t1", return_value="m2t"), patch(
+            f"{MODULE}.run_t1_to_mni", return_value="t2m"
+        ):
+            result = run_registration_workflow(_config(), "S001", "V1", "REF", "T1")
+        self.assertEqual(result.mrsi_to_t1, "m2t")
+        self.assertEqual(result.t1_to_mni, "t2m")
+
+
 if __name__ == "__main__":
     unittest.main()
