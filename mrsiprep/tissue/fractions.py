@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from mrsiprep.utils.debug import note_cache_hit, note_computed
 from mrsiprep.io.bids import BIDSLayout
 from mrsiprep.io.naming import anat_derivative, mrsi_derivative
 from mrsiprep.registration.transforms import apply_image_transform
@@ -61,8 +62,10 @@ def copy_tissue_to_derivatives(config, subject: str, session: str | None, tissue
     for label, path in tissue_t1.items():
         target = anat_derivative(config.derivative_dir, subject, session, space="T1w", label=label, suffix_override="probseg")
         if target.exists() and not (config.overwrite_seg or config.overwrite):
+            note_cache_hit()
             out[label] = target
             continue
+        note_computed()
         img = nib.load(str(path))
         out[label] = save_nifti(img.get_fdata().astype("float32"), img, target, dtype="float32")
     return out
@@ -93,7 +96,9 @@ def resample_tissue_to_mrsi(config, subject: str, session: str | None, tissue_t1
     for label, path in tissue_t1.items():
         target = mrsi_derivative(config.derivative_dir, subject, session, space="MRSI", label=label, suffix_override="probseg")
         if target.exists() and not (config.overwrite_seg or config.overwrite):
+            note_cache_hit()
             out[label] = target
             continue
+        note_computed()
         out[label] = apply_image_transform(mrsi_reference, path, t1_to_mrsi_transforms, target, interpolation="linear", threads=config.nthreads)
     return out

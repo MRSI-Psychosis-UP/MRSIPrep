@@ -26,6 +26,7 @@ def run_registration_workflow(
     registration_mask: Path | None = None,
     mrsi_mask: Path | None = None,
     subject_template=None,
+    debug=None,
 ) -> RegistrationResult:
     """Register one recording's MRSI reference to T1w, and T1w to MNI if requested.
 
@@ -54,11 +55,25 @@ def run_registration_workflow(
     :returns: :class:`RegistrationResult` with the MRSI→T1w transforms
         always set, and T1w→MNI transforms set only when that stage ran.
     """
-    mrsi_to_t1 = run_mrsi_to_t1(config, subject, session, mrsi_reference, registration_t1, fixed_mask=registration_mask, moving_mask=mrsi_mask)
+    from contextlib import nullcontext
+
+    def _stage(label):
+        """Time each registration separately when a Debug is supplied.
+
+        They are independent registrations with different failure modes and
+        very different costs, so one combined figure hid which of the two a
+        slow run was actually spending its time in.
+        """
+        return debug.step(label) if debug is not None else nullcontext()
+
+    with _stage("MRSI-to-T1w registration"):
+        mrsi_to_t1 = run_mrsi_to_t1(config, subject, session, mrsi_reference, registration_t1, fixed_mask=registration_mask, moving_mask=mrsi_mask)
+
     t1_to_mni = None
     if "MNI152NLin2009cAsym" in config.output_spaces or config.parcellation_mode == "atlas" or "mni" in config.transform:
-        if subject_template is not None and session is not None:
-            t1_to_mni = compose_longitudinal_t1_to_mni(config, subject, session, subject_template, registration_t1, mrsi_reference=mrsi_reference)
-        else:
-            t1_to_mni = run_t1_to_mni(config, subject, session, registration_t1, mrsi_reference=mrsi_reference)
+        with _stage("T1w-to-template registration"):
+            if subject_template is not None and session is not None:
+                t1_to_mni = compose_longitudinal_t1_to_mni(config, subject, session, subject_template, registration_t1, mrsi_reference=mrsi_reference)
+            else:
+                t1_to_mni = run_t1_to_mni(config, subject, session, registration_t1, mrsi_reference=mrsi_reference)
     return RegistrationResult(mrsi_to_t1=mrsi_to_t1, t1_to_mni=t1_to_mni)

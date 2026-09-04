@@ -123,6 +123,13 @@ def pipeline_trace(config) -> list[dict]:
         requested = _requested_parcellation_count(config)
         if requested > 1:
             parcellation_step += f" x{requested}"
+    # Same condition run_registration_workflow gates the stage on, so the
+    # trace cannot drift from what actually runs.
+    template_reg_ran = (
+        "MNI152NLin2009cAsym" in (getattr(config, "output_spaces", None) or [])
+        or config.parcellation_mode == "atlas"
+        or "mni" in (getattr(config, "transform", "") or "")
+    )
     pvc_ran = not config.no_pvc
     pvc_reason = "" if pvc_ran else "--no-pvc"
     t1corr_ran = config.t1_correction == "literature"
@@ -131,7 +138,12 @@ def pipeline_trace(config) -> list[dict]:
         {"step": "Anatomical preparation", "ran": True, "reason": ""},
         {"step": "MRSI preprocessing", "ran": True, "reason": ""},
         {"step": "T1 saturation correction", "ran": t1corr_ran, "reason": "" if t1corr_ran else "--t1-correction none"},
-        {"step": "MRSI-T1w-MNI registration", "ran": True, "reason": ""},
+        {"step": "MRSI-to-T1w registration", "ran": True, "reason": ""},
+        {
+            "step": "T1w-to-template registration",
+            "ran": template_reg_ran,
+            "reason": "" if template_reg_ran else "no template output space, atlas parcellation, or template transform requested",
+        },
         {"step": "Tissue probability maps in MRSI space", "ran": True, "reason": ""},
         {"step": "Partial volume correction", "ran": pvc_ran, "reason": pvc_reason},
         {"step": "Resampling MRSI maps to T1w/MNI space", "ran": True, "reason": ""},

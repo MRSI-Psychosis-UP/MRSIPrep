@@ -26,6 +26,7 @@ from pathlib import Path
 
 import numpy as np
 
+from mrsiprep.utils.debug import note_cache_hit, note_computed
 from mrsiprep.config.t1_values import METABOLITE_T1_VALUES
 from mrsiprep.io.naming import mrsi_derivative
 from mrsiprep.utils.images import load_3d_data, save_nifti
@@ -209,8 +210,10 @@ def apply_t1_correction(
             }
         )
         if out.exists() and not (config.overwrite_t1corr or config.overwrite):
+            note_cache_hit()
             corrected[met] = out
             continue
+        note_computed()
         img, data = load_3d_data(path, dtype=np.float32, label=f"{met} map")
         finite = np.isfinite(data)
         result = data.copy()
