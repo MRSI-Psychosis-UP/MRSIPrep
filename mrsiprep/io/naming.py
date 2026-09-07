@@ -65,7 +65,17 @@ def chimera_derivative(root: Path, subject: str, session: str | None, **entities
 
 
 def coverage_report_dir(root: Path, subject: str, session: str | None) -> Path:
-    return subject_session_dir(root, subject, session, "reports") / "coverage"
+    """The recording's ``reports/`` directory itself.
+
+    Previously an extra ``coverage/`` level under ``reports/``. Removed: the
+    report HTML, provenance.json and runtimemetrics.json already lived
+    directly in ``reports/``, so a reader opening that folder had to know to
+    step into ``coverage/`` to find the one file (the report) they actually
+    came for. The name is unchanged since every caller of this function only
+    ever wants "where do this recording's report and figures live", which
+    ``reports/`` itself now answers directly.
+    """
+    return subject_session_dir(root, subject, session, "reports")
 
 
 def coverage_figure_derivative(root: Path, subject: str, session: str | None, extension: str = "png", **entities) -> Path:

@@ -64,7 +64,7 @@ docker run --rm \
   --nthreads 8 --nproc 1 --verbose 2
 
 # 4. Open the QC report to confirm it worked
-xdg-open SynthMRSI-Project/derivatives/mrsiprep/sub-01/ses-01/reports/coverage/sub-01_ses-01_desc-report.html
+xdg-open SynthMRSI-Project/derivatives/mrsiprep/sub-01/ses-01/reports/sub-01_ses-01_desc-report.html
 ```
 
 Drop `--participant-label 01` to process all 32 subjects (scale runtime by
@@ -369,10 +369,10 @@ and `--output-mrsi-t1w`, and
                                                 T1-correction summary (opt-in, --t1-correction literature),
                                                 per-metabolite signal leakage summary (desc-leakageqc)
 <out>/mrsiprep/sub-*/ses-*/transforms/         ANTs MRSI→T1w and T1w→MNI transforms
-<out>/mrsiprep/sub-*/ses-*/reports/coverage/   combined subject HTML report (desc-report.html), all QC
-                                                figures (reports/coverage/figures/), parcelwise coverage/CRLB
-                                                figures, and per-metabolite signal leakage table
-<out>/mrsiprep/sub-*/ses-*/reports/            provenance JSON (config, software versions, pipeline_trace)
+<out>/mrsiprep/sub-*/ses-*/reports/             combined subject HTML report (desc-report.html), all QC
+                                                figures (reports/figures/), parcelwise coverage/CRLB figures,
+                                                per-metabolite signal leakage table, provenance JSON (config,
+                                                software versions, pipeline_trace), and runtime metrics JSON
 <out>/mrsiprep/sub-*/ses-*/logs/                per-recording timestamped logbook
 <out>/mrsiprep/logs/                           full-detail timestamped run logs (independent of --verbose)
 <out>/chimera-atlases/sub-*/ses-*/anat/        raw Chimera atlas outputs (one scheme/scale per file)
