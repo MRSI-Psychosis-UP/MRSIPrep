@@ -1,6 +1,7 @@
+import os
 import unittest
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from mrsiprep.cli.run import main
 from mrsiprep.workflows.participant import RecordingStatus
@@ -107,6 +108,48 @@ class MainParticipantRunTests(unittest.TestCase):
         with patch("mrsiprep.cli.run.parse_args", return_value=config), patch("mrsiprep.cli.run.run_participant_workflow", return_value=statuses):
             code = main([])
         self.assertEqual(code, 0)
+
+
+class NativeThreadLimitTests(unittest.TestCase):
+    """OpenMP and OpenBLAS default to the machine's full core count inside
+    *every* worker, so --nproc 4 --nthreads 8 really asks for 4x32 threads on a
+    32-core host. Capping them to --nthreads is what makes the CPU budget mean
+    what it says."""
+
+    def _config(self, nproc=2, nthreads=8):
+        cfg = SimpleNamespace(nproc=nproc, nthreads=nthreads)
+        cfg.resolve_cpu_budget = lambda: (nproc, nthreads, None)
+        return cfg
+
+    def test_limits_are_set_from_nthreads(self):
+        from mrsiprep.cli.run import _THREAD_LIMIT_VARS, _apply_resolved_cpu_budget
+
+        with patch.dict(os.environ, {}, clear=True):
+            _apply_resolved_cpu_budget(self._config(nthreads=6), MagicMock())
+            for name in _THREAD_LIMIT_VARS:
+                self.assertEqual(os.environ[name], "6", msg=name)
+
+    def test_an_explicit_user_setting_is_not_overridden(self):
+        """Someone tuning OMP_NUM_THREADS deliberately should keep their value."""
+        from mrsiprep.cli.run import _apply_resolved_cpu_budget
+
+        with patch.dict(os.environ, {"OMP_NUM_THREADS": "2"}, clear=True):
+            _apply_resolved_cpu_budget(self._config(nthreads=8), MagicMock())
+            self.assertEqual(os.environ["OMP_NUM_THREADS"], "2")
+            self.assertEqual(os.environ["OPENBLAS_NUM_THREADS"], "8")
+
+    def test_the_coerced_budget_is_what_gets_applied(self):
+        from mrsiprep.cli.run import _apply_resolved_cpu_budget
+
+        cfg = SimpleNamespace(nproc=4, nthreads=32)
+        cfg.resolve_cpu_budget = lambda: (4, 8, "coerced")
+        logger = MagicMock()
+        with patch.dict(os.environ, {}, clear=True):
+            _apply_resolved_cpu_budget(cfg, logger)
+            # Inside the patch: outside it os.environ is already restored.
+            self.assertEqual(os.environ["OMP_NUM_THREADS"], "8")
+        self.assertEqual(cfg.nthreads, 8)
+        logger.warning.assert_called_once()
 
 
 if __name__ == "__main__":
