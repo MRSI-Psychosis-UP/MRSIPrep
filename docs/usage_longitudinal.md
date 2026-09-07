@@ -5,8 +5,7 @@ unbiased ANTs template across all of that subject's sessions and registers
 the template to MNI once, instead of registering each session directly to
 MNI independently. Every session's final MNI-space maps are then produced by
 composing (session→template) with (template→MNI), reducing registration
-noise/bias across timepoints, the same "custom template" concept used by
-fMRIPrep's longitudinal processing.
+noise/bias across timepoints.
 
 ```bash
 docker run --rm \

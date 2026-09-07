@@ -3,8 +3,7 @@
 The *MRSIPrep* on Docker wrapper
 
 A lightweight, dependency-free Python wrapper that builds and runs the
-``docker run ...`` command for MRSIPrep, mirroring the fMRIPrep-on-Docker
-wrapper's design. Docker must be installed and running (check with
+``docker run ...`` command for MRSIPrep. Docker must be installed and running (check with
 ``docker info``). Native ``mrsiprep`` arguments are passed straight through;
 this wrapper only adds a handful of Docker-specific conveniences:
 
