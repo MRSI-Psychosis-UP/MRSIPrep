@@ -161,5 +161,33 @@ class TerminalStatusFromParentTests(unittest.TestCase):
         self.assertIn("FAILED", {item[2] for item in sent})
 
 
+class WorkerStartMethodTests(unittest.TestCase):
+    """The pool must not fork.
+
+    Workers load numpy/scipy/nilearn/matplotlib, which initialise OpenMP and
+    OpenBLAS thread pools. fork() copies those pools' mutexes without the
+    threads holding them, so the first parallel region in a child blocks on a
+    futex forever -- observed in the wild as a worker stuck with 32 threads in
+    futex_do_wait during the resampling step's QC figures, with --nproc 2 while
+    --nproc 1 ran cleanly.
+    """
+
+    def test_worker_context_is_spawn_not_fork(self):
+        from mrsiprep.workflows.nipype_engine.run import WORKER_START_METHOD, worker_context
+
+        self.assertEqual(WORKER_START_METHOD, "spawn")
+        self.assertEqual(worker_context().get_start_method(), "spawn")
+
+    def test_the_pool_is_given_that_context(self):
+        """Guards against a refactor dropping mp_context and silently
+        reverting to fork, which is the default and deadlocks."""
+        import inspect
+
+        from mrsiprep.workflows.nipype_engine import run as R
+
+        source = inspect.getsource(R.execute_recordings_nipype)
+        self.assertIn("mp_context=worker_context()", source)
+
+
 if __name__ == "__main__":
     unittest.main()
