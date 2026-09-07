@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.15.3
+
 ### QC report
 
 - **Parcelwise CRLB figure now shows the voxelwise CRLB map**, not a
@@ -18,6 +20,10 @@
   overlaid signal itself, not the full-head template background, so the
   montage doesn't spend most of its panels on scalp/neck the signal
   never reaches.
+- **`reports/` no longer has a `coverage/` intermediary.** The report
+  HTML, its `figures/`, and `provenance.json` now all live directly
+  under `reports/`, so opening that folder immediately shows the report
+  to open instead of requiring a step into a subfolder first.
 
 ## 1.15.2
 
