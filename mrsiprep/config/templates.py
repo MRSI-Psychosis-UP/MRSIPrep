@@ -7,12 +7,8 @@ what a future non-MNI target would need to hook into.
 
 **Why TemplateFlow.** MRSIPrep previously took its target from
 ``nilearn.datasets.load_mni152_template()`` while labelling outputs
-``MNI152NLin2009cAsym``. Nilearn's template is ICBM152 2009 release *a* (its
-own documentation says so, and directs users to TemplateFlow for the release
-fMRIPrep uses), so the label named a release the data was not in. Sourcing
-from TemplateFlow makes the label true, and makes MRSIPrep's derivatives
-genuinely combinable with fMRIPrep's and with TemplateFlow atlases.
-
+``MNI152NLin2009cAsym``. Nilearn's template is ICBM152 2009 release *a*, so the label named a release the data was not in. Sourcing
+from TemplateFlow makes the label true.
 TemplateFlow normally downloads on demand. MRSIPrep pre-fetches the templates
 it supports at image build time and pins ``TEMPLATEFLOW_HOME`` (see the
 Dockerfile), so runs stay offline and reproducible; a missing template raises

@@ -376,7 +376,7 @@ DEFAULT_SPACE_RESOLUTION = "origres"
 def _normalize_output_spaces(spaces: list[str]) -> tuple[list[str], dict[str, str]]:
     """Parse ``--output-spaces`` entries of the form ``space[:res-<value>]``.
 
-    Follows fMRIPrep's convention of qualifying a space with modifiers rather
+    Follows the convention of qualifying a space with modifiers rather
     than carrying a separate global resolution flag -- which would be
     ambiguous as soon as two spaces are requested at once.
 
@@ -416,7 +416,7 @@ def _normalize_output_spaces(spaces: list[str]) -> tuple[list[str], dict[str, st
 def _normalize_space_resolution(resolution: str, source: str) -> str:
     """Validate a ``res-`` value and normalize it to a self-describing form.
 
-    fMRIPrep writes a bare number (``res-2``) for millimetres; it is stored as
+    MRSIPrep writes a bare number (``res-2``) for millimetres; it is stored as
     ``"2mm"`` so the value reads unambiguously in ``provenance.json`` and is
     accepted directly by :func:`mrsiprep.utils.images.resolve_mni_resolution`.
     Fails at config time rather than mid-run.

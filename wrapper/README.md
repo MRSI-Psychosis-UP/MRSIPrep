@@ -2,7 +2,7 @@
 
 MRSIPrep is distributed as a Docker image; there is no supported host
 installation of the pipeline itself. This is a lightweight, dependency-free
-Python wrapper (mirroring the `fmriprep-docker` wrapper) that builds and runs
+Python wrapper that builds and runs
 the appropriate `docker run` command using the normal MRSIPrep BIDS App
 syntax. Docker must be installed and running (check with `docker info`).
 

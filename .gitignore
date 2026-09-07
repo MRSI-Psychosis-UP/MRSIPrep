@@ -26,3 +26,11 @@ scripts/qc/plot_axial_slice.py
 
 # Local-only benchmark writeup, not published/pushed, not in any toctree.
 /docs/benchmark_smoothing.md
+
+# test and dev files
+.claude/
+.coverage
+SynthMRSI-Project/
+bash_history
+outputs/
+scripts/
