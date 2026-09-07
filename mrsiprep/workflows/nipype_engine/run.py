@@ -25,6 +25,7 @@ see ``build_recording_workflow``'s docstring for why.
 
 from __future__ import annotations
 
+import multiprocessing
 import time
 import traceback
 from typing import TYPE_CHECKING
@@ -82,7 +83,6 @@ def execute_recordings_nipype(config, ready: "list[Recording]", subject_template
             for rec in ready
         ]
 
-    import multiprocessing
     from concurrent.futures import ProcessPoolExecutor, as_completed
 
     manager = multiprocessing.Manager()
@@ -92,7 +92,7 @@ def execute_recordings_nipype(config, ready: "list[Recording]", subject_template
 
     statuses: list = []
     try:
-        with ProcessPoolExecutor(max_workers=config.nproc) as executor:
+        with ProcessPoolExecutor(max_workers=config.nproc, mp_context=worker_context()) as executor:
             futures = {
                 executor.submit(
                     _run_one_recording_nipype, config, rec.subject, rec.session, subject_templates.get(rec.subject), status_queue
@@ -123,6 +123,25 @@ def execute_recordings_nipype(config, ready: "list[Recording]", subject_template
         listener_thread.join(timeout=5)
         manager.shutdown()
     return statuses
+
+
+#: Start method for the worker pool. Deliberately not Linux's default "fork".
+#:
+#: Workers load numpy/scipy/nilearn/matplotlib, which initialise OpenMP
+#: (libgomp) and OpenBLAS thread pools in the parent. fork() copies those
+#: pools' mutexes in whatever state they happened to be in, while copying none
+#: of the threads holding them, so the first parallel region a child enters
+#: blocks on a futex nothing will ever release. Seen in the wild as a worker
+#: stuck with 32 threads in futex_do_wait during the resampling step's QC
+#: figure rendering: --nproc 2 hung on a recording that --nproc 1 processed in
+#: 40 seconds. spawn gives each worker a fresh interpreter with no inherited
+#: locks, at the cost of re-importing on startup (seconds, once per worker).
+WORKER_START_METHOD = "spawn"
+
+
+def worker_context():
+    """Multiprocessing context for the cross-recording worker pool."""
+    return multiprocessing.get_context(WORKER_START_METHOD)
 
 
 def _start_live_status_table(config, tags: "list[str]", status_queue):
