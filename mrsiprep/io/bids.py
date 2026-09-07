@@ -10,7 +10,7 @@ from pathlib import Path
 from mrsiprep.config.defaults import METABOLITE_ALIASES
 from mrsiprep.utils.misc import normalize_session, normalize_subject, parse_bids_entities
 
-# Long-form PyBIDS/fMRIPrep-style entity names accepted in --bids-filter-file,
+# Long-form PyBIDS-style entity names accepted in --bids-filter-file,
 # mapped to the short-form keys parse_bids_entities() actually returns.
 _FILTER_ENTITY_ALIASES = {
     "subject": "sub",
@@ -43,8 +43,7 @@ def load_bids_filters(path: str | Path | None) -> dict:
     Only the "t1w" top-level key is currently supported (the one input
     MRSIPrep has ambiguous-candidate logic for today, in
     BIDSLayout.raw_t1()). Any other top-level key raises immediately rather
-    than being silently ignored, since a user copying an fMRIPrep-style
-    filter file (with "bold"/"fmap"/etc keys) should get fast feedback that
+    than being silently ignored and  should get fast feedback that
     those aren't supported here yet.
     """
     if path is None:
@@ -297,7 +296,7 @@ def _matches_filter(entities: dict, filter_dict: dict) -> bool:
     """True if every key in filter_dict matches the corresponding parsed entity.
 
     Filter keys may use either MRSIPrep's short entity names (acq, run, ses,
-    sub) or PyBIDS/fMRIPrep-style long names (acquisition, session, subject),
+    sub) or PyBIDS-style long names (acquisition, session, subject),
     per _FILTER_ENTITY_ALIASES. A filter value of null/None requires the
     entity to be absent from the filename.
     """

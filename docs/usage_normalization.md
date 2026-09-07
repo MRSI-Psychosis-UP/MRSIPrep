@@ -21,8 +21,7 @@ docker run --rm \
 space(s) the final MRSI maps are resampled into as permanent derivatives:
 `MRSI`, `T1w`, `MNI152NLin2009cAsym` (aliases `mrsi`, `t1w`, `mni` accepted).
 
-Each space may be qualified with a `res-` modifier, following fMRIPrep's
-convention:
+Each space may be qualified with a `res-` modifier
 
 ```bash
   --output-spaces MNI152NLin2009cAsym:res-2 T1w
