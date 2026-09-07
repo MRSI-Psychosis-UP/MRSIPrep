@@ -125,7 +125,10 @@ def _build_tabs(config, subject, session, out, outputs, qc_sections, mrsi_qc_bod
     tabs.append(("acquisition", "MRSinMRS", _mrsinmrs_html(config, subject, session)))
     tabs.append(("preproc", "PrepParams", _sections_html(build_preproc_overview_sections(config))))
     tabs.append(("runtime", "Runtime", _sections_html(qc_sections.get("runtime"))))
-    tabs.append(("outputs", "Outputs", _outputs_html(outputs, out.parent.parent.parent)))
+    # out is reports/sub-X..._report.html, so its recording root (ses-Y/, or
+    # sub-X/ for a session-less dataset) is two levels up: .parent is
+    # reports/ itself, .parent.parent is the recording directory.
+    tabs.append(("outputs", "Outputs", _outputs_html(outputs, out.parent.parent)))
     return tabs
 
 
