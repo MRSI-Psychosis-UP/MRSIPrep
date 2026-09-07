@@ -214,6 +214,45 @@ class RegistrationAlignmentSectionsTests(unittest.TestCase):
             sections = build_mni_alignment_sections(config, "S001", "V1", None)
             self.assertIn("not available for this configuration", _sections_text(sections))
 
+    def test_mni_alignment_uses_the_multi_slice_renderer(self):
+        """The figure is a multi-slice-per-plane montage, not the single
+        center slice every other alignment tab still uses -- a single center
+        slice can land on an unremarkable part of the registration and miss
+        a real misalignment a few slices away."""
+        with tempfile.TemporaryDirectory() as td:
+            tmp_path = Path(td)
+            config = _make_config(tmp_path)
+            mni_ref = _save_volume(tmp_path / "mni_ref.nii.gz", np.random.rand(6, 6, 6))
+            fake_template = nib.Nifti1Image(np.random.rand(6, 6, 6).astype("float32"), np.eye(4))
+
+            from mrsiprep.reports import registration_overview as reg_module
+
+            with mock.patch.object(reg_module, "_load_mni152_head_template", return_value=fake_template), mock.patch.object(
+                reg_module, "render_multi_slice_triplanar_png"
+            ) as render:
+                sections = build_mni_alignment_sections(config, "S001", "V1", mni_ref, mni_resolution=5)
+
+            render.assert_called_once()
+            self.assertNotIn("not available for this configuration", _sections_text(sections))
+            self.assertIn("MNI152NLin2009cAsym", _sections_text(sections))
+            self.assertIn("5 mm", _sections_text(sections))
+
+    def test_mni_alignment_names_the_reference_metabolite_in_the_colorbar(self):
+        with tempfile.TemporaryDirectory() as td:
+            tmp_path = Path(td)
+            config = _make_config(tmp_path)
+            mni_ref = _save_volume(tmp_path / "mni_ref.nii.gz", np.random.rand(6, 6, 6))
+            fake_template = nib.Nifti1Image(np.random.rand(6, 6, 6).astype("float32"), np.eye(4))
+
+            from mrsiprep.reports import registration_overview as reg_module
+
+            with mock.patch.object(reg_module, "_load_mni152_head_template", return_value=fake_template), mock.patch.object(
+                reg_module, "render_multi_slice_triplanar_png"
+            ) as render:
+                build_mni_alignment_sections(config, "S001", "V1", mni_ref, mni_resolution=5)
+
+            self.assertEqual(render.call_args.kwargs["colorbar_label"], config.ref_met)
+
     def test_handles_missing_t1_map(self):
         with tempfile.TemporaryDirectory() as td:
             tmp_path = Path(td)

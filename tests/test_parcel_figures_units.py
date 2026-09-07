@@ -8,13 +8,16 @@ import numpy as np
 import pandas as pd
 
 from mrsiprep.reports.parcel_figures import (
-    CRLB_QUALITY_THRESHOLD,
     _atlas_canonical,
     _value_volume,
     write_parcel_coverage_figure,
     write_parcel_crlb_figures,
     write_parcel_qc_figures,
 )
+
+
+def _save_nifti(path: Path, data: np.ndarray) -> None:
+    nib.save(nib.Nifti1Image(data.astype(np.float32), np.eye(4)), path)
 
 
 class AtlasCanonicalTests(unittest.TestCase):
@@ -106,19 +109,36 @@ class WriteParcelCrlbFiguresTests(unittest.TestCase):
         pd.DataFrame(rows).to_csv(path, sep="\t", index=False)
         return path
 
+    def _crlb_map(self, name: str, shape=(2, 2, 3), value: float = 5.0) -> Path:
+        path = self.tmp / f"crlb-{name}.nii.gz"
+        _save_nifti(path, np.full(shape, value))
+        return path
+
     def test_returns_empty_for_empty_dataframe(self):
         path = self._write_tsv({"parcel_id": [], "mean_crlb": [], "metabolite": []})
         self.assertEqual(write_parcel_crlb_figures(self.config, "01", "01", self.atlas_t1, path, t1_to_mni=["x"]), [])
 
-    def test_returns_empty_when_required_columns_missing(self):
+    def test_returns_empty_when_metabolite_column_missing(self):
         path = self._write_tsv({"parcel_id": [1], "anatomical_coverage_percent": [90.0]})
         self.assertEqual(write_parcel_crlb_figures(self.config, "01", "01", self.atlas_t1, path, t1_to_mni=["x"]), [])
 
     def test_returns_empty_without_a_t1_to_mni_transform(self):
         path = self._write_tsv({"parcel_id": [1], "mean_crlb": [5.0], "metabolite": ["CrPCr"]})
-        self.assertEqual(write_parcel_crlb_figures(self.config, "01", "01", self.atlas_t1, path, t1_to_mni=None), [])
+        crlb_maps = {"CrPCr": self._crlb_map("CrPCr")}
+        self.assertEqual(
+            write_parcel_crlb_figures(self.config, "01", "01", self.atlas_t1, path, t1_to_mni=None, crlb_maps=crlb_maps), []
+        )
 
-    def test_writes_one_grid_with_a_row_per_metabolite(self):
+    def test_returns_empty_without_crlb_maps(self):
+        """No MNI-space CRLB derivatives (template output not requested):
+        skip the figure rather than resample a second time for a space
+        nothing else in the run produced."""
+        path = self._write_tsv({"parcel_id": [1], "mean_crlb": [5.0], "metabolite": ["CrPCr"]})
+        self.assertEqual(
+            write_parcel_crlb_figures(self.config, "01", "01", self.atlas_t1, path, t1_to_mni=["x"], crlb_maps=None), []
+        )
+
+    def test_writes_one_grid_with_a_row_per_metabolite_showing_the_voxelwise_map(self):
         path = self._write_tsv(
             {
                 "parcel_id": [1, 2, 1, 2],
@@ -129,10 +149,13 @@ class WriteParcelCrlbFiguresTests(unittest.TestCase):
         fake_atlas = np.zeros((2, 2, 3), dtype=int)
         fake_atlas[0, 0, :] = 1
         fake_atlas[1, 1, :] = 2
+        crlb_maps = {"CrPCr": self._crlb_map("CrPCr", value=7.0), "GluGln": self._crlb_map("GluGln", value=15.0)}
         with patch("mrsiprep.reports.parcel_figures._resample_atlas_to_mni", return_value=(fake_atlas, np.eye(4))), patch(
             "mrsiprep.reports.parcel_figures.coverage_figure_derivative", side_effect=lambda *a, **k: self.tmp / f"{k.get('met', 'crlbgrid')}.png"
         ), patch("mrsiprep.reports.parcel_figures._render_axial_grid") as grid:
-            outputs = write_parcel_crlb_figures(self.config, "01", "01", self.atlas_t1, path, t1_to_mni=["x"])
+            outputs = write_parcel_crlb_figures(
+                self.config, "01", "01", self.atlas_t1, path, t1_to_mni=["x"], crlb_maps=crlb_maps
+            )
 
         # A single figure with one row per metabolite, not one figure each:
         # the panel exists to compare metabolites at identical anatomy.
@@ -140,8 +163,29 @@ class WriteParcelCrlbFiguresTests(unittest.TestCase):
         grid.assert_called_once()
         rows = grid.call_args.args[1]
         self.assertEqual([label for label, _volume in rows], ["CrPCr", "GluGln"])
-        # Semi-transparent so the template underneath places each parcel.
+        # The row holds the raw voxel values, not a per-parcel summary.
+        crpcr_volume = rows[0][1]
+        np.testing.assert_allclose(crpcr_volume, 7.0)
+        # Semi-transparent so the template underneath places the map.
         self.assertLess(grid.call_args.kwargs["alpha"], 1.0)
+        # A continuous quantity, so it gets a colorbar (unlike the old
+        # categorical green/red overlay, which would misrepresent one).
+        self.assertIn("CRLB", grid.call_args.kwargs["colorbar_label"])
+
+    def test_colorscale_uses_the_runs_own_crlb_threshold(self):
+        """vmax is the run's own quality threshold, not an arbitrary display
+        cap, so the colour scale means the same thing the pass/fail decision
+        used."""
+        path = self._write_tsv({"parcel_id": [1], "mean_crlb": [5.0], "metabolite": ["CrPCr"]})
+        fake_atlas = np.zeros((2, 2, 3), dtype=int)
+        fake_atlas[0, 0, :] = 1
+        crlb_maps = {"CrPCr": self._crlb_map("CrPCr")}
+        config = MagicMock(derivative_dir=self.tmp / "derivatives", crlb_max=42.0)
+        with patch("mrsiprep.reports.parcel_figures._resample_atlas_to_mni", return_value=(fake_atlas, np.eye(4))), patch(
+            "mrsiprep.reports.parcel_figures._render_axial_grid"
+        ) as grid:
+            write_parcel_crlb_figures(config, "01", "01", self.atlas_t1, path, t1_to_mni=["x"], crlb_maps=crlb_maps)
+        self.assertEqual(grid.call_args.kwargs["vmax"], 42.0)
 
     def test_removes_superseded_per_metabolite_figures(self):
         path = self._write_tsv({"parcel_id": [1], "mean_crlb": [5.0], "metabolite": ["CrPCr"]})
@@ -151,47 +195,77 @@ class WriteParcelCrlbFiguresTests(unittest.TestCase):
         stale.write_bytes(b"x")
         fake_atlas = np.zeros((2, 2, 3), dtype=int)
         fake_atlas[0, 0, :] = 1
+        crlb_maps = {"CrPCr": self._crlb_map("CrPCr")}
         with patch("mrsiprep.reports.parcel_figures._resample_atlas_to_mni", return_value=(fake_atlas, np.eye(4))), patch(
             "mrsiprep.reports.parcel_figures.coverage_figure_derivative",
             return_value=figures / "sub-01_desc-parcelcrlbquality.png",
         ), patch("mrsiprep.reports.parcel_figures._render_axial_grid"):
-            write_parcel_crlb_figures(self.config, "01", "01", self.atlas_t1, path, t1_to_mni=["x"])
+            write_parcel_crlb_figures(self.config, "01", "01", self.atlas_t1, path, t1_to_mni=["x"], crlb_maps=crlb_maps)
         self.assertFalse(stale.exists(), "the grid replaces these, so they must not linger")
 
-    def test_skips_metabolite_with_no_valid_crlb_values(self):
-        path = self._write_tsv({"parcel_id": [1], "mean_crlb": [float("nan")], "metabolite": ["CrPCr"]})
-        fake_atlas = np.array([[1]])
+    def test_skips_metabolite_with_no_crlb_map(self):
+        path = self._write_tsv({"parcel_id": [1], "mean_crlb": [5.0], "metabolite": ["CrPCr"]})
+        fake_atlas = np.array([[[1]]])
         with patch("mrsiprep.reports.parcel_figures._resample_atlas_to_mni", return_value=(fake_atlas, np.eye(4))), patch(
             "mrsiprep.reports.parcel_figures._render_axial_grid"
-        ) as montage:
-            outputs = write_parcel_crlb_figures(self.config, "01", "01", self.atlas_t1, path, t1_to_mni=["x"])
+        ) as grid:
+            outputs = write_parcel_crlb_figures(
+                self.config, "01", "01", self.atlas_t1, path, t1_to_mni=["x"], crlb_maps={"NAANAAG": self._crlb_map("NAANAAG")}
+            )
 
         self.assertEqual(outputs, [])
-        montage.assert_not_called()
+        grid.assert_not_called()
 
-    def test_thresholds_reliable_vs_unreliable_by_quality_threshold(self):
-        path = self._write_tsv(
-            {
-                "parcel_id": [1, 2],
-                "mean_crlb": [CRLB_QUALITY_THRESHOLD - 1, CRLB_QUALITY_THRESHOLD + 1],
-                "metabolite": ["CrPCr", "CrPCr"],
-            }
-        )
+    def test_skips_metabolite_whose_crlb_map_is_on_a_different_grid(self):
+        """A shape mismatch means resampling and this figure disagree on the
+        resolution used; draw nothing rather than misaligned voxels."""
+        path = self._write_tsv({"parcel_id": [1], "mean_crlb": [5.0], "metabolite": ["CrPCr"]})
         fake_atlas = np.zeros((2, 2, 3), dtype=int)
         fake_atlas[0, 0, :] = 1
-        fake_atlas[1, 1, :] = 2
-        captured = {}
-
-        def fake_value_volume(atlas, mapping):
-            captured["mapping"] = mapping
-            return np.zeros_like(atlas, dtype=np.float32)
-
+        mismatched = self._crlb_map("CrPCr", shape=(4, 4, 4))
         with patch("mrsiprep.reports.parcel_figures._resample_atlas_to_mni", return_value=(fake_atlas, np.eye(4))), patch(
-            "mrsiprep.reports.parcel_figures._value_volume", side_effect=fake_value_volume
-        ), patch("nibabel.Nifti1Image"), patch("nilearn.plotting.plot_glass_brain", return_value=MagicMock()):
-            write_parcel_crlb_figures(self.config, "01", "01", self.atlas_t1, path, t1_to_mni=["x"])
+            "mrsiprep.reports.parcel_figures._render_axial_grid"
+        ) as grid:
+            outputs = write_parcel_crlb_figures(
+                self.config, "01", "01", self.atlas_t1, path, t1_to_mni=["x"], crlb_maps={"CrPCr": mismatched}
+            )
+        self.assertEqual(outputs, [])
+        grid.assert_not_called()
 
-        self.assertEqual(captured["mapping"], {1: 1.0, 2: -1.0})
+    def test_draws_on_black_when_the_template_underlay_cannot_be_fetched(self):
+        """The underlay is decoration: a template fetch failure must not take
+        the CRLB figure down with it."""
+        path = self._write_tsv({"parcel_id": [1], "mean_crlb": [5.0], "metabolite": ["CrPCr"]})
+        fake_atlas = np.zeros((2, 2, 3), dtype=int)
+        fake_atlas[0, 0, :] = 1
+        crlb_maps = {"CrPCr": self._crlb_map("CrPCr")}
+        with patch("mrsiprep.reports.parcel_figures._resample_atlas_to_mni", return_value=(fake_atlas, np.eye(4))), patch(
+            "mrsiprep.config.templates.template_t1w", side_effect=RuntimeError("network unavailable")
+        ), patch("mrsiprep.reports.parcel_figures._render_axial_grid") as grid:
+            outputs = write_parcel_crlb_figures(self.config, "01", "01", self.atlas_t1, path, t1_to_mni=["x"], crlb_maps=crlb_maps)
+
+        self.assertEqual(len(outputs), 1)
+        self.assertIsNone(grid.call_args.kwargs["underlay"])
+
+    def test_a_stale_figure_that_cannot_be_deleted_does_not_fail_the_write(self):
+        """Best-effort cleanup: a read-only or concurrently-held stale file
+        is not a reason to fail the figure that replaces it."""
+        path = self._write_tsv({"parcel_id": [1], "mean_crlb": [5.0], "metabolite": ["CrPCr"]})
+        figures = self.tmp / "figures"
+        figures.mkdir(exist_ok=True)
+        stale = figures / "sub-01_met-CrPCr_desc-parcelcrlbquality.png"
+        stale.write_bytes(b"x")
+        fake_atlas = np.zeros((2, 2, 3), dtype=int)
+        fake_atlas[0, 0, :] = 1
+        crlb_maps = {"CrPCr": self._crlb_map("CrPCr")}
+        with patch("mrsiprep.reports.parcel_figures._resample_atlas_to_mni", return_value=(fake_atlas, np.eye(4))), patch(
+            "mrsiprep.reports.parcel_figures.coverage_figure_derivative",
+            return_value=figures / "sub-01_desc-parcelcrlbquality.png",
+        ), patch("mrsiprep.reports.parcel_figures._render_axial_grid"), patch(
+            "pathlib.Path.unlink", side_effect=OSError("permission denied")
+        ):
+            outputs = write_parcel_crlb_figures(self.config, "01", "01", self.atlas_t1, path, t1_to_mni=["x"], crlb_maps=crlb_maps)
+        self.assertEqual(len(outputs), 1)
 
 
 class WriteParcelQcFiguresTests(unittest.TestCase):
