@@ -98,6 +98,109 @@ def render_triplanar_png(
     return out_path
 
 
+_PLANE_AXES = {"sagittal": 0, "coronal": 1, "axial": 2}
+
+
+def _occupied_slice_indices(volume: np.ndarray, axis: int, n_slices: int) -> list[int]:
+    """``n_slices`` indices spanning the slices along ``axis`` that actually
+    contain nonzero data.
+
+    Spanning the raw array extent instead would spend much of the montage on
+    the empty padding a resampled/padded grid carries at each end.
+    """
+    other_axes = tuple(a for a in range(volume.ndim) if a != axis)
+    occupied = np.flatnonzero(np.any(volume != 0, axis=other_axes))
+    if occupied.size == 0:
+        low, high = 0, volume.shape[axis] - 1
+    else:
+        low, high = int(occupied[0]), int(occupied[-1])
+    if high <= low:
+        return [low] * n_slices
+    return sorted({int(round(value)) for value in np.linspace(low, high, n_slices)})
+
+
+def render_multi_slice_triplanar_png(
+    background: np.ndarray,
+    out_path: str | Path,
+    overlay: np.ndarray | None = None,
+    mode: str | None = None,
+    cmap: str = "gray",
+    overlay_cmap: str = "magma",
+    colorbar_label: str | None = None,
+    n_slices: int = 8,
+) -> Path:
+    """Coronal / axial / sagittal, ``n_slices`` slices per plane instead of
+    one -- a single center slice can land on an unremarkable part of the
+    registration and miss a real misalignment a few slices away.
+
+    ``background``/``overlay`` are full 3D (canonical-orientation) volumes,
+    not pre-sliced dicts like :func:`render_triplanar_png` takes: slice
+    selection happens per plane here, so the whole volume is needed.
+
+    Slice indices are chosen from ``overlay`` when one is given, not from
+    ``background``: a full-head template is nonzero almost everywhere
+    (scalp, neck), so indexing off it spends most of the montage on
+    anatomy the overlay doesn't even reach. The whole point of the montage
+    is to see where the overlay actually lands, so that is what decides
+    which slices are worth showing.
+    """
+    import matplotlib.pyplot as plt
+
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    background = np.squeeze(background)
+    overlay_arr = np.squeeze(overlay) if overlay is not None else None
+    index_source = overlay_arr if overlay_arr is not None else background
+
+    # One shared scale across every panel, from the overlay's own data:
+    # per-imshow auto-scaling (the default with vmin/vmax left unset) gives
+    # each slice its own colour scale, so the same signal level looks
+    # different from panel to panel and the numbers on the shared colorbar
+    # stop meaning anything.
+    vmin = vmax = None
+    if overlay_arr is not None and mode in ("alpha", "solid"):
+        finite = overlay_arr[np.isfinite(overlay_arr) & (overlay_arr != 0)]
+        vmin = 0.0
+        vmax = float(np.percentile(finite, 99)) if finite.size else 1.0
+        vmax = max(vmax, vmin + 1e-6)
+
+    planes = ("coronal", "axial", "sagittal")
+    fig, axes = plt.subplots(
+        len(planes), n_slices, figsize=(1.7 * n_slices, 1.9 * len(planes)), squeeze=False, constrained_layout=True
+    )
+    overlay_image = None
+    for row, plane in enumerate(planes):
+        axis = _PLANE_AXES[plane]
+        indices = _occupied_slice_indices(index_source, axis, n_slices)
+        for col in range(n_slices):
+            ax = axes[row][col]
+            if col >= len(indices):
+                ax.axis("off")
+                continue
+            index = indices[col]
+            bg_slice = np.rot90(np.take(background, index, axis=axis))
+            ax.imshow(bg_slice, cmap=cmap)
+            if overlay_arr is not None:
+                ov_slice = np.rot90(np.take(overlay_arr, index, axis=axis))
+                if mode == "outline":
+                    label_outline_overlay(ax, ov_slice)
+                elif mode == "alpha":
+                    overlay_image = ax.imshow(ov_slice, cmap=overlay_cmap, alpha=0.5, vmin=vmin, vmax=vmax)
+                elif mode == "solid":
+                    overlay_image = ax.imshow(np.ma.masked_equal(ov_slice, 0), cmap=overlay_cmap, vmin=vmin, vmax=vmax)
+            ax.set_title(f"{index}", fontsize=7)
+            ax.axis("off")
+        axes[row][0].axis("on")
+        axes[row][0].set_xticks([])
+        axes[row][0].set_yticks([])
+        axes[row][0].set_ylabel(plane.capitalize(), fontsize=9)
+    if overlay_image is not None and colorbar_label is not None:
+        fig.colorbar(overlay_image, ax=axes.ravel().tolist(), shrink=0.7, pad=0.01, label=colorbar_label)
+    fig.savefig(out_path)
+    plt.close(fig)
+    return out_path
+
+
 def html_page(title: str, sections: list[tuple[str, str]]) -> str:
     lines = [
         "<!doctype html>",
