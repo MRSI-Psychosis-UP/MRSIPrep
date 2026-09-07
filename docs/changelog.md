@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.15.2
+
+### Fixed
+
+- **A recording could hang indefinitely under `--nproc > 1`.** The
+  worker pool forked (Linux's default), which could copy a parent
+  process's OpenMP/OpenBLAS thread-pool locks into a child in a state
+  no thread in that child could ever release, deadlocking the first
+  parallel region it entered (observed during the resampling step's QC
+  figure rendering). The pool now uses a `spawn` context instead.
+- Native thread pools (`OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS`, and
+  related) are now capped to `--nthreads`, rather than defaulting to
+  the full host core count inside every worker.
+
 ## 1.15.1
 
 ### Runtime tab
