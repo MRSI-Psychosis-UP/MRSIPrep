@@ -9,6 +9,7 @@ import pandas as pd
 
 from mrsiprep.reports.parcel_figures import (
     _atlas_canonical,
+    _render_axial_grid,
     _value_volume,
     write_parcel_coverage_figure,
     write_parcel_crlb_figures,
@@ -18,6 +19,51 @@ from mrsiprep.reports.parcel_figures import (
 
 def _save_nifti(path: Path, data: np.ndarray) -> None:
     nib.save(nib.Nifti1Image(data.astype(np.float32), np.eye(4)), path)
+
+
+class RenderAxialGridTests(unittest.TestCase):
+    """Calls the real matplotlib rendering, not the usual mocked-out version.
+
+    Every other test in this file patches _render_axial_grid out entirely
+    (it is expensive and its output isn't asserted on), which is exactly
+    what let an axes.tolist()/colorbar bug through undetected: matplotlib's
+    colorbar rejects the list-of-lists axes.tolist() gives for a 2D subplot
+    grid, and it only raises inside the real call -- caught by actually
+    running the pipeline end to end, not by any mocked unit test.
+    """
+
+    def setUp(self):
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmpdir.cleanup)
+        self.out_path = Path(self._tmpdir.name) / "grid.png"
+
+    def test_renders_a_real_figure_with_a_shared_colorbar(self):
+        rows = [("CrPCr", np.full((2, 2, 3), 5.0)), ("GluGln", np.full((2, 2, 3), 15.0))]
+        _render_axial_grid(
+            self.out_path, rows, indices=[0, 1, 2], title="test", cmap="viridis",
+            vmin=0.0, vmax=20.0, colorbar_label="CRLB (%)",
+        )
+        self.assertTrue(self.out_path.exists())
+        self.assertGreater(self.out_path.stat().st_size, 0)
+
+    def test_renders_without_a_colorbar_label(self):
+        """The categorical (green/red) caller path: no label, no colorbar,
+        must not raise either."""
+        rows = [("CrPCr", np.full((2, 2, 3), 1.0))]
+        _render_axial_grid(
+            self.out_path, rows, indices=[0, 1], title="test", cmap="RdYlGn", vmin=-1.0, vmax=1.0,
+        )
+        self.assertTrue(self.out_path.exists())
+
+    def test_renders_with_a_single_row(self):
+        """n_rows=1 is the shape most likely to make squeeze=False's 2D
+        guarantee (and therefore the ravel() this needs) easy to forget."""
+        rows = [("CrPCr", np.full((2, 2, 3), 5.0))]
+        _render_axial_grid(
+            self.out_path, rows, indices=[0, 1, 2], title="test", cmap="viridis",
+            vmin=0.0, vmax=20.0, colorbar_label="CRLB (%)",
+        )
+        self.assertTrue(self.out_path.exists())
 
 
 class AtlasCanonicalTests(unittest.TestCase):

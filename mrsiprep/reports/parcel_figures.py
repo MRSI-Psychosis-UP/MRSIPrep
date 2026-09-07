@@ -6,8 +6,8 @@ native-MRSI-space parcel atlas. The CRLB montage shows the voxelwise CRLB
 map itself (not a parcel summary) on the T1w atlas resampled into MNI space,
 so within-parcel spread stays visible; the parcel-averaged numbers are
 reported separately as a table, in the Coverage tab. Saved into the
-subject/session ``reports/coverage/figures/`` folder next to the HTML report
-so it can embed them with relative paths.
+subject/session ``reports/figures/`` folder next to the HTML report so it
+can embed them with relative paths.
 """
 
 from __future__ import annotations
@@ -159,7 +159,14 @@ def _render_axial_grid(
         axes[row_index][0].set_yticks([])
         axes[row_index][0].set_ylabel(label, fontsize=8)
     if colorbar_label and image is not None:
-        fig.colorbar(image, ax=axes.tolist(), shrink=0.75, label=colorbar_label)
+        # ravel(), not a bare .tolist(): axes here is the 2D (n_rows, n_cols)
+        # array from squeeze=False, and matplotlib's colorbar rejects a
+        # list-of-lists -- it wants one flat list of axes. Caught by actually
+        # running this end to end (write_parcel_crlb_figures is the one
+        # caller that passes colorbar_label, and every unit test for it mocks
+        # this function out, so nothing else exercised the real matplotlib
+        # call).
+        fig.colorbar(image, ax=axes.ravel().tolist(), shrink=0.75, label=colorbar_label)
     fig.suptitle(title, fontsize=10)
     fig.savefig(out_path, dpi=110)
     plt.close(fig)
