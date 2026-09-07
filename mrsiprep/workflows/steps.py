@@ -191,7 +191,7 @@ def _step_leakage_qc(config, subject, session, anat, transformed, debug):
         return write_signal_leakage_qc(config, subject, session, transformed, anat.registration_mask)
 
 
-def _step_synthseg_parcellation_qc(config, subject, session, raw_t1, mrsi, registration, debug):
+def _step_synthseg_parcellation_qc(config, subject, session, raw_t1, mrsi, registration, debug, transformed=None):
     with debug.step("SynthSeg parcellation and QC"):
         preliminary_parcels = run_synthseg_parcellation(
             config,
@@ -210,6 +210,16 @@ def _step_synthseg_parcellation_qc(config, subject, session, raw_t1, mrsi, regis
             mrsi.crlb_maps,
             mrsi.qcmasks,
         )
+        # MNI152NLin2009cAsym-space CRLB maps, already written by the
+        # resampling step that ran earlier in STEP_SEQUENCE -- reused rather
+        # than resampled a second time here. `crlb-{met}` is the key
+        # _resample_space's _quality_items() names them under.
+        mni_outputs = (transformed or {}).get("MNI152NLin2009cAsym", {})
+        mni_crlb_maps = {
+            met: path
+            for key, path in mni_outputs.items()
+            if key.startswith("crlb-") and (met := key[len("crlb-") :]) in mrsi.crlb_maps
+        }
         write_parcel_qc_figures(
             config,
             subject,
@@ -219,6 +229,7 @@ def _step_synthseg_parcellation_qc(config, subject, session, raw_t1, mrsi, regis
             atlas_mrsi=preliminary_parcels.atlas_mrsi,
             t1_to_mni=registration.t1_to_mni.forward if registration.t1_to_mni else None,
             mrsi_reference=mrsi.reference,
+            crlb_maps=mni_crlb_maps or None,
         )
     return preliminary_parcels, parcel_qc
 

@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+### QC report
+
+- **Parcelwise CRLB figure now shows the voxelwise CRLB map**, not a
+  per-parcel pass/fail summary. Averaging into one number per parcel is
+  exactly what the (unchanged) Coverage-tab table is for; folding that
+  back into a two-colour image on top of it hid the within-parcel spread
+  a continuous map shows for free. The colour scale is fixed to the
+  run's own `--crlb-max`, and the parcel atlas is still used to pick
+  matching slice indices and an anatomical underlay.
+- **Template-space alignment now shows multiple slices per plane**
+  (coronal/axial/sagittal), not a single center slice, which could land
+  on an unremarkable part of the registration and miss a real
+  misalignment a few slices away. Slice selection is driven by the
+  overlaid signal itself, not the full-head template background, so the
+  montage doesn't spend most of its panels on scalp/neck the signal
+  never reaches.
+
 ## 1.15.2
 
 ### Fixed

@@ -172,7 +172,9 @@ def step_synthseg_parc_qc(config, subject, session, ctx):
     from mrsiprep.workflows.participant import _step_synthseg_parcellation_qc
 
     debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""))
-    preliminary_parcels, parcel_qc = _step_synthseg_parcellation_qc(config, subject, session, ctx["raw_t1"], ctx["mrsi"], ctx["registration"], debug)
+    preliminary_parcels, parcel_qc = _step_synthseg_parcellation_qc(
+        config, subject, session, ctx["raw_t1"], ctx["mrsi"], ctx["registration"], debug, transformed=ctx.get("transformed")
+    )
     ctx = dict(ctx)
     ctx.update(preliminary_parcels=preliminary_parcels, parcel_qc=parcel_qc)
     return ctx
