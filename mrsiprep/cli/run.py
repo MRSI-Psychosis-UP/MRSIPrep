@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 
 from mrsiprep.cli.parser import parse_args, print_presets
@@ -49,11 +50,31 @@ def _run_reports_only(config, logger) -> int:
     return 1 if failed and not succeeded else 0
 
 
+#: Native thread-pool limits honoured by the libraries the pipeline loads.
+#: ITK is set per-call in interfaces/ants.py; these cover the rest.
+_THREAD_LIMIT_VARS = (
+    "OMP_NUM_THREADS",
+    "OPENBLAS_NUM_THREADS",
+    "MKL_NUM_THREADS",
+    "NUMEXPR_NUM_THREADS",
+    "VECLIB_MAXIMUM_THREADS",
+)
+
+
 def _apply_resolved_cpu_budget(config, logger) -> None:
     nproc, nthreads, cpu_warning = config.resolve_cpu_budget()
     if cpu_warning:
         logger.warning(cpu_warning)
     config.nproc, config.nthreads = nproc, nthreads
+
+    # Without this, OpenMP and OpenBLAS each default to the machine's full core
+    # count *inside every worker*, so --nproc 4 --nthreads 8 really asks for
+    # 4 x 32 threads on a 32-core host. That oversubscription is why a worker
+    # could sit at a fraction of a core while thrashing, and it is independent
+    # of the fork deadlock fixed in nipype_engine/run.py. An explicit setting
+    # by the user wins: they may be tuning deliberately.
+    for name in _THREAD_LIMIT_VARS:
+        os.environ.setdefault(name, str(config.nthreads))
 
 
 def main(argv: list[str] | None = None) -> int:
