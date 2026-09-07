@@ -311,6 +311,67 @@ class StepSynthsegParcellationQcTests(unittest.TestCase):
             P._step_synthseg_parcellation_qc(SimpleNamespace(), "01", "01", Path("raw_t1"), self._mrsi(), registration, _debug())
         self.assertIsNone(figures.call_args.kwargs["t1_to_mni"])
 
+    def _mrsi_with_crlb(self, metabolites):
+        return SimpleNamespace(
+            reference=Path("ref"), brainmask=Path("mask"),
+            crlb_maps={met: Path(f"crlb-{met}.nii.gz") for met in metabolites}, qcmasks={},
+        )
+
+    def test_extracts_mni_space_crlb_maps_from_transformed(self):
+        """The MNI-space CRLB maps already written by resampling are reused,
+        not resampled a second time."""
+        registration = SimpleNamespace(mrsi_to_t1=SimpleNamespace(inverse="inv"), t1_to_mni=SimpleNamespace(forward="fwd"))
+        parcels = SimpleNamespace(atlas_t1="atlas_t1", atlas_mrsi="atlas_mrsi")
+        transformed = {
+            "MNI152NLin2009cAsym": {
+                "signal": Path("sig.nii.gz"),
+                "crlb-CrPCr": Path("mni_crlb_crpcr.nii.gz"),
+                "crlb-GluGln": Path("mni_crlb_glugln.nii.gz"),
+            }
+        }
+        with patch("mrsiprep.workflows.steps.run_synthseg_parcellation", return_value=parcels), patch(
+            "mrsiprep.workflows.steps.write_parcel_qc", return_value="parcel-qc"
+        ), patch("mrsiprep.workflows.steps.write_parcel_qc_figures") as figures:
+            P._step_synthseg_parcellation_qc(
+                SimpleNamespace(), "01", "01", Path("raw_t1"), self._mrsi_with_crlb(["CrPCr", "GluGln"]), registration,
+                _debug(), transformed=transformed,
+            )
+        self.assertEqual(
+            figures.call_args.kwargs["crlb_maps"],
+            {"CrPCr": Path("mni_crlb_crpcr.nii.gz"), "GluGln": Path("mni_crlb_glugln.nii.gz")},
+        )
+
+    def test_ignores_crlb_entries_for_metabolites_not_in_this_recording(self):
+        """transformed can carry a superset (e.g. a stale cache entry); only
+        metabolites this recording actually has crlb_maps for are kept."""
+        registration = SimpleNamespace(mrsi_to_t1=SimpleNamespace(inverse="inv"), t1_to_mni=SimpleNamespace(forward="fwd"))
+        parcels = SimpleNamespace(atlas_t1="atlas_t1", atlas_mrsi="atlas_mrsi")
+        transformed = {
+            "MNI152NLin2009cAsym": {"crlb-CrPCr": Path("crpcr.nii.gz"), "crlb-Stale": Path("stale.nii.gz")}
+        }
+        with patch("mrsiprep.workflows.steps.run_synthseg_parcellation", return_value=parcels), patch(
+            "mrsiprep.workflows.steps.write_parcel_qc", return_value="parcel-qc"
+        ), patch("mrsiprep.workflows.steps.write_parcel_qc_figures") as figures:
+            P._step_synthseg_parcellation_qc(
+                SimpleNamespace(), "01", "01", Path("raw_t1"), self._mrsi_with_crlb(["CrPCr"]), registration,
+                _debug(), transformed=transformed,
+            )
+        self.assertEqual(figures.call_args.kwargs["crlb_maps"], {"CrPCr": Path("crpcr.nii.gz")})
+
+    def test_passes_none_when_transformed_has_no_mni_space(self):
+        """No template output requested: figures skips the CRLB panel rather
+        than resample for a space nothing else in the run produced."""
+        registration = SimpleNamespace(mrsi_to_t1=SimpleNamespace(inverse="inv"), t1_to_mni=None)
+        parcels = SimpleNamespace(atlas_t1="atlas_t1", atlas_mrsi="atlas_mrsi")
+        with patch("mrsiprep.workflows.steps.run_synthseg_parcellation", return_value=parcels), patch(
+            "mrsiprep.workflows.steps.write_parcel_qc", return_value="parcel-qc"
+        ), patch("mrsiprep.workflows.steps.write_parcel_qc_figures") as figures:
+            P._step_synthseg_parcellation_qc(
+                SimpleNamespace(), "01", "01", Path("raw_t1"), self._mrsi_with_crlb(["CrPCr"]), registration,
+                _debug(), transformed=None,
+            )
+        self.assertIsNone(figures.call_args.kwargs["crlb_maps"])
+
 
 def _parcels(atlas_name="atlasA", scale=None, grow=None):
     """Minimal stand-in exposing the fields _step_* reads."""

@@ -224,13 +224,23 @@ class StepLeakageQcTests(unittest.TestCase):
 
 class StepSynthsegParcQcTests(unittest.TestCase):
     def test_wires_ctx_in_and_out(self):
-        ctx = {"raw_t1": "raw", "mrsi": "mrsi_obj", "registration": "reg_obj"}
+        ctx = {"raw_t1": "raw", "mrsi": "mrsi_obj", "registration": "reg_obj", "transformed": "transformed_obj"}
         with patch("mrsiprep.workflows.participant._step_synthseg_parcellation_qc", return_value=("prelim", "parcel_qc")) as step:
             result = N.step_synthseg_parc_qc(_fake_config(), _SUBJECT, _SESSION, ctx)
 
-        step.assert_called_once_with(unittest.mock.ANY, _SUBJECT, _SESSION, "raw", "mrsi_obj", "reg_obj", unittest.mock.ANY)
+        step.assert_called_once_with(
+            unittest.mock.ANY, _SUBJECT, _SESSION, "raw", "mrsi_obj", "reg_obj", unittest.mock.ANY, transformed="transformed_obj"
+        )
         self.assertEqual(result["preliminary_parcels"], "prelim")
         self.assertEqual(result["parcel_qc"], "parcel_qc")
+
+    def test_tolerates_a_missing_transformed_key(self):
+        """resampling's ctx entry might be absent (e.g. a test-fixture ctx);
+        the node must not KeyError on it, just pass None through."""
+        ctx = {"raw_t1": "raw", "mrsi": "mrsi_obj", "registration": "reg_obj"}
+        with patch("mrsiprep.workflows.participant._step_synthseg_parcellation_qc", return_value=("prelim", "parcel_qc")) as step:
+            N.step_synthseg_parc_qc(_fake_config(), _SUBJECT, _SESSION, ctx)
+        self.assertIsNone(step.call_args.kwargs["transformed"])
 
 
 class StepParcellationTests(unittest.TestCase):

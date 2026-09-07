@@ -15,7 +15,7 @@ import pandas as pd
 
 from mrsiprep.io.naming import coverage_report_dir, qc_report_derivative
 from mrsiprep.mrsi.resampling import resample_ref_met_to_t1w
-from mrsiprep.reports.slices import load_canonical_data, render_triplanar_png, triplanar_slices
+from mrsiprep.reports.slices import load_canonical_data, render_multi_slice_triplanar_png, render_triplanar_png, triplanar_slices
 from mrsiprep.config.templates import template_head
 
 
@@ -105,13 +105,14 @@ def build_mni_alignment_sections(
         )
         template_data = np.squeeze(nib.as_closest_canonical(template).get_fdata())
         mni_data = np.squeeze(load_canonical_data(mni_ref_map_path))
-        template_slices = triplanar_slices(template_data)
-        mni_slices = triplanar_slices(mni_data)
         mni_png = figures_dir / f"{out.stem}_space-MNI.png"
-        render_triplanar_png(
-            template_slices,
+        # Multiple slices per plane, not one: a single center slice can land
+        # on an unremarkable part of the registration and miss a real
+        # misalignment a few slices away.
+        render_multi_slice_triplanar_png(
+            template_data,
             mni_png,
-            overlay_slices=mni_slices,
+            overlay=mni_data,
             mode="solid",
             overlay_cmap="hot",
             colorbar_label=config.ref_met,

@@ -208,7 +208,7 @@ recording, not just this benchmark: against the MNI152 standard brain
 mask for the default MNI-space output, and against the T1w reference
 brain mask when T1w-space output is also requested
 (`--output-mrsi-t1w`). See the per-metabolite leakage table in the
-standard `reports/coverage/*_desc-report.html` output, backed by
+standard `reports/*_desc-report.html` output, backed by
 `confounds/*_desc-leakageqc.tsv`.
 
 ### Results
