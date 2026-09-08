@@ -22,6 +22,8 @@ def ants_transform_prefix(root: Path, subject: str, session: str | None, stage: 
     backend_suffix = "" if backend == "ants" else f"_{backend}"
     if stage == "mrsi":
         return root / sub / ses / "transforms" / "mrsi" / f"{sub}_{ses}_desc-mrsi_to_t1w{backend_suffix}"
+    if stage == "orient":
+        return root / sub / ses / "transforms" / "mrsi" / f"{sub}_{ses}_desc-mrsi_orientfix{backend_suffix}"
     if stage == "anat":
         return root / sub / ses / "transforms" / "anat" / f"{sub}_{ses}_desc-t1w_to_mni{backend_suffix}"
     if stage == "t1-template":

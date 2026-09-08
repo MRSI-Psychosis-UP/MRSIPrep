@@ -82,9 +82,10 @@ def _step_anatomical_prep(config, subject, session, t1_path, p3_override, brain_
         return prepare_anatomical(config, subject, session, t1_path, p3_override=p3_override, brain_mask_override=brain_mask_override)
 
 
-def _step_mrsi_preprocessing(config, subject, session, inputs, debug):
+def _step_mrsi_preprocessing(config, subject, session, inputs, debug, anat=None):
     with debug.step("MRSI preprocessing"):
-        mrsi = run_mrsi_workflow(config, subject, session, inputs)
+        t1_path = anat.registration_t1w if anat is not None else None
+        mrsi = run_mrsi_workflow(config, subject, session, inputs, t1_path=t1_path)
         qc_sections_mrsi_raw = build_mrsi_raw_qc_sections(config, subject, session, mrsi.raw_maps, mrsi.preproc_maps)
         qc_sections_mrsi_raw += build_ventricle_qc_sections(config, subject, session, mrsi.raw_maps)
         qc_sections_mrsi_preproc = build_mrsi_preproc_qc_sections(config, subject, session, mrsi.raw_maps, mrsi.preproc_maps)
