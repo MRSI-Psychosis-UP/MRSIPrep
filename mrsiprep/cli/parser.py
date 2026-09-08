@@ -141,6 +141,18 @@ def build_parser() -> argparse.ArgumentParser:
 
     registration = parser.add_argument_group("Specific options for registrations")
     registration.add_argument(
+        "--correct-mrsi-orientation",
+        dest="correct_mrsi_orientation",
+        action="store_true",
+        default=False,
+        help="Off by default. Post-quantification MRSI maps can occasionally come out with a wrong "
+        "sform/qform -- close enough to plausible that later steps 'succeed' on a misaligned recording. "
+        "When set, a quick rigid-only registration of the reference metabolite map to the T1w anatomical "
+        "runs first, before any MRSI preprocessing, and that same rigid correction is applied to every "
+        "other metabolite/CRLB/SNR/FWHM map and the brainmask, in place, at native MRSI resolution. Uses "
+        "--registration-backend (ANTs Rigid, or FLIRT dof=6 for fsl).",
+    )
+    registration.add_argument(
         "--registration-backend",
         choices=["ants", "fsl", "flirt-fnirt", "flirt_fnirt", "flirt/fnirt"],
         default="ants",
@@ -657,6 +669,7 @@ def parse_args(argv: list[str] | None = None) -> MRSIPrepConfig:
         linewidth_max=args.linewidth_max,
         crlb_max=args.crlb_max,
         tissue_backend=args.tissue_backend,
+        correct_mrsi_orientation=args.correct_mrsi_orientation,
         registration_backend=args.registration_backend,
         ants_mrsi_to_t1_transform=args.ants_mrsi_to_t1_transform,
         ants_t1_to_template_transform=args.ants_t1_to_template_transform,

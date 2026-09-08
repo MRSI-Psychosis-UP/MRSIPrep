@@ -321,6 +321,36 @@ docker run --rm \
   --tissue-backend none
 ```
 
+## MRSI orientation correction
+
+Post-quantification MRSI maps occasionally come out of the vendor/quantification
+pipeline with a wrong sform/qform -- close enough to plausible that spike
+filtering, PVC, and even MRSI-to-T1w registration all "succeed", but the whole
+recording ends up subtly or badly misaligned. `--correct-mrsi-orientation`
+fixes this upstream of everything else: before any MRSI preprocessing runs, it
+does a quick rigid-only registration of the reference metabolite map (`--ref-met`)
+to the T1w anatomical, then applies that same rigid correction to every other
+metabolite/CRLB/SNR/FWHM map, in place, at native MRSI resolution (shape and
+voxel spacing are unchanged; only position/orientation is corrected).
+
+```bash
+docker run --rm \
+  -v /path/to/bids:/data:ro \
+  -v /path/to/derivatives:/out \
+  mrsiup/mrsiprep:cpu \
+  /data /out participant \
+  --participant-label S001 \
+  --session-label V1 \
+  --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \
+  --ref-met CrPCr \
+  --correct-mrsi-orientation
+```
+
+Off by default -- most recordings do not need it, and the real (deformable)
+MRSI-to-T1w registration that runs afterward already tolerates ordinary
+misalignment. Uses `--registration-backend` (ANTs `Rigid`, or FLIRT `dof=6`
+for `fsl`).
+
 ## Command-Line Arguments
 
 ```{argparse}

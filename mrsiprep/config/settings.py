@@ -31,6 +31,7 @@ class MRSIPrepConfig:
     crlb_max: float | None = None
     tissue_backend: str = "synthseg-fast"
     registration_backend: str = "ants"
+    correct_mrsi_orientation: bool = False
     ants_mrsi_to_t1_transform: str = "sr"
     ants_t1_to_template_transform: str = "s"
     fsl_mrsi_to_t1_dof: int = 6
