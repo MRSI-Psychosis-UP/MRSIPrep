@@ -12,6 +12,7 @@ from mrsiprep.io.mrsinmrs import resolve_mrsinmrs
 from mrsiprep.io.naming import mrsi_derivative
 from mrsiprep.mrsi.filtering import filter_metabolite_maps
 from mrsiprep.mrsi.masks import ensure_brainmask
+from mrsiprep.mrsi.orientation import correct_mrsi_orientation
 from mrsiprep.mrsi.quality import make_quality_masks
 from mrsiprep.mrsi.reference import generate_reference
 from mrsiprep.mrsi.t1_correction import apply_t1_correction, resolve_acquisition_params
@@ -91,6 +92,7 @@ def _copy_native_maps(config, subject: str, session: str | None, inputs: MRSIInp
     links: list[tuple[Path | None, dict, str]] = [
         (inputs.snr_map, {"desc": "snr"}, "orig"),
         (inputs.linewidth_map, {"desc": "fwhm"}, "orig"),
+        (inputs.water_map, {"met": "water", "desc": "signal"}, "mrsi"),
     ]
     for met, path in inputs.crlb_maps.items():
         links.append((path, {"met": met, "desc": "crlb"}, "orig"))
@@ -138,14 +140,52 @@ def _copy_native_maps(config, subject: str, session: str | None, inputs: MRSIInp
         os.replace(tmp_target, target)
 
 
-def run_mrsi_workflow(config, subject: str, session: str | None, inputs: MRSIInputs) -> MRSIResult:
+def _derivative_map_paths(config, subject: str, session: str | None, inputs: MRSIInputs) -> tuple[dict[str, Path], dict[str, Path], Path | None, Path | None, Path | None]:
+    """The mrsi/orig/ derivative-tree paths ``_copy_native_maps`` just wrote
+    for each of ``inputs``' maps, in the same shape as the input dicts.
+
+    Correcting orientation in place has to target these, not
+    ``inputs.metabolite_maps``/etc. directly: those are the *input* BIDS
+    paths, commonly mounted read-only (e.g. Docker's ``-v ...:/data:ro``),
+    while the derivative copies are the writable ones this run actually owns.
+    """
+    metabolite_maps = {
+        met: mrsi_derivative(config.derivative_dir, subject, session, space="mrsi", met=met, desc="signal", suffix_override="mrsi")
+        for met in inputs.metabolite_maps
+    }
+    crlb_maps = {
+        met: mrsi_derivative(config.derivative_dir, subject, session, space="orig", met=met, desc="crlb", suffix_override="mrsi")
+        for met in inputs.crlb_maps
+    }
+    snr_map = (
+        mrsi_derivative(config.derivative_dir, subject, session, space="orig", desc="snr", suffix_override="mrsi")
+        if inputs.snr_map is not None
+        else None
+    )
+    linewidth_map = (
+        mrsi_derivative(config.derivative_dir, subject, session, space="orig", desc="fwhm", suffix_override="mrsi")
+        if inputs.linewidth_map is not None
+        else None
+    )
+    water_map = (
+        mrsi_derivative(config.derivative_dir, subject, session, space="mrsi", met="water", desc="signal", suffix_override="mrsi")
+        if inputs.water_map is not None
+        else None
+    )
+    return metabolite_maps, crlb_maps, snr_map, linewidth_map, water_map
+
+
+def run_mrsi_workflow(config, subject: str, session: str | None, inputs: MRSIInputs, t1_path: Path | None = None) -> MRSIResult:
     """Preprocess one recording's native-space MRSI maps.
 
-    Copies raw inputs into the derivatives tree, ensures a brainmask
-    exists (deriving one from the water/metabolite maps if the input
-    layout didn't provide one), filters metabolite maps (spike detection
-    and biharmonic repair), builds the reference-metabolite image used to
-    drive registration, and computes voxel-level quality masks from the
+    Copies raw inputs into the derivatives tree, optionally rigid-corrects
+    their orientation against the T1w anatomical (see
+    :func:`mrsiprep.mrsi.orientation.correct_mrsi_orientation`, opt-in via
+    ``config.correct_mrsi_orientation``), ensures a brainmask exists
+    (deriving one from the water/metabolite maps if the input layout didn't
+    provide one), filters metabolite maps (spike detection and biharmonic
+    repair), builds the reference-metabolite image used to drive
+    registration, and computes voxel-level quality masks from the
     SNR/CRLB/FWHM thresholds in ``config``.
 
     :param config: Run-wide :class:`mrsiprep.config.settings.MRSIPrepConfig`.
@@ -156,10 +196,36 @@ def run_mrsi_workflow(config, subject: str, session: str | None, inputs: MRSIInp
         :func:`mrsiprep.io.loaders.load_mrsi_inputs` (metabolite/CRLB
         maps, SNR/linewidth/water maps, brainmask -- any of which may be
         ``None`` except ``metabolite_maps``).
+    :param t1_path: The recording's registration-ready T1w anatomical.
+        Required when ``config.correct_mrsi_orientation`` is set; unused
+        otherwise.
     :returns: :class:`MRSIResult` with all derivatives written to
         ``config.derivative_dir`` and referenced by path.
     """
     _copy_native_maps(config, subject, session, inputs)
+    if config.correct_mrsi_orientation:
+        if t1_path is None:
+            raise ValueError("--correct-mrsi-orientation requires a T1w anatomical, but none was provided.")
+        metabolite_maps, crlb_maps, snr_map, linewidth_map, water_map = _derivative_map_paths(config, subject, session, inputs)
+        correct_mrsi_orientation(
+            config,
+            subject,
+            session,
+            metabolite_maps,
+            t1_path,
+            crlb_maps=crlb_maps,
+            snr_map=snr_map,
+            linewidth_map=linewidth_map,
+            water_map=water_map,
+        )
+        # Everything downstream must read the corrected derivative copies,
+        # not the (possibly misaligned, and possibly read-only) input paths
+        # this run started from.
+        inputs.metabolite_maps = metabolite_maps
+        inputs.crlb_maps = crlb_maps
+        inputs.snr_map = snr_map
+        inputs.linewidth_map = linewidth_map
+        inputs.water_map = water_map
     brainmask = ensure_brainmask(config, subject, session, inputs.brainmask, inputs.water_map, inputs.metabolite_maps)
     preproc = filter_metabolite_maps(config, subject, session, inputs.metabolite_maps, brainmask)
     corrected = preproc

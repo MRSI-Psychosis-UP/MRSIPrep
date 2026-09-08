@@ -71,7 +71,9 @@ def step_mrsi(config, subject, session, ctx):
     from mrsiprep.workflows.participant import _step_mrsi_preprocessing
 
     debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""))
-    mrsi, qc_sections_mrsi_raw, qc_sections_mrsi_preproc, qc_sections_t1_correction = _step_mrsi_preprocessing(config, subject, session, ctx["inputs"], debug)
+    mrsi, qc_sections_mrsi_raw, qc_sections_mrsi_preproc, qc_sections_t1_correction = _step_mrsi_preprocessing(
+        config, subject, session, ctx["inputs"], debug, anat=ctx.get("anat")
+    )
     ctx = dict(ctx)
     ctx.update(
         mrsi=mrsi,
