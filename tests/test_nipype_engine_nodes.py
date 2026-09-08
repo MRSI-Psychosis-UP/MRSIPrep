@@ -90,17 +90,26 @@ class StepAnatTests(unittest.TestCase):
 
 class StepMrsiTests(unittest.TestCase):
     def test_wires_ctx_in_and_out(self):
-        ctx = {"inputs": "inputs_obj"}
+        ctx = {"inputs": "inputs_obj", "anat": "anat_obj"}
         with patch(
             "mrsiprep.workflows.participant._step_mrsi_preprocessing", return_value=("mrsi_obj", "raw_qc", "preproc_qc", "t1corr_qc")
         ) as step:
             result = N.step_mrsi(_fake_config(), _SUBJECT, _SESSION, ctx)
 
         self.assertEqual(step.call_args[0][3], "inputs_obj")
+        self.assertEqual(step.call_args.kwargs["anat"], "anat_obj")
         self.assertEqual(result["mrsi"], "mrsi_obj")
         self.assertEqual(result["qc_sections_mrsi_raw"], "raw_qc")
         self.assertEqual(result["qc_sections_mrsi_preproc"], "preproc_qc")
         self.assertEqual(result["qc_sections_t1_correction"], "t1corr_qc")
+
+    def test_tolerates_a_missing_anat_key(self):
+        ctx = {"inputs": "inputs_obj"}
+        with patch(
+            "mrsiprep.workflows.participant._step_mrsi_preprocessing", return_value=("mrsi_obj", "raw_qc", "preproc_qc", "t1corr_qc")
+        ) as step:
+            N.step_mrsi(_fake_config(), _SUBJECT, _SESSION, ctx)
+        self.assertIsNone(step.call_args.kwargs["anat"])
 
 
 class StepRegistrationTests(unittest.TestCase):

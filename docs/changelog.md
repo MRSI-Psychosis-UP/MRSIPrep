@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### MRSI preprocessing
+
+- **Added `--correct-mrsi-orientation`** (off by default). Post-quantification
+  MRSI maps occasionally come out of the vendor/quantification pipeline with
+  a wrong sform/qform -- close enough to plausible that spike filtering, PVC,
+  and even MRSI-to-T1w registration all "succeed" on a misaligned recording.
+  When set, a quick rigid-only registration of the reference metabolite map
+  to the T1w anatomical runs first, before any MRSI preprocessing, and that
+  same rigid correction is applied to every other metabolite/CRLB/SNR/FWHM
+  map, in place, at native MRSI resolution. Uses `--registration-backend`
+  (ANTs `Rigid`, or FLIRT `dof=6` for `fsl`).
+
 ## 1.15.3
 
 ### QC report

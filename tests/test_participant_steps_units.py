@@ -165,6 +165,25 @@ class StepMrsiPreprocessingTests(unittest.TestCase):
         t1_corr.assert_called_once()
         self.assertEqual(qc_t1corr, ["t1corr"])
 
+    def test_threads_anat_registration_t1w_through_as_t1_path(self):
+        anat = SimpleNamespace(registration_t1w=Path("t1.nii.gz"))
+        with patch("mrsiprep.workflows.steps.run_mrsi_workflow", return_value=self._mrsi()) as run_mrsi, patch(
+            "mrsiprep.workflows.steps.build_mrsi_raw_qc_sections", return_value=[]
+        ), patch("mrsiprep.workflows.steps.build_ventricle_qc_sections", return_value=[]), patch(
+            "mrsiprep.workflows.steps.build_mrsi_preproc_qc_sections", return_value=[]
+        ):
+            P._step_mrsi_preprocessing(SimpleNamespace(), "01", "01", object(), _debug(), anat=anat)
+        run_mrsi.assert_called_once_with(unittest.mock.ANY, "01", "01", unittest.mock.ANY, t1_path=Path("t1.nii.gz"))
+
+    def test_t1_path_is_none_without_anat(self):
+        with patch("mrsiprep.workflows.steps.run_mrsi_workflow", return_value=self._mrsi()) as run_mrsi, patch(
+            "mrsiprep.workflows.steps.build_mrsi_raw_qc_sections", return_value=[]
+        ), patch("mrsiprep.workflows.steps.build_ventricle_qc_sections", return_value=[]), patch(
+            "mrsiprep.workflows.steps.build_mrsi_preproc_qc_sections", return_value=[]
+        ):
+            P._step_mrsi_preprocessing(SimpleNamespace(), "01", "01", object(), _debug())
+        run_mrsi.assert_called_once_with(unittest.mock.ANY, "01", "01", unittest.mock.ANY, t1_path=None)
+
 
 class StepRegistrationTests(unittest.TestCase):
     def test_threads_mrsi_and_anat_fields_through(self):

@@ -116,6 +116,14 @@ class CLITests(unittest.TestCase):
         cfg = parse_args(["/tmp/bids", "/tmp/out", "participant", "--validate-only"])
         self.assertTrue(cfg.validate_only)
 
+    def test_cli_correct_mrsi_orientation_defaults_off(self):
+        cfg = parse_args(["/tmp/bids", "/tmp/out", "participant"])
+        self.assertFalse(cfg.correct_mrsi_orientation)
+
+    def test_cli_correct_mrsi_orientation_opts_in(self):
+        cfg = parse_args(["/tmp/bids", "/tmp/out", "participant", "--correct-mrsi-orientation"])
+        self.assertTrue(cfg.correct_mrsi_orientation)
+
     def test_cli_fsl_deformable_defaults_on(self):
         cfg = parse_args(["/tmp/bids", "/tmp/out", "participant"])
         self.assertTrue(cfg.fsl_deformable)
