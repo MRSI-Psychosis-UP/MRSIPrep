@@ -1,4 +1,4 @@
-name: E2E mni-norm
+name: E2E full pipeline
 
 on:
   workflow_dispatch:
@@ -8,7 +8,7 @@ on:
 jobs:
   e2e:
     runs-on: mrsiprep_runner
-    timeout-minutes: 40
+    timeout-minutes: 300
     env:
       MRSIPREP_E2E_DATA_DIR: ${{ github.workspace }}/SynthMRSI-Project
       SYNTHMRSI_PROJECT_URL: https://zenodo.org/records/21477048/files/SynthMRSI-Project.zip
@@ -42,4 +42,4 @@ jobs:
           echo "FS_LICENSE=${{ github.workspace }}/freesurfer_license.txt" >> "${GITHUB_ENV}"
 
       - name: Run end-to-end test
-        run: pytest -m e2e_synthmrsi_project --no-cov tests/test_synthmrsi_project_e2e.py -k synthseg_parcellation
+        run: pytest -m e2e_synthmrsi_project --no-cov tests/test_synthmrsi_project_e2e.py -k full_pipeline

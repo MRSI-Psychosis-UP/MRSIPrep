@@ -56,63 +56,13 @@ class SynthMRSIProjectE2ETests(unittest.TestCase):
         self.out_dir = Path(tempfile.mkdtemp(prefix="mrsiprep_e2e_out_"))
         self.addCleanup(shutil.rmtree, self.out_dir, ignore_errors=True)
 
-    def test_two_subjects_run_end_to_end_synthseg_parcellation(self):
-        cmd = [
-            "docker", "run", "--rm",
-            "-v", f"{self.data_dir}:/data:ro",
-            "-v", f"{self.out_dir}:/out",
-            "-v", f"{self.fs_license}:/opt/freesurfer/license.txt:ro",
-            "-e", "FS_LICENSE=/opt/freesurfer/license.txt",
-            _IMAGE,
-            "/data", "/out", "participant",
-            "--participant-label", "01", "05",
-            "--session-label", "01",
-            "--parcellation-mode", "synthseg",
-            "--t1", "acq-mprage_T1w",
-            "--metabolites", "NAANAAG,GPCPCh,CrPCr,GluGln,Ins",
-            "--ref-met", "CrPCr",
-            # --synthseg-mode fast, not the default "robust": SynthSeg-robust's
-            # inference is memory-hungry enough to hit std::bad_alloc on
-            # GitHub's standard 16GB-RAM runners (confirmed via a live CI
-            # crash: "mri_synthseg exited with status -6 ... terminate
-            # called after throwing an instance of 'std::bad_alloc'").
-            "--synthseg-mode", "fast",
-            # Self-managed 64-thread/128GB larger runner (mrsiprep_runner) --
-            # 32 threads x 2 parallel subjects uses the full runner.
-            "--nthreads", "32", "--nproc", "2", "--verbose", "1",
-        ]
-        # Stream output live (rather than capture_output=True, which buffers
-        # everything silently until the process exits) so a hang is visible
-        # in CI logs as it happens, not just as a wall of text after a
-        # timeout finally kills it. A hard timeout bounds worst-case runtime
-        # instead of relying on GitHub's own 6-hour job cap.
-        lines: list[str] = []
-        # nosemgrep: dangerous-subprocess-use-audit,avoid-execution-of-untrusted-input-in-subprocess-calls
-        # nosec B603 -- cmd is a static list literal defined above, no shell=True
-        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
-        try:
-            for line in process.stdout:
-                print(line, end="", flush=True)
-                lines.append(line)
-            returncode = process.wait(timeout=1200)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            process.wait()
-            self.fail(f"mrsiprep run exceeded 1200s timeout without finishing. Output so far:\n{''.join(lines)}")
-        self.assertEqual(returncode, 0, msg=f"mrsiprep run failed:\n{''.join(lines)}")
-
-        for subject in ("01", "05"):
-            subject_root = self.out_dir / "mrsiprep" / f"sub-{subject}" / "ses-01"
-            self.assertTrue(subject_root.is_dir(), msg=f"no output directory for sub-{subject}: {subject_root}")
-
-            qc_reports = list((subject_root / "reports" / "coverage").glob(f"sub-{subject}_ses-01_desc-report.html"))
-            self.assertTrue(qc_reports, msg=f"no combined QC report for sub-{subject} under {subject_root}")
-            self.assertGreater(qc_reports[0].stat().st_size, 1024, msg=f"QC report for sub-{subject} looks too small to be real")
-
-            mni_maps = list((subject_root / "mrsi" / "mni").glob("*.nii.gz"))
-            self.assertTrue(mni_maps, msg=f"no MNI-space metabolite maps for sub-{subject} under {subject_root}")
-
-    def test_two_subjects_run_end_to_end_chimera_parcellation(self):
+    def test_two_subjects_run_end_to_end_full_pipeline(self):
+        """The full pipeline, not a parcellation-mode subset: Chimera
+        parcellation (FreeSurfer recon-all + Chimera, the most expensive
+        combination) plus metabolic connectivity, on two subjects run in
+        parallel. This is what the "e2e" badge in the README actually
+        certifies -- a single real run through every optional stage a user
+        is likely to enable, not just the always-on ones."""
         cmd = [
             "docker", "run", "--rm",
             "-v", f"{self.data_dir}:/data:ro",
@@ -127,17 +77,23 @@ class SynthMRSIProjectE2ETests(unittest.TestCase):
             "--t1", "acq-mprage_T1w",
             "--metabolites", "NAANAAG,GPCPCh,CrPCr,GluGln,Ins",
             "--ref-met", "CrPCr",
-            # Same rationale as the synthseg-parcellation test: keep
-            # SynthSeg-fast rather than the memory-hungry default "robust" mode.
+            "--write-connectivity",
+            # Same rationale as before: SynthSeg-robust's inference is
+            # memory-hungry enough to hit std::bad_alloc on GitHub's
+            # standard-RAM runners; keep the lighter "fast" mode.
             "--synthseg-mode", "fast",
-            # Self-managed 64-thread/128GB larger runner (mrsiprep_runner) --
-            # 32 threads x 2 parallel subjects uses the full runner.
             # --parcellation-mode chimera runs FreeSurfer recon-all
             # (documented 1-3h/subject) and Chimera (10-20+min/subject) --
-            # run in parallel across the 2 subjects, so wall time is bounded
-            # by one subject's worst case.
-            "--nthreads", "32", "--nproc", "2", "--verbose", "1",
+            # 2 subjects in parallel (--nproc 2) so wall time is bounded by
+            # one subject's worst case, --nthreads 12 each on the
+            # self-managed mrsiprep_runner.
+            "--nproc", "2", "--nthreads", "12", "--verbose", "1",
         ]
+        # Stream output live (rather than capture_output=True, which buffers
+        # everything silently until the process exits) so a hang is visible
+        # in CI logs as it happens, not just as a wall of text after a
+        # timeout finally kills it. A hard timeout bounds worst-case runtime
+        # instead of relying on GitHub's own 6-hour job cap.
         lines: list[str] = []
         # nosemgrep: dangerous-subprocess-use-audit,avoid-execution-of-untrusted-input-in-subprocess-calls
         # nosec B603 -- cmd is a static list literal defined above, no shell=True
@@ -157,18 +113,22 @@ class SynthMRSIProjectE2ETests(unittest.TestCase):
             subject_root = self.out_dir / "mrsiprep" / f"sub-{subject}" / "ses-01"
             self.assertTrue(subject_root.is_dir(), msg=f"no output directory for sub-{subject}: {subject_root}")
 
-            qc_reports = list((subject_root / "reports" / "coverage").glob(f"sub-{subject}_ses-01_desc-report.html"))
+            qc_reports = list((subject_root / "reports").glob(f"sub-{subject}_ses-01_desc-report.html"))
             self.assertTrue(qc_reports, msg=f"no combined QC report for sub-{subject} under {subject_root}")
             self.assertGreater(qc_reports[0].stat().st_size, 1024, msg=f"QC report for sub-{subject} looks too small to be real")
 
-            # chimera parcellation is a superset of synthseg parcellation's outputs.
             mni_maps = list((subject_root / "mrsi" / "mni").glob("*.nii.gz"))
             self.assertTrue(mni_maps, msg=f"no MNI-space metabolite maps for sub-{subject} under {subject_root}")
 
-            # chimera-specific: proves Chimera/FreeSurfer recon-all and PVC
+            # Chimera-specific: proves FreeSurfer recon-all, Chimera, and PVC
             # actually ran, not just the always-on steps.
             parcel_profiles = list((subject_root / "mrsi" / "parcel").glob("*.npz"))
             self.assertTrue(parcel_profiles, msg=f"no parcel profile archive for sub-{subject} under {subject_root}")
+
+            # --write-connectivity: proves the metabolic connectivity matrix
+            # was actually built, not just the always-on profile export.
+            connectivity_matrices = list((subject_root / "connectivity").glob("*_desc-connectivity_mrsi.npz"))
+            self.assertTrue(connectivity_matrices, msg=f"no connectivity matrix for sub-{subject} under {subject_root}")
 
 
 if __name__ == "__main__":
