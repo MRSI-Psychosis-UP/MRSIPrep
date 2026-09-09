@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 2.0.0
+
+The version described by the MRSIPrep bioRxiv preprint.
+
 ### MRSI preprocessing
 
 - **Added `--correct-mrsi-orientation`** (off by default). Post-quantification
