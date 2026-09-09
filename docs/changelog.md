@@ -6,6 +6,15 @@
 
 The version described by the MRSIPrep bioRxiv preprint.
 
+### CI
+
+- **Replaced the two parcellation-mode-specific e2e workflows** (`e2e-mni-norm`,
+  `e2e-parc-con` -- named after `--mode` values removed back in 1.11.0/1.10.0,
+  which made the badges misleading) **with one `e2e-full-pipeline` workflow**:
+  two subjects run in parallel (`--nproc 2 --nthreads 12`) through the full
+  pipeline -- Chimera parcellation plus `--write-connectivity` -- instead of
+  two separate partial runs.
+
 ### MRSI preprocessing
 
 - **Added `--correct-mrsi-orientation`** (off by default). Post-quantification
