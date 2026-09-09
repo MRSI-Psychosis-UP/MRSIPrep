@@ -2,9 +2,8 @@
 
 
 
-![version](https://img.shields.io/badge/version-v1.10.1-blue)
-[![e2e mni-norm](https://img.shields.io/github/actions/workflow/status/MRSI-Psychosis-UP/MRSIPrep/e2e-mni-norm.yml?label=e2e%20mni-norm&color=success)](https://github.com/MRSI-Psychosis-UP/MRSIPrep/actions/workflows/e2e-mni-norm.yml)
-[![e2e parc-con](https://img.shields.io/github/actions/workflow/status/MRSI-Psychosis-UP/MRSIPrep/e2e-parc-con.yml?label=e2e%20parc-con&color=success)](https://github.com/MRSI-Psychosis-UP/MRSIPrep/actions/workflows/e2e-parc-con.yml)
+![version](https://img.shields.io/badge/version-v2.0.0-blue)
+[![e2e full pipeline](https://img.shields.io/github/actions/workflow/status/MRSI-Psychosis-UP/MRSIPrep/e2e-full-pipeline.yml?label=e2e%20full%20pipeline&color=success)](https://github.com/MRSI-Psychosis-UP/MRSIPrep/actions/workflows/e2e-full-pipeline.yml)
 [![codecov](https://codecov.io/gh/MRSI-Psychosis-UP/MRSIPrep/branch/main/graph/badge.svg)](https://codecov.io/gh/MRSI-Psychosis-UP/MRSIPrep)
 [![docs](https://app.readthedocs.org/projects/mrsiprep/badge/?version=stable)](https://mrsiprep.readthedocs.io/en/stable/)
 [![Codacy Badge](https://app.codacy.com/project/badge/Grade/55f24973247f41bbb27885f6b6375389)](https://app.codacy.com/gh/MRSI-Psychosis-UP/MRSIPrep/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
@@ -69,7 +68,7 @@ following MRSIPrep's own raw-MRSI-input convention.
 - Published on Zenodo: [10.5281/zenodo.21477047](https://doi.org/10.5281/zenodo.21477047) (CC0)
 - Full download and usage instructions: [PUBLIC_DATASET.md](PUBLIC_DATASET.md)
 - Used as the fixture for this repo's automated end-to-end pipeline test (see
-  the "tested on SynthMRSI-Project" badge above)
+  the "e2e full pipeline" badge above)
 
 **SynthMRSI-Project is never modified after publication** — its Zenodo
 record is fixed and citable. A separate, unpublished internal dataset,
