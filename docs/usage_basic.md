@@ -125,8 +125,13 @@ derivative is missing -- so it is not a substitute for a normal run on data
 that hasn't been processed yet.
 
 A full example report, rendered end-to-end on the public SynthMRSI-Project
-subject above, is available to preview without running anything:
-[`docs/examples/sub-01_ses-01_desc-report_SynthMRSI-Project.pdf`](https://github.com/MRSI-Psychosis-UP/MRSIPrep/blob/main/docs/examples/sub-01_ses-01_desc-report_SynthMRSI-Project.pdf).
+subject above (`--parcellation-mode chimera`, `--write-connectivity`), is
+available to preview without running anything:
+[`docs/examples/sub-01_ses-01/sub-01_ses-01_desc-report.html`](https://github.com/MRSI-Psychosis-UP/MRSIPrep/blob/main/docs/examples/sub-01_ses-01/sub-01_ses-01_desc-report.html)
+(download the whole
+[`docs/examples/sub-01_ses-01/`](https://github.com/MRSI-Psychosis-UP/MRSIPrep/tree/main/docs/examples/sub-01_ses-01)
+folder to view it rendered in a browser, since GitHub shows raw `.html`
+as source rather than executing it).
 
 ## The Nipype workflow engine
 
