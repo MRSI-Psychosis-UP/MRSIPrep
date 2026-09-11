@@ -9,6 +9,7 @@ import nibabel as nib
 import numpy as np
 
 from mrsiprep.config.templates import template_t1w
+from mrsiprep.parcellation.cubic import generate_cubic_atlas, parse_cubic_atlas_name
 from mrsiprep.parcellation.labels import write_labels
 
 
@@ -69,6 +70,20 @@ def load_mni_atlas(config, work_dir: str | Path, atlas_name: str | None = None) 
         labels = [label.decode() if isinstance(label, bytes) else str(label) for label in fetched.labels]
         write_labels(indices, labels[: len(indices)], labels_path)
         return atlas_path, labels_path, atlas
+    cube_size_mm = parse_cubic_atlas_name(atlas)
+    if cube_size_mm is not None:
+        atlas_key = f"cubic{cube_size_mm}mm"
+        atlas_path = work_dir / f"atlas-{atlas_key}_space-MNI152NLin2009cAsym_dseg.nii.gz"
+        labels_path = work_dir / f"atlas-{atlas_key}_labels.tsv"
+        if atlas_path.exists() and labels_path.exists():
+            return atlas_path, labels_path, atlas_key
+        atlas_img = generate_cubic_atlas(cube_size_mm)
+        _save_nifti_atomic(atlas_img, atlas_path)
+        data = np.asanyarray(atlas_img.dataobj).astype(int)
+        indices = np.unique(data)
+        indices = indices[indices != 0]
+        write_labels(indices, [f"gm-cube-{i}" for i in indices], labels_path)
+        return atlas_path, labels_path, atlas_key
     if atlas in {"mist197", "mist-197"}:
         atlas_path = work_dir / "atlas-mist197_space-MNI152NLin2009cAsym_dseg.nii.gz"
         labels_path = work_dir / "atlas-mist197_labels.tsv"
