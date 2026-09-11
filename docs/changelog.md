@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Parcellation
+
+- **Added a cubic (grid) parcellation**, selected via `--parcellation-mode
+  atlas --atlas cubic<N>mm` (e.g. `cubic10mm`, `cubic12mm`): tiles the
+  bundled MNI-space gray-matter mask into a regular grid of `N`-millimeter
+  cubes instead of anatomical regions, useful for analyses that want
+  spatially uniform sampling rather than atlas-defined boundaries. Any
+  integer `N` is accepted -- the grid is generated (and cached per size)
+  the first time it's requested, the same way `schaefer<N>`/`mist197`
+  already are, rather than shipping one bundled file per size.
+
 ## 2.0.0
 
 The version described by the MRSIPrep bioRxiv preprint.

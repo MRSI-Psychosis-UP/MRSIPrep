@@ -206,6 +206,74 @@ class LoadMniAtlasSchaeferFetchTests(unittest.TestCase):
         self.assertEqual(result, (atlas_path, labels_path, "schaefer100"))
 
 
+class LoadMniAtlasCubicGenerateTests(unittest.TestCase):
+    def setUp(self):
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._tmpdir.name)
+        patcher = patch("mrsiprep.parcellation.atlas_registry._find_bundled_atlas", return_value=None)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def tearDown(self):
+        self._tmpdir.cleanup()
+
+    def test_generates_and_caches_when_not_already_present(self):
+        cubic_img = nib.Nifti1Image(np.array([[[0, 1], [2, 3]]], dtype=np.int32), np.eye(4))
+        config = SimpleNamespace(atlas="cubic10mm", custom_atlas=None, custom_atlas_lut=None)
+
+        with patch("mrsiprep.parcellation.atlas_registry.generate_cubic_atlas", return_value=cubic_img) as gen_mock, patch(
+            "mrsiprep.parcellation.atlas_registry.write_labels"
+        ) as write_labels_mock:
+            atlas_path, labels_path, atlas_name = load_mni_atlas(config, self.tmp)
+
+        gen_mock.assert_called_once_with(10)
+        self.assertEqual(atlas_name, "cubic10mm")
+        self.assertTrue(atlas_path.exists())
+        indices_arg, labels_arg, labels_path_arg = write_labels_mock.call_args[0]
+        np.testing.assert_array_equal(indices_arg, [1, 2, 3])
+        self.assertEqual(labels_arg, ["gm-cube-1", "gm-cube-2", "gm-cube-3"])
+        self.assertEqual(labels_path_arg, labels_path)
+
+    def test_hyphenated_form_also_generates(self):
+        cubic_img = nib.Nifti1Image(np.array([[[0, 1]]], dtype=np.int32), np.eye(4))
+        config = SimpleNamespace(atlas="cubic-15mm", custom_atlas=None, custom_atlas_lut=None)
+
+        with patch("mrsiprep.parcellation.atlas_registry.generate_cubic_atlas", return_value=cubic_img) as gen_mock, patch(
+            "mrsiprep.parcellation.atlas_registry.write_labels"
+        ):
+            _atlas_path, _labels_path, atlas_name = load_mni_atlas(config, self.tmp)
+
+        gen_mock.assert_called_once_with(15)
+        self.assertEqual(atlas_name, "cubic15mm")
+
+    def test_reuses_cache_when_both_files_already_exist(self):
+        atlas_path = self.tmp / "atlas-cubic10mm_space-MNI152NLin2009cAsym_dseg.nii.gz"
+        labels_path = self.tmp / "atlas-cubic10mm_labels.tsv"
+        atlas_path.touch()
+        labels_path.touch()
+        config = SimpleNamespace(atlas="cubic10mm", custom_atlas=None, custom_atlas_lut=None)
+
+        with patch("mrsiprep.parcellation.atlas_registry.generate_cubic_atlas") as gen_mock:
+            result = load_mni_atlas(config, self.tmp)
+
+        gen_mock.assert_not_called()
+        self.assertEqual(result, (atlas_path, labels_path, "cubic10mm"))
+
+    def test_two_different_cube_sizes_get_independent_cache_entries(self):
+        cubic_img = nib.Nifti1Image(np.array([[[1]]], dtype=np.int32), np.eye(4))
+        with patch("mrsiprep.parcellation.atlas_registry.generate_cubic_atlas", return_value=cubic_img), patch(
+            "mrsiprep.parcellation.atlas_registry.write_labels"
+        ):
+            _p1, _l1, name_10 = load_mni_atlas(SimpleNamespace(atlas="cubic10mm", custom_atlas=None, custom_atlas_lut=None), self.tmp)
+            _p2, _l2, name_15 = load_mni_atlas(SimpleNamespace(atlas="cubic15mm", custom_atlas=None, custom_atlas_lut=None), self.tmp)
+
+        self.assertNotEqual(name_10, name_15)
+        self.assertEqual(
+            sorted(p.name for p in self.tmp.glob("atlas-cubic*mm_space-MNI152NLin2009cAsym_dseg.nii.gz")),
+            ["atlas-cubic10mm_space-MNI152NLin2009cAsym_dseg.nii.gz", "atlas-cubic15mm_space-MNI152NLin2009cAsym_dseg.nii.gz"],
+        )
+
+
 class LoadMniAtlasMistFetchTests(unittest.TestCase):
     def setUp(self):
         self._tmpdir = tempfile.TemporaryDirectory()
