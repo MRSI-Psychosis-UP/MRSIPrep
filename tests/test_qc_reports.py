@@ -291,6 +291,47 @@ class RegistrationAlignmentSectionsTests(unittest.TestCase):
             self.assertNotIn("No T1w-space reference metabolite map available", text)
 
 
+class LoadMni152HeadTemplateTests(unittest.TestCase):
+    """Calls the real function, not mocked out: this is a regression guard
+    for a genuine UserWarning ("Casting data from int16 to float32") that
+    fired on every report build with a non-1mm MNI resolution, because the
+    fetched template is int16 and nilearn's resample_img warns on its own
+    implicit int->float cast during interpolation."""
+
+    def test_resampling_a_non_native_resolution_raises_no_warning(self):
+        import warnings
+
+        from mrsiprep.reports.registration_overview import _load_mni152_head_template
+
+        int16_template = nib.Nifti1Image(np.random.randint(0, 1000, (30, 30, 30)).astype(np.int16), np.eye(4))
+        with mock.patch("mrsiprep.reports.registration_overview.template_head", return_value=int16_template):
+            with warnings.catch_warnings():
+                warnings.simplefilter("error")
+                result = _load_mni152_head_template(5)
+        # A finer (1mm) grid resampled to a coarser (5mm) voxel size over the
+        # same physical extent has fewer voxels per axis -- the actual
+        # regression guard here is that no warning fired above, not the
+        # exact output shape, but confirm resampling genuinely happened.
+        self.assertLess(result.shape[0], int16_template.shape[0])
+
+    def test_native_resolution_skips_resampling_entirely(self):
+        from mrsiprep.reports.registration_overview import _load_mni152_head_template
+
+        int16_template = nib.Nifti1Image(np.zeros((4, 4, 4), dtype=np.int16), np.eye(4))
+        with mock.patch("mrsiprep.reports.registration_overview.template_head", return_value=int16_template) as fetch:
+            result = _load_mni152_head_template(1)
+        fetch.assert_called_once()
+        self.assertIs(result, int16_template)
+
+    def test_none_resolution_defaults_to_1_and_skips_resampling(self):
+        from mrsiprep.reports.registration_overview import _load_mni152_head_template
+
+        int16_template = nib.Nifti1Image(np.zeros((4, 4, 4), dtype=np.int16), np.eye(4))
+        with mock.patch("mrsiprep.reports.registration_overview.template_head", return_value=int16_template):
+            result = _load_mni152_head_template(None)
+        self.assertIs(result, int16_template)
+
+
 class LeakageTableHtmlTests(unittest.TestCase):
     def test_renders_rows_for_matching_space_only(self):
         leakage_df = pd.DataFrame(
