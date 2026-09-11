@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### QC report
+
+- Fixed a `UserWarning: Casting data from int16 to float32` that fired on
+  every report build with a non-native MNI resolution (e.g. `res-5`): the
+  full-head MNI template used as the Template-space alignment tab's
+  background is fetched as `int16` and was resampled without first
+  casting to `float32`, so nilearn warned about its own implicit cast on
+  every call.
+
 ## 2.0.1
 
 ### Parcellation

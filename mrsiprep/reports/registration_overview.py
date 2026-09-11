@@ -132,11 +132,16 @@ def _load_mni152_head_template(resolution: int | None):
     the grid used by the run's reference template (see config/templates.py) so it aligns
     with MNI-space outputs produced by `transform_mrsi_maps()`.
     """
+    import nibabel as nib
     import numpy as np
     from nilearn import image
 
     resolution = resolution or 1
     head = template_head()
     if resolution != 1:
+        # Cast to float32 before resampling: the fetched template is int16,
+        # and resample_img's own implicit int->float cast during
+        # interpolation raises a UserWarning on every call otherwise.
+        head = nib.Nifti1Image(np.asarray(head.dataobj, dtype=np.float32), head.affine, head.header)
         head = image.resample_img(head, np.eye(3) * resolution)
     return head
