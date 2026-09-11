@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 2.0.1
+
 ### Parcellation
 
 - **Added a cubic (grid) parcellation**, selected via `--parcellation-mode
