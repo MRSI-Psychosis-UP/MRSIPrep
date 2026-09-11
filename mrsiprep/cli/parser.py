@@ -358,8 +358,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Atlas used when --parcellation-mode atlas. One of: a bundled atlas name (see "
         "mrsiprep.parcellation.atlas_registry.available_bundled_atlases(), e.g. 'chimera-LFMIHIFIS_scale3'); "
         "'custom' (requires --custom-atlas and --custom-atlas-lut); 'schaefer<N>' for the Schaefer 2018 "
-        "N-parcel cortical atlas (e.g. 'schaefer400'); or 'mist197'/'mist-197' for the BASC multiscale "
-        "atlas at scale 197. Accepts a comma-separated list to project several atlases in one run.",
+        "N-parcel cortical atlas (e.g. 'schaefer400'); 'mist197'/'mist-197' for the BASC multiscale "
+        "atlas at scale 197; or 'cubic<N>mm' (e.g. 'cubic10mm') for a non-anatomical grid parcellation -- "
+        "the bundled MNI-space gray-matter mask tiled into N-millimeter cubes, generated on demand at any "
+        "N rather than shipped as fixed sizes. Accepts a comma-separated list to project several atlases "
+        "in one run.",
     )
     parcellation.add_argument(
         "--custom-atlas",
