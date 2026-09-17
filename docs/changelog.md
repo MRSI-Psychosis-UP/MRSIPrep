@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 2.0.2
+
 ### CLI
 
 - **Added `--hello-world`**, a zero-argument smoke test that prints the
