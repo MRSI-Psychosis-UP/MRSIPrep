@@ -16,6 +16,18 @@ The image bundles ANTs, FSL (FAST plus FLIRT/FNIRT registration tools),
 FreeSurfer (`recon-all`, `mri_synthseg`, `mri_vol2vol`), PETPVC, Chimera, and Nipype. It does not
 include a FreeSurfer license file. Mount your own and set `FS_LICENSE`.
 
+## Verify the pull: `--hello-world`
+
+No BIDS dataset or license file needed -- this just confirms the image was
+pulled correctly and the container runs:
+
+```bash
+docker run --rm mrsiup/mrsiprep:cpu --hello-world
+```
+
+Prints the MRSIPrep banner and a confirmation message, then exits
+immediately with status 0.
+
 ## Option A: plain `docker run`
 
 ```bash
