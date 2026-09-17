@@ -80,6 +80,9 @@ def _apply_resolved_cpu_budget(config, logger) -> None:
 def main(argv: list[str] | None = None) -> int:
     print_banner()
     argv = list(sys.argv[1:] if argv is None else argv)
+    if "--hello-world" in argv:
+        print("MRSIPrep image pulled and running correctly.")
+        return 0
     if "--list-presets" in argv:
         print_presets()
         return 0

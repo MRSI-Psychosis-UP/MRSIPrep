@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### CLI
+
+- **Added `--hello-world`**, a zero-argument smoke test that prints the
+  MRSIPrep banner and a confirmation message, then exits with status 0.
+  Verifies a `docker pull`/image works without mounting a BIDS dataset or
+  FreeSurfer license.
+
 ### QC report
 
 - Fixed a `UserWarning: Casting data from int16 to float32` that fired on

@@ -33,6 +33,14 @@ class MainListPresetsTests(unittest.TestCase):
         parse_args.assert_not_called()
 
 
+class MainHelloWorldTests(unittest.TestCase):
+    def test_hello_world_short_circuits_before_parsing(self):
+        with patch("mrsiprep.cli.run.parse_args") as parse_args:
+            code = main(["--hello-world"])
+        self.assertEqual(code, 0)
+        parse_args.assert_not_called()
+
+
 class MainAnalysisLevelTests(unittest.TestCase):
     def test_non_participant_analysis_level_returns_2(self):
         config = _config(analysis_level="group")

@@ -557,6 +557,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Print available built-in --config-preset names and their source citation, then exit.",
     )
+    runtime.add_argument(
+        "--hello-world",
+        action="store_true",
+        help="Print the MRSIPrep banner and a confirmation message, then exit. Useful to verify the Docker image "
+        "was pulled and runs correctly, without mounting a BIDS dataset.",
+    )
     runtime.add_argument("--validate-only", action="store_true", help="Check selected subject/session inputs and exit without running preprocessing.")
     runtime.add_argument(
         "--reports-only",
