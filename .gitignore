@@ -34,3 +34,7 @@ SynthMRSI-Project/
 bash_history
 outputs/
 scripts/
+
+# self-hosted GitHub Actions runner (local install, holds registration
+# credentials -- never commit)
+actions-runner/
