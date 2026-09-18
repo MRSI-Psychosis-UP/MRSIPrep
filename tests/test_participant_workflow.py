@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 from mrsiprep.cli.parser import parse_args as _parse_args
 from mrsiprep.io.bids import Recording
+from mrsiprep.registration.transforms import ants_transform_prefix
 from mrsiprep.workflows import participant as P
 
 _REQUIRED_ARGS = ["--metabolites", "CrPCr", "--ref-met", "CrPCr"]
@@ -93,33 +94,53 @@ class PreflightTissueLabelTests(unittest.TestCase):
 
 
 class PreflightTransformStatusTests(unittest.TestCase):
+    """_preflight_transform_status() must check config.derivative_dir via the
+    same ants_transform_prefix/transform_paths primitives the real
+    registration steps use (mrsiprep/registration/mrsi_to_t1.py,
+    t1_to_mni.py) -- not BIDSLayout.transform()'s bids_dir-relative path,
+    which can silently disagree with the real run whenever --output-dir
+    differs from <bids_dir>/derivatives/mrsiprep (e.g. mrsiprep-docker's
+    fixed /out mount point)."""
+
+    def _config(self, derivative_dir, longitudinal=False):
+        return SimpleNamespace(derivative_dir=derivative_dir, registration_backend="ants", longitudinal=longitudinal)
+
     def test_reports_mrsi_and_anat_by_default(self):
-        layout = MagicMock()
-        layout.transform.return_value = [Path("/tmp/a"), Path("/tmp/b")]
-        config = SimpleNamespace(longitudinal=False)
         with tempfile.TemporaryDirectory() as tmpdir:
-            existing = Path(tmpdir) / "mrsi_to_t1.affine.mat"
-            existing.touch()
-            layout.transform.return_value = [existing]
-            statuses = P._preflight_transform_status(layout, "01", "01", config)
+            derivative_dir = Path(tmpdir)
+            prefix = ants_transform_prefix(derivative_dir, "01", "01", "mrsi", backend="ants")
+            prefix.parent.mkdir(parents=True)
+            for suffix in (".syn.nii.gz", ".affine.mat", ".affine_inv.mat", ".syn_inv.nii.gz"):
+                prefix.with_suffix(suffix).touch()
+            statuses = P._preflight_transform_status("01", "01", self._config(derivative_dir))
         self.assertEqual(set(statuses), {"mrsi", "anat"})
-        self.assertTrue(all(statuses.values()))
+        self.assertTrue(statuses["mrsi"])
+        self.assertFalse(statuses["anat"])  # anat transform files were never created
 
     def test_includes_template_stage_when_longitudinal(self):
-        layout = MagicMock()
-        layout.transform.return_value = []
-        config = SimpleNamespace(longitudinal=True)
-        statuses = P._preflight_transform_status(layout, "01", "01", config)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            statuses = P._preflight_transform_status("01", "01", self._config(Path(tmpdir), longitudinal=True))
         self.assertIn("t1-template", statuses)
-        self.assertFalse(statuses["t1-template"])  # no paths -> not present
+        self.assertFalse(statuses["t1-template"])  # no files -> not present
 
     def test_missing_files_reported_false(self):
-        layout = MagicMock()
-        # A path that genuinely does not exist on disk -- no mocking needed.
-        layout.transform.return_value = [Path("/tmp/mrsiprep_test_definitely_missing_12345")]
-        config = SimpleNamespace(longitudinal=False)
-        statuses = P._preflight_transform_status(layout, "01", "01", config)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            statuses = P._preflight_transform_status("01", "01", self._config(Path(tmpdir)))
         self.assertFalse(statuses["mrsi"])
+
+    def test_disagrees_with_a_different_derivative_dir(self):
+        """Regression guard: transforms present under one derivative_dir must
+        not be reported as present when config points at a different one."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            real_dir = Path(tmpdir) / "derivatives" / "mrsiprep"
+            other_dir = Path(tmpdir) / "out" / "mrsiprep"
+            prefix = ants_transform_prefix(real_dir, "01", "01", "mrsi", backend="ants")
+            prefix.parent.mkdir(parents=True)
+            for suffix in (".syn.nii.gz", ".affine.mat", ".affine_inv.mat", ".syn_inv.nii.gz"):
+                prefix.with_suffix(suffix).touch()
+
+            self.assertTrue(P._preflight_transform_status("01", "01", self._config(real_dir))["mrsi"])
+            self.assertFalse(P._preflight_transform_status("01", "01", self._config(other_dir))["mrsi"])
 
 
 class PreflightFreesurferStatusTests(unittest.TestCase):

@@ -1,12 +1,16 @@
+import tempfile
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 
+from mrsiprep.registration.transforms import ants_transform_prefix
 from mrsiprep.workflows.participant import (
     _build_preflight_table,
     _preflight_missing_items,
     _preflight_row_cells,
     _preflight_tissue_label,
     _preflight_transform_columns,
+    _preflight_transform_status,
     _report_cpu_budget,
     _report_preflight_summary,
 )
@@ -101,6 +105,43 @@ class PreflightRowCellsTests(unittest.TestCase):
         columns = [("mrsi", "MRSI→T1"), ("anat", "T1→MNI")]
         cells = _preflight_row_cells(row, columns, show_integrity=False, show_freesurfer=False)
         self.assertEqual(cells[-2:], ["[green]✔[/green]", "[orange3]PROC[/orange3]"])
+
+
+class PreflightTransformStatusTests(unittest.TestCase):
+    """Regression guard for the bug where preflight checked transforms under
+    bids_dir/derivatives/mrsiprep (BIDSLayout.transform()) while the real
+    registration steps check config.derivative_dir -- disagreeing whenever
+    the two paths differ (e.g. mrsiprep-docker's fixed /out mount point)."""
+
+    def _config(self, derivative_dir, longitudinal=False):
+        return SimpleNamespace(
+            derivative_dir=derivative_dir,
+            registration_backend="ants",
+            longitudinal=longitudinal,
+        )
+
+    def test_reports_false_when_output_dir_transforms_are_missing(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            derivative_dir = Path(tmpdir) / "out" / "mrsiprep"
+            config = self._config(derivative_dir)
+            status = _preflight_transform_status("S001", "V1", config)
+        self.assertEqual(status, {"mrsi": False, "anat": False})
+
+    def test_reports_true_only_for_the_configured_derivative_dir(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            real_derivative_dir = Path(tmpdir) / "derivatives" / "mrsiprep"
+            other_derivative_dir = Path(tmpdir) / "out" / "mrsiprep"
+
+            prefix = ants_transform_prefix(real_derivative_dir, "S001", "V1", "mrsi", backend="ants")
+            prefix.parent.mkdir(parents=True)
+            for suffix in (".syn.nii.gz", ".affine.mat", ".affine_inv.mat", ".syn_inv.nii.gz"):
+                prefix.with_suffix(suffix).touch()
+
+            status_real = _preflight_transform_status("S001", "V1", self._config(real_derivative_dir))
+            status_other = _preflight_transform_status("S001", "V1", self._config(other_derivative_dir))
+
+        self.assertTrue(status_real["mrsi"])
+        self.assertFalse(status_other["mrsi"])
 
 
 class PreflightMissingItemsTests(unittest.TestCase):
