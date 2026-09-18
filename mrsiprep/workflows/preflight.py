@@ -20,6 +20,7 @@ from rich.table import Table
 from mrsiprep.interfaces.freesurfer import freesurfer_subject_id, subject_dir_valid
 from mrsiprep.io.bids import BIDSLayout
 from mrsiprep.io.loaders import load_mrsi_inputs
+from mrsiprep.registration.transforms import all_exist, ants_transform_prefix, transform_paths
 from mrsiprep.utils.debug import Debug
 
 
@@ -90,15 +91,28 @@ def _preflight_tissue_label(layout, subject, session, config) -> str:
     )
 
 
-def _preflight_transform_status(layout, subject, session, config) -> dict[str, bool]:
-    """Which registration-transform stages already have all their files on disk."""
+def _preflight_transform_status(subject, session, config) -> dict[str, bool]:
+    """Which registration-transform stages already have all their files on disk.
+
+    Must use the exact same path computation as the real registration steps
+    (config.derivative_dir via ants_transform_prefix/transform_paths, not
+    BIDSLayout.transform()'s bids_dir-relative path) -- otherwise, whenever
+    --output-dir differs from <bids_dir>/derivatives/mrsiprep (e.g. the
+    mrsiprep-docker wrapper's fixed /out mount point), this table can report
+    "present" for stale transforms under bids_dir while the run itself looks
+    under output_dir and finds nothing, or vice versa.
+    """
+    backend = config.registration_backend
+    deformable = backend == "fsl" and getattr(config, "fsl_deformable", False)
     transform_stages = ["mrsi", "anat"]
     if config.longitudinal:
         transform_stages.append("t1-template")
     transforms = {}
     for stage in transform_stages:
-        stage_paths = layout.transform(subject, session, stage)
-        transforms[stage] = bool(stage_paths and all(path.exists() for path in stage_paths))
+        prefix = ants_transform_prefix(config.derivative_dir, subject, session, stage, backend=backend)
+        forward = transform_paths(prefix, "forward", backend=backend, deformable=deformable)
+        inverse = transform_paths(prefix, "inverse", backend=backend, deformable=deformable)
+        transforms[stage] = all_exist(forward) and all_exist(inverse)
     return transforms
 
 
@@ -137,7 +151,7 @@ def _gather_input_availability(config, subject: str, session: str | None) -> dic
         "fwhm": bool(inputs.linewidth_map),
         "brainmask": bool(inputs.brainmask),
         "tissue": _preflight_tissue_label(layout, subject, session, config),
-        "transforms": _preflight_transform_status(layout, subject, session, config),
+        "transforms": _preflight_transform_status(subject, session, config),
         "freesurfer": _preflight_freesurfer_status(layout, subject, session, config),
         "corrupt_items": corrupt_items,
     }
