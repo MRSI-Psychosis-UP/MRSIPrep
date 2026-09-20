@@ -407,11 +407,21 @@ def _mrsinmrs_html(config, subject: str, session: str | None) -> str:
     return table
 
 
+_MRSIPREP_CITATION_DOI = "10.64898/2026.09.11.750896"
+_MRSIPREP_CITATION_TEXT = (
+    "Lucchetti, F., Céléreau, E., Jenni, R., Ledoux, J.-B., Eliez, S., Delavari, F., Hagmann, P., "
+    "Alemán-Gómez, Y., Klauser, A., &amp; Klauser, P. (2026). MRSIPrep: A Standardized "
+    "Post-Quantification Framework for Preprocessing Whole-Brain Magnetic Resonance Spectroscopic "
+    "Imaging. <i>bioRxiv</i>."
+)
+
+
 def _citations_html(config) -> str:
     parts = [
-        "<p>MRSIPrep: see <code>CITATION.cff</code> in the "
-        "<a href='https://github.com/MRSI-Psychosis-UP/MRSIPrep'>MRSIPrep repository</a> for how to cite this "
-        "software.</p>",
+        f"<p>If you use MRSIPrep, please cite: {_MRSIPREP_CITATION_TEXT} "
+        f"<a href='https://doi.org/{_MRSIPREP_CITATION_DOI}'>doi:{_MRSIPREP_CITATION_DOI}</a>. "
+        "A downloadable BibTeX entry is in <code>CITATION.cff</code> in the "
+        "<a href='https://github.com/MRSI-Psychosis-UP/MRSIPrep'>MRSIPrep repository</a>.</p>",
         f"<p>MRSI acquisition reporting follows the <a href='{_MRSINMRS_URL}'>MRSinMRS</a> minimum reporting "
         "standard (Lin et al. 2021).</p>",
     ]
