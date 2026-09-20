@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 2.0.3
+
 ### Documentation
 
 - **Added a "How to Cite" section** to the README, a matching Read the Docs
@@ -9,6 +11,23 @@
   the MRSIPrep bioRxiv preprint (doi:10.64898/2026.09.11.750896). The QC
   report's Citations section now includes this reference directly (with
   DOI link) instead of only pointing readers to `CITATION.cff`.
+
+### Parcellation
+
+- Fixed `--atlas gm_mesh_12mm`: its bundled NIfTI file was named
+  `gm_mesh_12mm.gz` instead of `gm_mesh_12mm.nii.gz`, so the bundled-atlas
+  discovery glob silently failed to find it and every subject's
+  Parcellation step raised, despite the atlas data itself being valid.
+
+### Preflight
+
+- Fixed the preflight table's registration-transform status check: it
+  looked for transforms under `<bids_dir>/derivatives/mrsiprep` instead of
+  the configured `--output-dir`, so it could report "present" for stale or
+  unrelated transforms while the run itself looked elsewhere and found
+  nothing (e.g. with the `mrsiprep-docker` wrapper's fixed `/out` mount
+  point). Now uses the same path-resolution logic as the registration
+  steps themselves.
 
 ## 2.0.2
 
