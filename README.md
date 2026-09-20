@@ -99,6 +99,27 @@ publications:
   2026-06.
   [doi:10.64898/2026.06.30.735476](https://doi.org/10.64898/2026.06.30.735476)
 
+## How to Cite
+
+If you use MRSIPrep in your research, please cite:
+
+> Lucchetti, F., Céléreau, E., Jenni, R., Ledoux, J.-B., Eliez, S., Delavari,
+> F., Hagmann, P., Alemán-Gómez, Y., Klauser, A., & Klauser, P. (2026).
+> MRSIPrep: A Standardized Post-Quantification Framework for Preprocessing
+> Whole-Brain Magnetic Resonance Spectroscopic Imaging. *bioRxiv*.
+> [doi:10.64898/2026.09.11.750896](https://doi.org/10.64898/2026.09.11.750896)
+
+```bibtex
+@article{lucchetti2026mrsiprep,
+  title={MRSIPrep: A Standardized Post-Quantification Framework for Preprocessing Whole-Brain Magnetic Resonance Spectroscopic Imaging},
+  author={Lucchetti, Federico and Celereau, Edgar and Jenni, Raoul and Ledoux, Jean-Baptiste and Eliez, Stephan and Delavari, Farnaz and Hagmann, Patric and Aleman-Gomez, Yasser and Klauser, Antoine and Klauser, Paul},
+  journal={bioRxiv},
+  pages={2026--09},
+  year={2026},
+  publisher={Cold Spring Harbor Laboratory}
+}
+```
+
 ## License
 
 MRSIPrep is distributed under the CHUV academic non-commercial research

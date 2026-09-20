@@ -65,6 +65,12 @@ class CitationsHtmlTests(unittest.TestCase):
         self.assertIn("CITATION.cff", html)
         self.assertIn("MRSinMRS", html)
 
+    def test_always_includes_the_mrsiprep_paper_citation(self):
+        config = SimpleNamespace()
+        html = _citations_html(config)
+        self.assertIn("10.64898/2026.09.11.750896", html)
+        self.assertIn("Lucchetti, F.", html)
+
     def test_no_preset_citation_omits_processing_parameters_line(self):
         config = SimpleNamespace()
         html = _citations_html(config)
@@ -77,10 +83,13 @@ class CitationsHtmlTests(unittest.TestCase):
         self.assertIn("Some Study", html)
 
     def test_preset_citation_with_explicit_url_takes_priority(self):
+        # The MRSIPrep-paper citation line always contains its own doi.org
+        # link, so this must check the "Processing parameters replicate"
+        # line specifically, not the whole page's markup.
         config = SimpleNamespace(preset_citation={"text": "Some Study", "url": "https://example.org/study", "doi": "10.1000/xyz"})
         html = _citations_html(config)
         self.assertIn("https://example.org/study", html)
-        self.assertNotIn("doi.org", html)
+        self.assertNotIn("Processing parameters replicate: <a href='https://doi.org", html)
 
     def test_preset_citation_without_url_or_doi_renders_plain_text(self):
         # The two other citation lines always contain their own <a href>

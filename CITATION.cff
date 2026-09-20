@@ -1,11 +1,39 @@
 cff-version: 1.2.0
-message: "If you use MRSIPrep, cite the MRSI-Metabolic-Connectome work this package is derived from."
+message: "If you use MRSIPrep, please cite the paper below."
 title: "MRSIPrep"
 authors:
   - family-names: Lucchetti
     given-names: Federico
 license: "CHUV academic non-commercial research license"
-version: "1.7.7"
+version: "2.0.2"
+preferred-citation:
+  type: article
+  title: "MRSIPrep: A Standardized Post-Quantification Framework for Preprocessing Whole-Brain Magnetic Resonance Spectroscopic Imaging"
+  authors:
+    - family-names: Lucchetti
+      given-names: Federico
+    - family-names: Céléreau
+      given-names: Edgar
+    - family-names: Jenni
+      given-names: Raoul
+    - family-names: Ledoux
+      given-names: Jean-Baptiste
+    - family-names: Eliez
+      given-names: Stephan
+    - family-names: Delavari
+      given-names: Farnaz
+    - family-names: Hagmann
+      given-names: Patric
+    - family-names: Alemán-Gómez
+      given-names: Yasser
+    - family-names: Klauser
+      given-names: Antoine
+    - family-names: Klauser
+      given-names: Paul
+  journal: "bioRxiv"
+  year: 2026
+  doi: "10.64898/2026.09.11.750896"
+  url: "https://www.biorxiv.org/content/10.64898/2026.09.11.750896v1"
 references:
   - type: dataset
     title: "SynthMRSI-Project: synthetic MRSI BIDS test dataset for MRSIPrep"
