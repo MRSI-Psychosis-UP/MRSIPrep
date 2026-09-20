@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Documentation
+
+- **Added a "How to Cite" section** to the README, a matching Read the Docs
+  page (`docs/citing.md`), and an up-to-date `CITATION.cff`, all pointing to
+  the MRSIPrep bioRxiv preprint (doi:10.64898/2026.09.11.750896). The QC
+  report's Citations section now includes this reference directly (with
+  DOI link) instead of only pointing readers to `CITATION.cff`.
+
 ## 2.0.2
 
 ### CLI

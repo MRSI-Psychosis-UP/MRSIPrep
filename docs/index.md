@@ -232,5 +232,6 @@ api
 :maxdepth: 1
 :hidden:
 
+citing
 changelog
 ```
