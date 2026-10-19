@@ -95,6 +95,57 @@ def _format_elapsed(seconds: float) -> str:
     return format_elapsed_hm(seconds)
 
 
+def _run_one_recording_reports_only(config, subject: str, session: str | None, subject_template=None, status_queue=None) -> "RecordingStatus":
+    """Run one recording's step sequence directly (no Nipype DAG), the same
+    work :func:`run_reports_only_workflow`'s sequential loop does per
+    iteration -- factored out to a module-level function (required for
+    ``spawn``-based multiprocessing: a worker target must be importable/
+    picklable, which a closure isn't) so it can also be dispatched through a
+    :class:`~concurrent.futures.ProcessPoolExecutor`, matching how
+    :func:`mrsiprep.workflows.nipype_engine.run._run_one_recording_nipype`
+    is used by the full-pipeline path. ``status_queue``, when given, routes
+    step transitions to the coordinating process's live status table instead
+    of printing directly -- see that function's docstring for why.
+    """
+    from mrsiprep.io.naming import prefix as name_prefix
+    from mrsiprep.io.naming import subject_session_dir
+    from mrsiprep.utils.debug import collect_timings, set_logbook, set_status_queue, set_timing_sink
+    from mrsiprep.utils.runtime_metrics import write_runtime_metrics
+    from mrsiprep.workflows.nipype_engine.nodes import STEP_SEQUENCE
+
+    logbook = subject_session_dir(config.derivative_dir, subject, session, "logs") / f"{name_prefix(subject, session)}_desc-mrsiprep_log.txt"
+    set_logbook(logbook)
+    set_status_queue(status_queue)
+    set_timing_sink(True)
+
+    tag = f"sub-{subject}" + (f" ses-{session}" if session else "")
+    debug = Debug(verbose=config.verbose)
+    if status_queue is None:
+        debug.always(f"[proc]START[/proc] {tag}")
+    start = time.monotonic()
+    try:
+        ctx: dict = {"subject_template": subject_template}
+        for _name, step_fn in STEP_SEQUENCE:
+            ctx = step_fn(config, subject, session, ctx)
+        elapsed = time.monotonic() - start
+        debug.always(f"[success]FINISHED[/success] {tag} in {_format_elapsed(elapsed)}")
+        write_runtime_metrics(config, subject, session, collect_timings(), elapsed, status="success")
+        return RecordingStatus(subject, session, "success", outputs=ctx.get("outputs", {}))
+    except Exception as exc:  # batch-safe failure, unless --stop-on-first-crash
+        elapsed = time.monotonic() - start
+        exc_summary = str(exc).splitlines()[0] if str(exc) else exc.__class__.__name__
+        debug.always(f"[failure]FAILED[/failure] {tag} after {_format_elapsed(elapsed)}: {exc_summary}")
+        debug.exception(f"FAILED {tag} after {_format_elapsed(elapsed)}: {exc}", traceback.format_exc())
+        write_runtime_metrics(config, subject, session, collect_timings(), elapsed, status="failed")
+        if config.stop_on_first_crash:
+            raise
+        return RecordingStatus(subject, session, "failed", error=str(exc))
+    finally:
+        set_logbook(None)
+        set_status_queue(None)
+        set_timing_sink(False)
+
+
 def _build_subject_templates(config, ready: list[Recording], debug: Debug) -> dict[str, object]:
     """Build one subject-level template per subject with >=2 ready sessions.
 
@@ -264,16 +315,18 @@ def run_reports_only_workflow(config) -> list[RecordingStatus]:
     duplicating each step's own gating logic (see
     :mod:`mrsiprep.workflows.nipype_engine.nodes` for the source of truth).
 
+    Cross-recording parallelism (``--nproc > 1``) works the same way it does
+    for the full pipeline (:func:`mrsiprep.workflows.nipype_engine.run.execute_recordings_nipype`):
+    a :class:`~concurrent.futures.ProcessPoolExecutor` fans recordings out
+    across worker processes, with a live per-subject status table in place
+    of interleaved step lines. Previously this path was always sequential
+    regardless of ``--nproc`` -- it bypasses Nipype's own engine (see above),
+    which is where that pooling otherwise comes from, so it needs its own.
+
     :param config: Run-wide :class:`mrsiprep.config.settings.MRSIPrepConfig`.
     :returns: One :class:`RecordingStatus` per recording matched by
         ``config`` (empty list if none matched).
     """
-    from mrsiprep.io.naming import prefix as name_prefix
-    from mrsiprep.io.naming import subject_session_dir
-    from mrsiprep.utils.debug import collect_timings, set_logbook, set_timing_sink
-    from mrsiprep.utils.runtime_metrics import write_runtime_metrics
-    from mrsiprep.workflows.nipype_engine.nodes import STEP_SEQUENCE
-
     ensure_work_dirs(config)
     init_derivative(config.derivative_dir)
     debug = Debug(verbose=config.verbose)
@@ -307,36 +360,49 @@ def run_reports_only_workflow(config) -> list[RecordingStatus]:
     if config.longitudinal:
         subject_templates = _build_subject_templates(config, ready, debug)
 
-    for recording in ready:
-        subject, session = recording.subject, recording.session
-        tag = f"sub-{subject}" + (f" ses-{session}" if session else "")
-        logbook = subject_session_dir(config.derivative_dir, subject, session, "logs") / f"{name_prefix(subject, session)}_desc-mrsiprep_log.txt"
-        set_logbook(logbook)
-        set_timing_sink(True)
-        debug.always(f"[proc]START[/proc] {tag}")
-        start = time.monotonic()
-        try:
-            ctx: dict = {"subject_template": subject_templates.get(subject)}
-            for _name, step_fn in STEP_SEQUENCE:
-                ctx = step_fn(config, subject, session, ctx)
-            elapsed = time.monotonic() - start
-            debug.always(f"[success]FINISHED[/success] {tag} in {_format_elapsed(elapsed)}")
-            write_runtime_metrics(config, subject, session, collect_timings(), elapsed, status="success")
-            statuses.append(RecordingStatus(subject, session, "success", outputs=ctx.get("outputs", {})))
-        except Exception as exc:
-            elapsed = time.monotonic() - start
-            exc_summary = str(exc).splitlines()[0] if str(exc) else exc.__class__.__name__
-            debug.always(f"[failure]FAILED[/failure] {tag} after {_format_elapsed(elapsed)}: {exc_summary}")
-            debug.exception(f"FAILED {tag} after {_format_elapsed(elapsed)}: {exc}", traceback.format_exc())
-            write_runtime_metrics(config, subject, session, collect_timings(), elapsed, status="failed")
-            if config.stop_on_first_crash:
-                set_logbook(None)
-                set_timing_sink(False)
-                raise
-            statuses.append(RecordingStatus(subject, session, "failed", error=str(exc)))
-        finally:
-            set_logbook(None)
-            set_timing_sink(False)
+    if config.nproc <= 1:
+        statuses.extend(
+            _run_one_recording_reports_only(config, rec.subject, rec.session, subject_templates.get(rec.subject)) for rec in ready
+        )
+        return statuses
+
+    import multiprocessing
+    from concurrent.futures import ProcessPoolExecutor, as_completed
+
+    from mrsiprep.workflows.nipype_engine.run import _start_live_status_table, worker_context
+
+    manager = multiprocessing.Manager()
+    status_queue = manager.Queue()
+    tags = [f"sub-{rec.subject}" + (f" ses-{rec.session}" if rec.session else "") for rec in ready]
+    stop_listener, listener_thread = _start_live_status_table(config, tags, status_queue)
+
+    try:
+        with ProcessPoolExecutor(max_workers=config.nproc, mp_context=worker_context()) as executor:
+            futures = {
+                executor.submit(
+                    _run_one_recording_reports_only, config, rec.subject, rec.session, subject_templates.get(rec.subject), status_queue
+                ): rec
+                for rec in ready
+            }
+            for future in as_completed(futures):
+                status = future.result()
+                statuses.append(status)
+                # Same reasoning as execute_recordings_nipype: state the
+                # real outcome directly here rather than leaving the
+                # worker's own (queue-routed, possibly-still-in-flight or
+                # never-sent-if-the-worker-died) FINISHED/FAILED message as
+                # the table's only source of truth.
+                recording = futures[future]
+                tag = f"sub-{recording.subject}" + (f" ses-{recording.session}" if recording.session else "")
+                outcome = "FINISHED" if getattr(status, "status", "") == "success" else "FAILED"
+                try:
+                    status_queue.put((tag, "always", outcome))
+                except (OSError, EOFError, BrokenPipeError, ValueError):
+                    continue
+    finally:
+        stop_listener.set()
+        listener_thread.join(timeout=5)
+        manager.shutdown()
     return statuses
 
 

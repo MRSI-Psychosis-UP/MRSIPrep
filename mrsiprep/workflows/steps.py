@@ -177,6 +177,7 @@ def _step_resampling(config, subject, session, anat, mrsi, registration, correct
             session,
             transformed.get("MNI152NLin2009cAsym", {}).get(config.ref_met),
             mni_resolution=mni_resolution,
+            t1_to_mni_transforms=registration.t1_to_mni.forward if registration.t1_to_mni else None,
         )
     return transformed, qc_sections_t1w_alignment, qc_sections_mni_alignment
 

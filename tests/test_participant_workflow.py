@@ -492,5 +492,84 @@ class RunReportsOnlyWorkflowTests(unittest.TestCase):
                 P.run_reports_only_workflow(self.config)
 
 
+class RunReportsOnlyWorkflowParallelPathTests(unittest.TestCase):
+    """--reports-only used to always run recordings sequentially regardless
+    of --nproc (it bypasses Nipype's engine, which is where that pooling
+    otherwise comes from -- see run_reports_only_workflow's docstring), even
+    though the CLI's --nproc help text and the full-pipeline path both
+    promise cross-recording parallelism. These mirror
+    tests/test_nipype_engine_run.py::ExecuteRecordingsParallelPathTests,
+    which cover the equivalent branch on the full-pipeline path."""
+
+    def setUp(self):
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._tmpdir.name)
+        self.config = make_config(["/tmp/bids", str(self.tmp / "out"), "participant"], nproc=2)
+        self._patches = [
+            patch("mrsiprep.workflows.participant.ensure_work_dirs"),
+            patch("mrsiprep.workflows.participant.init_derivative"),
+            patch(
+                "mrsiprep.workflows.participant.collect_recordings",
+                return_value=[Recording("01", "01"), Recording("02", None)],
+            ),
+            patch("mrsiprep.workflows.participant._gather_input_availability", return_value={}),
+            patch("mrsiprep.workflows.participant._render_preflight_table"),
+            patch("mrsiprep.workflows.participant.validate_recording", return_value=(Path("t1"), object())),
+            patch("mrsiprep.workflows.participant._validate_backend_inputs"),
+        ]
+        for p in self._patches:
+            p.start()
+            self.addCleanup(p.stop)
+
+    def tearDown(self):
+        self._tmpdir.cleanup()
+
+    def test_dispatches_via_process_pool_and_collects_all_results(self):
+        future_01 = MagicMock()
+        future_01.result.return_value = P.RecordingStatus("01", "01", "success")
+        future_02 = MagicMock()
+        future_02.result.return_value = P.RecordingStatus("02", None, "failed", error="boom")
+
+        executor_instance = MagicMock()
+        executor_instance.__enter__.return_value = executor_instance
+        executor_instance.__exit__.return_value = False
+        executor_instance.submit.side_effect = [future_01, future_02]
+
+        stop_event = MagicMock()
+        listener_thread = MagicMock()
+
+        with patch("multiprocessing.Manager") as manager_cls, patch(
+            "concurrent.futures.ProcessPoolExecutor", return_value=executor_instance
+        ), patch("concurrent.futures.as_completed", side_effect=lambda futures: list(futures.keys())), patch(
+            "mrsiprep.workflows.nipype_engine.run._start_live_status_table", return_value=(stop_event, listener_thread)
+        ):
+            statuses = P.run_reports_only_workflow(self.config)
+
+        self.assertEqual(executor_instance.submit.call_count, 2)
+        self.assertEqual({s.subject for s in statuses}, {"01", "02"})
+        stop_event.set.assert_called_once()
+        listener_thread.join.assert_called_once()
+        manager_cls.return_value.shutdown.assert_called_once()
+
+    def test_manager_is_shut_down_even_if_a_future_raises(self):
+        failing_future = MagicMock()
+        failing_future.result.side_effect = RuntimeError("subprocess crashed")
+
+        executor_instance = MagicMock()
+        executor_instance.__enter__.return_value = executor_instance
+        executor_instance.__exit__.return_value = False
+        executor_instance.submit.side_effect = [failing_future, MagicMock()]
+
+        with patch("multiprocessing.Manager") as manager_cls, patch(
+            "concurrent.futures.ProcessPoolExecutor", return_value=executor_instance
+        ), patch("concurrent.futures.as_completed", side_effect=lambda futures: list(futures.keys())), patch(
+            "mrsiprep.workflows.nipype_engine.run._start_live_status_table", return_value=(MagicMock(), MagicMock())
+        ):
+            with self.assertRaises(RuntimeError):
+                P.run_reports_only_workflow(self.config)
+
+        manager_cls.return_value.shutdown.assert_called_once()
+
+
 if __name__ == "__main__":
     unittest.main()

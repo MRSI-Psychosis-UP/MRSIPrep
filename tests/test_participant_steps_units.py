@@ -279,7 +279,7 @@ class StepResamplingTests(unittest.TestCase):
         t1w_qc.assert_called_once_with(
             config, "01", "01", Path("raw_t1"), Path("t1w_map"), orig_ref_map_path=Path("orig"), mrsi_to_t1_transforms="fwd"
         )
-        mni_qc.assert_called_once_with(config, "01", "01", Path("mni_map"), mni_resolution=2.0)
+        mni_qc.assert_called_once_with(config, "01", "01", Path("mni_map"), mni_resolution=2.0, t1_to_mni_transforms="mni_fwd")
         self.assertEqual(result, (transformed, ["t1w-qc"], ["mni-qc"]))
 
     def test_without_mni_registration_skips_resolution_lookup(self):
@@ -296,6 +296,7 @@ class StepResamplingTests(unittest.TestCase):
         config.resolution_for.assert_not_called()
         self.assertIsNone(tmm.call_args.args[5])  # no t1_to_mni forward transform
         self.assertIsNone(mni_qc.call_args.kwargs["mni_resolution"])
+        self.assertIsNone(mni_qc.call_args.kwargs["t1_to_mni_transforms"])
 
 
 class StepLeakageQcTests(unittest.TestCase):

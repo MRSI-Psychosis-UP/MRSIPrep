@@ -228,7 +228,7 @@ class RegistrationAlignmentSectionsTests(unittest.TestCase):
             from mrsiprep.reports import registration_overview as reg_module
 
             with mock.patch.object(reg_module, "_load_mni152_head_template", return_value=fake_template), mock.patch.object(
-                reg_module, "render_multi_slice_triplanar_png"
+                reg_module, "render_multi_slice_triplanar_svg_flicker"
             ) as render:
                 sections = build_mni_alignment_sections(config, "S001", "V1", mni_ref, mni_resolution=5)
 
@@ -237,7 +237,7 @@ class RegistrationAlignmentSectionsTests(unittest.TestCase):
             self.assertIn("MNI152NLin2009cAsym", _sections_text(sections))
             self.assertIn("5 mm", _sections_text(sections))
 
-    def test_mni_alignment_names_the_reference_metabolite_in_the_colorbar(self):
+    def test_mni_alignment_names_the_reference_metabolite_and_units_in_the_colorbar(self):
         with tempfile.TemporaryDirectory() as td:
             tmp_path = Path(td)
             config = _make_config(tmp_path)
@@ -247,11 +247,11 @@ class RegistrationAlignmentSectionsTests(unittest.TestCase):
             from mrsiprep.reports import registration_overview as reg_module
 
             with mock.patch.object(reg_module, "_load_mni152_head_template", return_value=fake_template), mock.patch.object(
-                reg_module, "render_multi_slice_triplanar_png"
+                reg_module, "render_multi_slice_triplanar_svg_flicker"
             ) as render:
                 build_mni_alignment_sections(config, "S001", "V1", mni_ref, mni_resolution=5)
 
-            self.assertEqual(render.call_args.kwargs["colorbar_label"], config.ref_met)
+            self.assertEqual(render.call_args.kwargs["colorbar_label"], f"{config.ref_met} [IU]")
 
     def test_handles_missing_t1_map(self):
         with tempfile.TemporaryDirectory() as td:
@@ -260,6 +260,103 @@ class RegistrationAlignmentSectionsTests(unittest.TestCase):
             raw_t1 = _save_volume(tmp_path / "raw_t1.nii.gz", np.random.rand(8, 8, 8))
             sections = build_t1w_alignment_sections(config, "S001", "V1", raw_t1, None)
             self.assertIn("No T1w-space reference metabolite map available", _sections_text(sections))
+
+    def test_t1w_alignment_uses_the_multi_slice_renderer(self):
+        """Same montage style as the Template-space tab, not a single
+        center slice per plane -- see test_mni_alignment_uses_the_multi_slice_renderer."""
+        with tempfile.TemporaryDirectory() as td:
+            tmp_path = Path(td)
+            config = _make_config(tmp_path)
+            raw_t1 = _save_volume(tmp_path / "raw_t1.nii.gz", np.random.rand(8, 8, 8))
+            t1_ref = _save_volume(tmp_path / "ref_t1.nii.gz", np.random.rand(8, 8, 8))
+
+            from mrsiprep.reports import registration_overview as reg_module
+
+            with mock.patch.object(reg_module, "render_multi_slice_triplanar_svg_flicker") as render:
+                sections = build_t1w_alignment_sections(config, "S001", "V1", raw_t1, t1_ref)
+
+            render.assert_called_once()
+            self.assertNotIn("No T1w-space reference metabolite map available", _sections_text(sections))
+
+    def test_t1w_alignment_draws_wm_contour_when_wm_probseg_derivative_exists(self):
+        with tempfile.TemporaryDirectory() as td:
+            tmp_path = Path(td)
+            config = _make_config(tmp_path)
+            raw_t1 = _save_volume(tmp_path / "raw_t1.nii.gz", np.random.rand(8, 8, 8))
+            t1_ref = _save_volume(tmp_path / "ref_t1.nii.gz", np.random.rand(8, 8, 8))
+            wm_probseg_path = (
+                config.derivative_dir / "sub-S001" / "ses-V1" / "confounds" / "sub-S001_ses-V1_space-T1w_label-WM_probseg.nii.gz"
+            )
+            _save_volume(wm_probseg_path, np.random.rand(8, 8, 8))
+
+            from mrsiprep.reports import registration_overview as reg_module
+
+            with mock.patch.object(reg_module, "render_multi_slice_triplanar_svg_flicker") as render:
+                sections = build_t1w_alignment_sections(config, "S001", "V1", raw_t1, t1_ref)
+
+            self.assertIsNotNone(render.call_args.kwargs["wm_mask"])
+            self.assertIn("white-matter boundary", _sections_text(sections))
+
+    def test_t1w_alignment_omits_wm_contour_when_no_probseg_derivative(self):
+        with tempfile.TemporaryDirectory() as td:
+            tmp_path = Path(td)
+            config = _make_config(tmp_path)
+            raw_t1 = _save_volume(tmp_path / "raw_t1.nii.gz", np.random.rand(8, 8, 8))
+            t1_ref = _save_volume(tmp_path / "ref_t1.nii.gz", np.random.rand(8, 8, 8))
+
+            from mrsiprep.reports import registration_overview as reg_module
+
+            with mock.patch.object(reg_module, "render_multi_slice_triplanar_svg_flicker") as render:
+                sections = build_t1w_alignment_sections(config, "S001", "V1", raw_t1, t1_ref)
+
+            self.assertIsNone(render.call_args.kwargs["wm_mask"])
+            self.assertNotIn("white-matter boundary", _sections_text(sections))
+
+    def test_mni_alignment_resamples_and_draws_wm_contour_when_transforms_given(self):
+        with tempfile.TemporaryDirectory() as td:
+            tmp_path = Path(td)
+            config = _make_config(tmp_path)
+            mni_ref = _save_volume(tmp_path / "mni_ref.nii.gz", np.random.rand(6, 6, 6))
+            fake_template = nib.Nifti1Image(np.random.rand(6, 6, 6).astype("float32"), np.eye(4))
+            wm_probseg_path = (
+                config.derivative_dir / "sub-S001" / "ses-V1" / "confounds" / "sub-S001_ses-V1_space-T1w_label-WM_probseg.nii.gz"
+            )
+            _save_volume(wm_probseg_path, np.random.rand(6, 6, 6))
+
+            from mrsiprep.reports import registration_overview as reg_module
+
+            def _fake_apply(fixed, moving, transforms, out_path, interpolation="linear", threads=None):
+                out_path = Path(out_path)
+                out_path.parent.mkdir(parents=True, exist_ok=True)
+                nib.save(nib.load(str(moving)), out_path)
+                return out_path
+
+            with mock.patch.object(reg_module, "_load_mni152_head_template", return_value=fake_template), mock.patch.object(
+                reg_module, "render_multi_slice_triplanar_svg_flicker"
+            ) as render, mock.patch("mrsiprep.registration.transforms.apply_image_transform", side_effect=_fake_apply):
+                sections = build_mni_alignment_sections(
+                    config, "S001", "V1", mni_ref, mni_resolution=5, t1_to_mni_transforms=[tmp_path / "fake.h5"]
+                )
+
+            self.assertIsNotNone(render.call_args.kwargs["wm_mask"])
+            self.assertIn("white-matter boundary", _sections_text(sections))
+
+    def test_mni_alignment_omits_wm_contour_without_transforms(self):
+        with tempfile.TemporaryDirectory() as td:
+            tmp_path = Path(td)
+            config = _make_config(tmp_path)
+            mni_ref = _save_volume(tmp_path / "mni_ref.nii.gz", np.random.rand(6, 6, 6))
+            fake_template = nib.Nifti1Image(np.random.rand(6, 6, 6).astype("float32"), np.eye(4))
+
+            from mrsiprep.reports import registration_overview as reg_module
+
+            with mock.patch.object(reg_module, "_load_mni152_head_template", return_value=fake_template), mock.patch.object(
+                reg_module, "render_multi_slice_triplanar_svg_flicker"
+            ) as render:
+                sections = build_mni_alignment_sections(config, "S001", "V1", mni_ref, mni_resolution=5, t1_to_mni_transforms=None)
+
+            self.assertIsNone(render.call_args.kwargs["wm_mask"])
+            self.assertNotIn("white-matter boundary", _sections_text(sections))
 
     def test_computes_t1w_alignment_on_demand_when_not_already_transformed(self):
         with tempfile.TemporaryDirectory() as td:
