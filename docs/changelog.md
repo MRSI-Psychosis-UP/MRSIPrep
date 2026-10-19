@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+## 2.0.4
+
+### Reports
+
+- **Added hover-to-flicker alignment reportlets**, matching fMRIPrep's own
+  coregistration panels: the T1w-space and Template-space (MNI) alignment
+  tabs now show a multi-slice (coronal/axial/sagittal) montage with mm
+  coordinate titles, L/R markers, and a white-matter contour, composited as
+  two SVG layers that fade between anatomy and the metabolite overlay on
+  hover instead of one flat, permanently alpha-blended slice.
+- Fixed the Template-space alignment figure's colorbar, which could overlap
+  a slice panel or silently lose its tick labels/axis label depending on
+  layout details; it now sits in its own dedicated column with
+  `"<ref-met> [IU]"` units always shown.
+
+### CLI
+
+- Fixed `--reports-only` always running recordings sequentially regardless
+  of `--nproc`: it bypasses the Nipype engine (where cross-recording
+  parallelism normally comes from), so it needed its own
+  `ProcessPoolExecutor` dispatch, now added to match the full-pipeline path.
+
 ## 2.0.3
 
 ### Documentation
