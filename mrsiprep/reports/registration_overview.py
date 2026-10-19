@@ -13,10 +13,30 @@ from pathlib import Path
 
 import pandas as pd
 
-from mrsiprep.io.naming import coverage_report_dir, qc_report_derivative
+from mrsiprep.io.naming import anat_derivative, coverage_report_dir, qc_report_derivative, resampling_work_path
 from mrsiprep.mrsi.resampling import resample_ref_met_to_t1w
-from mrsiprep.reports.slices import load_canonical_data, render_multi_slice_triplanar_png, render_triplanar_png, triplanar_slices
+from mrsiprep.reports.slices import (
+    load_canonical_data,
+    load_canonical_data_with_affine,
+    render_multi_slice_triplanar_svg_flicker,
+)
 from mrsiprep.config.templates import template_head
+
+
+def _svg_object_html(svg_path: Path) -> str:
+    """Embed an SVG reportlet via <object>, not <img>: only <object> reliably
+    runs the CSS hover-to-flicker animation baked into the SVG itself (see
+    render_triplanar_svg_flicker/render_multi_slice_triplanar_svg_flicker) --
+    an <img> sandboxes the SVG and some browsers won't animate it. Matches
+    fMRIPrep's own reportlet markup (`class="svg-reportlet"`).
+    """
+    return (
+        f"<div class='reportlet'><object class='svg-reportlet' type='image/svg+xml' "
+        f"data='figures/{svg_path.name}'>"
+        f"Problem loading figure figures/{svg_path.name}. Try reloading the report."
+        f"</object></div>"
+        f"<small>Get figure file: <a href='figures/{svg_path.name}' target='_blank'>figures/{svg_path.name}</a></small>"
+    )
 
 
 def leakage_table_html(leakage_df: pd.DataFrame | None, space: str) -> str:
@@ -52,8 +72,6 @@ def build_t1w_alignment_sections(
     mrsi_to_t1_transforms: list[Path] | None = None,
 ) -> list[tuple[str, str]]:
     """Returns the T1w-space alignment tab's (heading, body_html) sections."""
-    import numpy as np
-
     out = qc_report_derivative(config.derivative_dir, subject, session, "registration")
     figures_dir = coverage_report_dir(config.derivative_dir, subject, session) / "figures"
     figures_dir.mkdir(parents=True, exist_ok=True)
@@ -65,13 +83,30 @@ def build_t1w_alignment_sections(
         t1_ref_map_path = resample_ref_met_to_t1w(config, subject, session, orig_ref_map_path, mrsi_to_t1_transforms, raw_t1)
 
     if t1_ref_map_path is not None and Path(t1_ref_map_path).exists():
-        t1_data = np.squeeze(load_canonical_data(raw_t1))
-        ref_data = np.squeeze(load_canonical_data(t1_ref_map_path))
-        t1_slices = triplanar_slices(t1_data)
-        ref_slices = triplanar_slices(ref_data)
-        t1_png = figures_dir / f"{out.stem}_space-T1w.png"
-        render_triplanar_png(t1_slices, t1_png, overlay_slices=ref_slices, mode="alpha", colorbar_label=config.ref_met)
-        body = f"<p>Reference metabolite map (<code>{config.ref_met}</code>) overlaid on raw T1w.</p><img src='figures/{t1_png.name}'>"
+        t1_data, t1_affine = load_canonical_data_with_affine(raw_t1)
+        ref_data = load_canonical_data(t1_ref_map_path)
+        wm_probseg_path = anat_derivative(config.derivative_dir, subject, session, space="T1w", label="WM", suffix_override="probseg")
+        wm_mask = load_canonical_data(wm_probseg_path) if wm_probseg_path.exists() else None
+        t1_svg = figures_dir / f"{out.stem}_space-T1w.svg"
+        # Multiple slices per plane (not a single center slice), matching the
+        # Template-space tab: a single slice can land on an unremarkable part
+        # of the registration and miss a real misalignment a few slices away.
+        render_multi_slice_triplanar_svg_flicker(
+            t1_data.squeeze(),
+            t1_svg,
+            overlay=ref_data.squeeze(),
+            flicker_id=out.stem,
+            overlay_mode="solid",
+            overlay_cmap="magma",
+            colorbar_label=f"{config.ref_met} [IU]",
+            affine=t1_affine,
+            wm_mask=wm_mask,
+        )
+        body = (
+            f"<p>Reference metabolite map (<code>{config.ref_met}</code>) overlaid on raw T1w"
+            f"{', with the white-matter boundary in green' if wm_mask is not None else ''}. "
+            f"Hover over the figure to flip between the two.</p>{_svg_object_html(t1_svg)}"
+        )
     else:
         body = "<p>No T1w-space reference metabolite map available.</p>"
 
@@ -84,8 +119,15 @@ def build_mni_alignment_sections(
     session: str | None,
     mni_ref_map_path: Path | None = None,
     mni_resolution: int | None = None,
+    t1_to_mni_transforms: list[Path] | None = None,
 ) -> list[tuple[str, str]]:
-    """Returns the MNI-space alignment tab's (heading, body_html) sections."""
+    """Returns the MNI-space alignment tab's (heading, body_html) sections.
+
+    ``t1_to_mni_transforms``, when given along with a T1w-space WM probseg
+    derivative, resamples the WM mask into MNI space (report-only, written
+    under --work-dir -- same pattern as :func:`resample_ref_met_to_t1w`) so
+    its contour can be drawn on the alignment figure too.
+    """
     import nibabel as nib
     import numpy as np
 
@@ -94,7 +136,7 @@ def build_mni_alignment_sections(
     figures_dir.mkdir(parents=True, exist_ok=True)
 
     if mni_ref_map_path is not None and Path(mni_ref_map_path).exists():
-        template = _load_mni152_head_template(mni_resolution)
+        template = nib.as_closest_canonical(_load_mni152_head_template(mni_resolution))
         # Name the template and its resolution explicitly: "MNI152" alone spans
         # several distinct templates, and the resolution decides what the
         # overlay can actually show.
@@ -103,28 +145,55 @@ def build_mni_alignment_sections(
             f"full-head <code>{space_name[0] if space_name else 'MNI152NLin2009cAsym'}</code> "
             f"template at {mni_resolution} mm"
         )
-        template_data = np.squeeze(nib.as_closest_canonical(template).get_fdata())
-        mni_data = np.squeeze(load_canonical_data(mni_ref_map_path))
-        mni_png = figures_dir / f"{out.stem}_space-MNI.png"
+        template_data = np.squeeze(template.get_fdata())
+        mni_data, _mni_affine = load_canonical_data_with_affine(mni_ref_map_path)
+        mni_data = mni_data.squeeze()
+        wm_mask = _resample_wm_mask_to_mni(config, subject, session, t1_to_mni_transforms, template)
+        mni_svg = figures_dir / f"{out.stem}_space-MNI.svg"
         # Multiple slices per plane, not one: a single center slice can land
         # on an unremarkable part of the registration and miss a real
-        # misalignment a few slices away.
-        render_multi_slice_triplanar_png(
+        # misalignment a few slices away. Coordinate titles/affine come from
+        # the template (both layers share the same grid/resolution, so
+        # either affine works; the template's is already loaded).
+        render_multi_slice_triplanar_svg_flicker(
             template_data,
-            mni_png,
+            mni_svg,
             overlay=mni_data,
-            mode="solid",
-            overlay_cmap="hot",
-            colorbar_label=config.ref_met,
+            flicker_id=out.stem,
+            overlay_mode="solid",
+            overlay_cmap="magma",
+            colorbar_label=f"{config.ref_met} [IU]",
+            affine=template.affine,
+            wm_mask=wm_mask,
         )
         body = (
             f"<p>Reference metabolite map (<code>{config.ref_met}</code>) overlaid on the "
-            f"{template_label}.</p><img src='figures/{mni_png.name}'>"
+            f"{template_label}{', with the white-matter boundary in green' if wm_mask is not None else ''}. "
+            f"Hover over the figure to flip between the two.</p>{_svg_object_html(mni_svg)}"
         )
     else:
         body = "<p>MNI-space registration not available for this configuration.</p>"
 
     return [("Template-space alignment", body)]
+
+
+def _resample_wm_mask_to_mni(config, subject: str, session: str | None, t1_to_mni_transforms: list[Path] | None, template):
+    """Report-only resampling of the T1w-space WM probseg into MNI space, for
+    the Template-space alignment figure's WM contour. Returns ``None`` (no
+    contour drawn) when the transform or the WM probseg derivative isn't
+    available -- the alignment image itself doesn't depend on it.
+    """
+    if not t1_to_mni_transforms:
+        return None
+    wm_probseg_path = anat_derivative(config.derivative_dir, subject, session, space="T1w", label="WM", suffix_override="probseg")
+    if not wm_probseg_path.exists():
+        return None
+    from mrsiprep.registration.transforms import apply_image_transform
+
+    out = resampling_work_path(config.work_dir, subject, session, space="MNI152NLin2009cAsym", label="WM", desc="probseg")
+    if not out.exists() or config.overwrite_transform or config.overwrite:
+        apply_image_transform(template, wm_probseg_path, t1_to_mni_transforms, out, interpolation="linear", threads=config.nthreads)
+    return load_canonical_data(out)
 
 
 def _load_mni152_head_template(resolution: int | None):
