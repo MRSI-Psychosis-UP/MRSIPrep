@@ -31,16 +31,36 @@ def build_t1_correction_qc_sections(
     figures_dir.mkdir(parents=True, exist_ok=True)
 
     rows_by_met = {row["metabolite"]: row for row in summary_rows}
-    header = "<tr><th>Metabolite</th><th>T1 (s)</th><th>TR (s)</th><th>Flip (deg)</th><th>Field (T)</th><th>Factor</th><th>Source</th><th>Status</th></tr>"
-    body_rows = "".join(
-        f"<tr><td>{row['metabolite']}</td><td>{row['t1_s']:.3f}</td><td>{row['tr_s']:.3f}</td>"
-        f"<td>{row['flip_deg']:.1f}</td><td>{row['field_strength_t']:.1f}</td>"
-        f"<td>{row['saturation_factor']:.4f}</td><td>{row['source']}</td><td>{row['status']}</td></tr>"
-        for row in summary_rows
-    )
+    # "literature" rows have a scalar flip_deg/saturation_factor; "voxelwise"
+    # rows (mrsiprep.mrsi.t1_correction.apply_t1_correction_voxelwise) have
+    # no single scalar flip angle or factor to report, so they carry
+    # flip_angle_map/saturation_factor_median/non_physical_voxel_fraction
+    # instead -- render whichever shape this recording's rows actually are.
+    voxelwise = summary_rows and "flip_angle_map" in summary_rows[0]
+    if voxelwise:
+        header = (
+            "<tr><th>Metabolite</th><th>T1 (s)</th><th>TR (s)</th><th>Field (T)</th>"
+            "<th>Median factor</th><th>Non-physical voxels</th><th>Source</th><th>Status</th></tr>"
+        )
+        body_rows = "".join(
+            f"<tr><td>{row['metabolite']}</td><td>{row['t1_s']:.3f}</td><td>{row['tr_s']:.3f}</td>"
+            f"<td>{row['field_strength_t']:.1f}</td><td>{row['saturation_factor_median']:.4f}</td>"
+            f"<td>{row['non_physical_voxel_fraction']:.1%}</td><td>{row['source']}</td><td>{row['status']}</td></tr>"
+            for row in summary_rows
+        )
+        caption = f"<p>Flip-angle (B1+) map: <code>{summary_rows[0]['flip_angle_map']}</code></p>"
+    else:
+        header = "<tr><th>Metabolite</th><th>T1 (s)</th><th>TR (s)</th><th>Flip (deg)</th><th>Field (T)</th><th>Factor</th><th>Source</th><th>Status</th></tr>"
+        body_rows = "".join(
+            f"<tr><td>{row['metabolite']}</td><td>{row['t1_s']:.3f}</td><td>{row['tr_s']:.3f}</td>"
+            f"<td>{row['flip_deg']:.1f}</td><td>{row['field_strength_t']:.1f}</td>"
+            f"<td>{row['saturation_factor']:.4f}</td><td>{row['source']}</td><td>{row['status']}</td></tr>"
+            for row in summary_rows
+        )
+        caption = ""
     warnings = sorted({row.get("warnings") for row in summary_rows if row.get("warnings")})
     warning_html = "".join(f"<p><strong>Warning:</strong> {text}</p>" for text in warnings)
-    table_html = f"<table>{header}{body_rows}</table>{warning_html}"
+    table_html = f"{caption}<table>{header}{body_rows}</table>{warning_html}"
     sections: list[tuple[str, str]] = [("Saturation correction factors", table_html)]
 
     metabolites = [met for met in preproc_maps if met in corrected_maps]
@@ -54,8 +74,10 @@ def build_t1_correction_qc_sections(
         after_png = figures_dir / f"{out.stem}_met-{met}_after.png"
         render_triplanar_png(before_slices, before_png, cmap=cmap, colorbar_label=met)
         render_triplanar_png(after_slices, after_png, cmap=cmap, colorbar_label=met)
-        factor = rows_by_met.get(met, {}).get("saturation_factor")
-        factor_note = f"<p>Factor: {factor:.4f}</p>" if factor is not None else ""
+        row = rows_by_met.get(met, {})
+        factor = row.get("saturation_factor", row.get("saturation_factor_median"))
+        factor_label = "Factor" if "saturation_factor" in row else "Median factor"
+        factor_note = f"<p>{factor_label}: {factor:.4f}</p>" if factor is not None else ""
         sections.append((
             f"Metabolite: {met}",
             factor_note + "<div class='row'>"

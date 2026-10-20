@@ -1,20 +1,28 @@
-"""Protocol-level T1 saturation correction for quantified MRSI metabolite maps.
+"""T1 saturation correction for quantified MRSI metabolite maps.
 
 Raw fitted metabolite amplitudes are systematically underestimated when the
 acquisition's TR is short relative to a metabolite's own T1, since the spin
-system has not fully relaxed between excitations. This module applies a
-single scalar correction factor per metabolite per recording, derived from
-the standard spoiled-FID/Ernst-angle steady-state signal equation:
+system has not fully relaxed between excitations. This module corrects for
+that using the standard spoiled-FID/Ernst-angle steady-state signal equation:
 
     S/S0 = sin(alpha) * (1 - exp(-TR/T1)) / (1 - cos(alpha) * exp(-TR/T1))
 
-using TR/flip angle read from the dataset's mrsinmrs.json and a curated
-literature T1 value (mrsiprep/config/t1_literature.json). This
-is "literature" mode: one factor per metabolite, not per-voxel -- a future
-voxelwise mode would require a measured B1+ map, which mrsiprep does not
-currently ingest.
+in two modes, both keyed by metabolite (not by individual spectroscopic
+resonance -- a resonance-resolved correction is not implemented):
 
-Only active when config.t1_correction == "literature"; a config with the
+- "literature" (:func:`apply_t1_correction`): a single scalar correction
+  factor per metabolite per recording, using the acquisition's nominal
+  flip angle (and TR) read from the dataset's mrsinmrs.json, and a curated
+  literature T1 value (mrsiprep/config/t1_literature.json).
+- "voxelwise" (:func:`apply_t1_correction_voxelwise`): a per-voxel
+  correction factor per metabolite, using a measured B1+/flip-angle map
+  (``desc-b1map``, same grid as the metabolite maps) in place of the
+  nominal flip angle -- TR and the literature T1 value are still scalar,
+  since neither varies spatially in the way flip angle does under B1
+  inhomogeneity. Requires the dataset to actually provide a flip-angle
+  map; there is no fallback to the nominal flip angle.
+
+Only active when config.t1_correction is "literature" or "voxelwise"; the
 default "none" never calls into this module.
 """
 
@@ -69,6 +77,27 @@ def ernst_saturation_factor(tr_s: float, flip_deg: float, t1_s: float) -> float:
             "(sin(flip)*(1-exp(-TR/T1)) <= 0)."
         )
     return numerator / denominator
+
+
+def ernst_saturation_factor_map(tr_s: float, flip_deg_map: np.ndarray, t1_s: float) -> np.ndarray:
+    """Per-voxel sibling of :func:`ernst_saturation_factor`: ``flip_deg_map``
+    is a per-voxel flip-angle (B1+) map in degrees, everything else is the
+    same scalar acquisition/literature value used in "literature" mode.
+
+    Unlike the scalar version, a non-physical denominator (e.g. at a voxel
+    where the measured flip angle is 0, typically outside the imaged
+    object) does not raise: that voxel's factor is ``NaN``, which
+    :func:`apply_t1_correction_voxelwise` then excludes the same way it
+    already excludes non-finite input signal, rather than failing the
+    whole recording over one bad voxel in an otherwise-usable map.
+    """
+    alpha = np.radians(flip_deg_map.astype(np.float64))
+    e1 = math.exp(-tr_s / t1_s)
+    numerator = 1 - np.cos(alpha) * e1
+    denominator = np.sin(alpha) * (1 - e1)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        factor = np.where(denominator > 0, numerator / denominator, np.nan)
+    return factor
 
 
 def resolve_metabolite_t1(metabolite: str, field_strength_t: float) -> dict:
@@ -222,5 +251,96 @@ def apply_t1_correction(
     for row in summary_rows:
         row["warnings"] = "; ".join(warnings)
     summary = mrsi_derivative(config.derivative_dir, subject, session, desc="t1corr", suffix_override="tsv")
+    write_tsv(summary_rows, summary)
+    return corrected, summary_rows, summary
+
+
+def apply_t1_correction_voxelwise(
+    config,
+    subject: str,
+    session: str | None,
+    metabolite_maps: dict[str, Path],
+    flip_angle_map_path: Path,
+    acquisition_params: AcquisitionParams,
+    water_status: str,
+) -> tuple[dict[str, Path], list[dict], Path]:
+    """Multiply each metabolite map by a per-voxel saturation factor, using
+    a measured flip-angle (B1+) map in place of the nominal flip angle.
+
+    TR and field strength still come from ``acquisition_params`` (scalar,
+    acquisition-level); T1 is still a single literature value per metabolite
+    (resonance-resolved T1 is not supported, same as "literature" mode).
+    Only the flip angle -- the quantity B1 inhomogeneity actually distorts
+    spatially -- varies per voxel here.
+
+    ``flip_angle_map_path`` must be on the same grid as ``metabolite_maps``
+    (same shape; this is not resampled/registered here). A voxel where the
+    saturation factor is non-physical (see
+    :func:`ernst_saturation_factor_map`) is left uncorrected in the output
+    -- excluded from the multiplication the same way a non-finite input
+    signal voxel already is -- rather than failing the whole recording.
+
+    Writes a per-recording confounds/*_desc-t1corrvoxelwise.tsv summary
+    (one row per metabolite: T1/TR/field strength/source/sensitivity, plus
+    the flip-angle map path and the fraction of in-map voxels excluded for
+    a non-physical factor -- there is no single scalar "flip_deg"/
+    "saturation_factor" to report, unlike "literature" mode's summary).
+    Returns the corrected map paths, the same summary rows (for
+    provenance), and the summary TSV path.
+    """
+    _, flip_map = load_3d_data(flip_angle_map_path, dtype=np.float32, label="flip-angle (B1+) map")
+
+    corrected: dict[str, Path] = {}
+    summary_rows: list[dict] = []
+    warnings: list[str] = []
+    if water_status == "unknown":
+        warnings.append("Water-referencing status unknown; correction applied to metabolite T1 only.")
+    for met, path in metabolite_maps.items():
+        out = mrsi_derivative(config.derivative_dir, subject, session, space="MRSI", met=met, desc="signalt1corrvoxelwise", suffix_override="mrsi")
+        entry = resolve_metabolite_t1(met, acquisition_params.field_strength_t)
+        factor_map = ernst_saturation_factor_map(acquisition_params.tr_s, flip_map, entry["t1_s"])
+        sensitivity = {}
+        if entry["t1_sd_s"] is not None:
+            sensitivity = {
+                "factor_at_t1_minus_sd_median": float(np.nanmedian(ernst_saturation_factor_map(acquisition_params.tr_s, flip_map, entry["t1_s"] - entry["t1_sd_s"]))),
+                "factor_at_t1_plus_sd_median": float(np.nanmedian(ernst_saturation_factor_map(acquisition_params.tr_s, flip_map, entry["t1_s"] + entry["t1_sd_s"]))),
+            }
+        excluded_fraction = float(np.mean(~np.isfinite(factor_map)))
+        summary_rows.append(
+            {
+                "metabolite": met,
+                "t1_s": entry["t1_s"],
+                "t1_sd_s": entry["t1_sd_s"],
+                "tr_s": acquisition_params.tr_s,
+                "field_strength_t": acquisition_params.field_strength_t,
+                "flip_angle_map": str(flip_angle_map_path),
+                "saturation_factor_median": float(np.nanmedian(factor_map)),
+                "non_physical_voxel_fraction": excluded_fraction,
+                "source": entry["source"],
+                "doi": entry["doi"],
+                "status": entry["status"],
+                "water_status": water_status,
+                **sensitivity,
+            }
+        )
+        if out.exists() and not (config.overwrite_t1corr or config.overwrite):
+            note_cache_hit()
+            corrected[met] = out
+            continue
+        note_computed()
+        img, data = load_3d_data(path, dtype=np.float32, label=f"{met} map")
+        if data.shape != flip_map.shape:
+            raise T1CorrectionError(
+                f"Flip-angle map shape {flip_map.shape} ({flip_angle_map_path}) does not match "
+                f"'{met}' map shape {data.shape} ({path}); --t1-correction voxelwise requires the "
+                "flip-angle map to be on the same grid as the metabolite maps."
+            )
+        apply_mask = np.isfinite(data) & np.isfinite(factor_map)
+        result = data.copy()
+        result[apply_mask] = result[apply_mask] * factor_map[apply_mask]
+        corrected[met] = save_nifti(result.astype(np.float32), img, out, dtype=np.float32)
+    for row in summary_rows:
+        row["warnings"] = "; ".join(warnings)
+    summary = mrsi_derivative(config.derivative_dir, subject, session, desc="t1corrvoxelwise", suffix_override="tsv")
     write_tsv(summary_rows, summary)
     return corrected, summary_rows, summary

@@ -65,6 +65,7 @@ def correct_mrsi_orientation(
     snr_map: Path | None = None,
     linewidth_map: Path | None = None,
     water_map: Path | None = None,
+    flip_angle_map: Path | None = None,
 ) -> dict[str, Path]:
     """Rigid-register ``metabolite_maps[config.ref_met]`` (or the first
     available map) to ``t1_path``, then apply that one rigid transform to
@@ -84,7 +85,8 @@ def correct_mrsi_orientation(
 
     Returns a dict of every path actually rewritten, keyed the same way the
     input dicts were (metabolite maps by metabolite name, others by their
-    own fixed key: ``"crlb-<met>"``, ``"snr"``, ``"fwhm"``, ``"water"``).
+    own fixed key: ``"crlb-<met>"``, ``"snr"``, ``"fwhm"``, ``"water"``,
+    ``"b1map"``).
     """
     backend = config.registration_backend
     prefix = ants_transform_prefix(config.derivative_dir, subject, session, "orient", backend=backend)
@@ -118,6 +120,8 @@ def correct_mrsi_orientation(
         items.append(("fwhm", linewidth_map))
     if water_map is not None:
         items.append(("water", water_map))
+    if flip_angle_map is not None:
+        items.append(("b1map", flip_angle_map))
 
     corrected: dict[str, Path] = {}
     for key, path in items:

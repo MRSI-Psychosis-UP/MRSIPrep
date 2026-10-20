@@ -16,9 +16,19 @@ using the acquisition's TR and nominal flip angle (read from a
 dataset-level `mrsinmrs.json`, see [MRSinMRS](https://doi.org/10.1002/nbm.4484))
 and a curated literature T1 value per metabolite per field strength
 (`mrsiprep/config/t1_literature.json`). This is a **protocol-level** correction --
-one factor per metabolite per recording, not per-voxel. A future
-`voxelwise` mode using a measured B1+ map is not yet implemented (MRSIPrep
-does not currently ingest B1+ maps).
+one factor per metabolite per recording, not per-voxel.
+
+`--t1-correction voxelwise` instead applies a **per-voxel** correction
+factor per metabolite, using a measured flip-angle (B1+) map in place of
+the nominal flip angle -- TR and the literature T1 value remain scalar
+(resonance-resolved T1 is not supported in either mode). This requires the
+input layout to actually provide a flip-angle map
+(`desc-b1map`, same grid as the metabolite maps); there is no fallback to
+the nominal flip angle, and the step fails loudly if the map is absent.
+A voxel where the measured flip angle yields a non-physical correction
+factor (e.g. a near-zero flip angle outside the imaged object) is left
+uncorrected rather than failing the whole recording; the fraction of such
+voxels is recorded per metabolite in the confound table below.
 
 ```bash
 docker run --rm \
@@ -38,15 +48,20 @@ docker run --rm \
 
 ## Requirements
 
-`--t1-correction literature` requires a `mrsinmrs.json` at the BIDS root
-with unambiguous TR, flip angle, and field-strength entries (under
-`CommonMetadata` or a matching `Recordings` entry). Fails loudly,
+Both `--t1-correction literature` and `--t1-correction voxelwise` require
+a `mrsinmrs.json` at the BIDS root with unambiguous TR, flip angle, and
+field-strength entries (under `CommonMetadata` or a matching `Recordings`
+entry) -- the nominal `FlipAngle` is still read in `voxelwise` mode even
+though it is not used for the correction itself, since it remains useful
+provenance to compare against the measured B1+ map. Fails loudly,
 per-recording, if metadata is missing or if two recognized spellings of
 the same field disagree -- other recordings in a batch still process
 normally. Since MRSinMRS defines no enforced schema, only a small
 whitelist of key spellings is recognized (below); values are also
 sanity-checked to be in a plausible range (e.g. TR must be in seconds,
-not milliseconds).
+not milliseconds). `--t1-correction voxelwise` additionally requires a
+flip-angle (B1+) map discoverable as `desc-b1map` in the MRSI input
+layout, on the same grid as the metabolite maps.
 
 ### Recognized `mrsinmrs.json` keys
 
@@ -125,5 +140,18 @@ With `--t1-correction literature`, each recording gains:
   slices and the factor table, folded into the combined QC report.
 - A `t1_correction` block in the recording's provenance JSON
   (`reports/*_desc-provenance.json`).
+
+With `--t1-correction voxelwise`, each recording instead gains:
+
+- `mrsi/orig-t1corr/*_desc-signalt1corrvoxelwise_mrsi.nii.gz` -- the
+  per-voxel-corrected metabolite maps, consumed downstream the same way.
+- `confounds/*_desc-t1corrvoxelwise.tsv` -- one row per metabolite: T1,
+  TR, field strength, the flip-angle map path, the median correction
+  factor, the fraction of voxels excluded for a non-physical factor,
+  source citation, and a `t1_s ± t1_sd_s` sensitivity pair (reported as
+  the median factor at ±1 SD, since there is no single scalar factor to
+  report per metabolite in this mode).
+- The same QC report and provenance JSON integration as `literature`
+  mode.
 
 See [Basic Usage](usage_basic.md) for the full CLI reference.

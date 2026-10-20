@@ -107,7 +107,7 @@ def resampling_work_path(work_dir: Path, subject: str, session: str | None, **en
     return _derivative(work_dir, subject, session, "resampling", "mrsi", **entities)
 
 
-_CONFOUND_DESCS = {"brain", "mrsiqc", "qcmask", "spikemask", "crlb", "snr", "fwhm", "t1corr", "leakageqc"}
+_CONFOUND_DESCS = {"brain", "mrsiqc", "qcmask", "spikemask", "crlb", "snr", "fwhm", "b1map", "t1corr", "t1corrvoxelwise", "leakageqc"}
 
 
 def _mrsi_folder(entities: dict) -> str:
@@ -116,7 +116,7 @@ def _mrsi_folder(entities: dict) -> str:
     space = entities.get("space")
     if entities.get("label") in {"GM", "WM", "CSF"}:
         return "confounds"
-    if desc == "signalt1corr":
+    if desc in {"signalt1corr", "signalt1corrvoxelwise"}:
         return "mrsi/orig-t1corr"
     if desc == "signalpvc":
         return "mrsi/orig-pvc"

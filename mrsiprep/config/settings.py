@@ -140,7 +140,7 @@ class MRSIPrepConfig:
             raise ValueError(f"Unsupported SynthSeg mode: {self.synthseg_mode}")
         if self.tissue_backend not in {"synthseg-fast", "existing", "none"}:
             raise ValueError(f"Unsupported tissue backend: {self.tissue_backend}")
-        if self.t1_correction not in {"none", "literature"}:
+        if self.t1_correction not in {"none", "literature", "voxelwise"}:
             raise ValueError(f"Unsupported --t1-correction: {self.t1_correction}")
         if self.t1_correction_water_status not in {"uncorrected", "corrected", "unknown"}:
             raise ValueError(f"Unsupported --t1-correction-water-status: {self.t1_correction_water_status}")
