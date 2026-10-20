@@ -107,7 +107,7 @@ def resampling_work_path(work_dir: Path, subject: str, session: str | None, **en
     return _derivative(work_dir, subject, session, "resampling", "mrsi", **entities)
 
 
-_CONFOUND_DESCS = {"brain", "mrsiqc", "qcmask", "spikemask", "crlb", "snr", "fwhm", "b1map", "t1corr", "t1corrvoxelwise", "leakageqc"}
+_CONFOUND_DESCS = {"brain", "mrsiqc", "qcmask", "spikemask", "crlb", "snr", "fwhm", "b1map", "t1corr", "t1corrvoxelwise", "leakageqc", "ventricleqc"}
 
 
 def _mrsi_folder(entities: dict) -> str:

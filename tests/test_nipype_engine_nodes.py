@@ -319,7 +319,7 @@ class StepReportsTests(unittest.TestCase):
             "connectivity": {pid: "connectivity_obj"},
             "transformed": "transformed_obj",
             "qc_sections_tissue": "tissue_qc",
-            "qc_sections_mrsi_raw": "mrsi_raw_qc",
+            "qc_sections_mrsi_raw": ["mrsi_raw_qc"],
             "qc_sections_mrsi_preproc": "mrsi_preproc_qc",
             "qc_sections_t1_correction": "t1corr_qc",
             "qc_sections_t1w_alignment": "t1w_align_qc",
@@ -331,6 +331,7 @@ class StepReportsTests(unittest.TestCase):
     def test_assembles_outputs_and_writes_provenance(self):
         ctx = self._ctx()
         with patch("mrsiprep.workflows.participant._step_reports", side_effect=lambda cfg, s, ses, outputs, qc, debug: outputs) as step_reports, \
+            patch("mrsiprep.workflows.participant._step_ventricle_qc", return_value=["ventricle_qc"]) as ventricle_qc, \
             patch("mrsiprep.utils.provenance.write_provenance", return_value="provenance_path") as write_prov, \
             patch("mrsiprep.io.naming.provenance_derivative", return_value="provenance_derivative_path"), \
             patch("mrsiprep.reports.runtime_overview.build_runtime_qc_sections", return_value="runtime_qc"), \
@@ -357,6 +358,9 @@ class StepReportsTests(unittest.TestCase):
         )
         qc_sections = step_reports.call_args[0][4]
         self.assertEqual(qc_sections["runtime"], "runtime_qc")
+        # Ventricle QC is appended to the MRSI Raw tab at this step, with the registration.
+        self.assertEqual(qc_sections["mrsi_raw"], ["mrsi_raw_qc", "ventricle_qc"])
+        ventricle_qc.assert_called_once()
 
         write_prov.assert_called_once()
         provenance_payload = write_prov.call_args[0][2]
@@ -366,6 +370,7 @@ class StepReportsTests(unittest.TestCase):
     def test_provenance_includes_t1_correction_when_present(self):
         ctx = self._ctx(t1_correction_provenance={"CrPCr": {"factor": 0.9}})
         with patch("mrsiprep.workflows.participant._step_reports", side_effect=lambda cfg, s, ses, outputs, qc, debug: outputs), \
+            patch("mrsiprep.workflows.participant._step_ventricle_qc", return_value=[]), \
             patch("mrsiprep.utils.provenance.write_provenance", return_value="provenance_path") as write_prov, \
             patch("mrsiprep.io.naming.provenance_derivative", return_value="provenance_derivative_path"), \
             patch("mrsiprep.reports.runtime_overview.build_runtime_qc_sections", return_value="runtime_qc"), \

@@ -28,6 +28,7 @@ from mrsiprep.reports.parcel_qc import write_parcel_qc
 from mrsiprep.reports.parcellation_overview import build_parcellation_qc_sections
 from mrsiprep.reports.registration_overview import build_mni_alignment_sections, build_t1w_alignment_sections
 from mrsiprep.reports.t1_correction import build_t1_correction_qc_sections
+from mrsiprep.qc.ventricles import ventricle_reference_mask
 from mrsiprep.reports.ventricle_overview import build_ventricle_qc_sections
 from mrsiprep.tissue.synthseg_fast import (
     segment_t1_synthseg_fast,
@@ -86,8 +87,9 @@ def _step_mrsi_preprocessing(config, subject, session, inputs, debug, anat=None)
     with debug.step("MRSI preprocessing"):
         t1_path = anat.registration_t1w if anat is not None else None
         mrsi = run_mrsi_workflow(config, subject, session, inputs, t1_path=t1_path)
+        # The ventricle section is appended at the reports step
+        # (_step_ventricle_qc), once the MRSI->T1w transform exists to score it.
         qc_sections_mrsi_raw = build_mrsi_raw_qc_sections(config, subject, session, mrsi.raw_maps, mrsi.preproc_maps)
-        qc_sections_mrsi_raw += build_ventricle_qc_sections(config, subject, session, mrsi.raw_maps)
         qc_sections_mrsi_preproc = build_mrsi_preproc_qc_sections(config, subject, session, mrsi.raw_maps, mrsi.preproc_maps)
         qc_sections_t1_correction = None
         if mrsi.t1_correction_provenance is not None:
@@ -95,6 +97,22 @@ def _step_mrsi_preprocessing(config, subject, session, inputs, debug, anat=None)
                 config, subject, session, mrsi.preproc_maps, mrsi.corrected_maps, mrsi.t1_correction_provenance
             )
     return mrsi, qc_sections_mrsi_raw, qc_sections_mrsi_preproc, qc_sections_t1_correction
+
+
+def _step_ventricle_qc(config, subject, session, raw_t1, mrsi, registration):
+    """Ventricle visibility section for the MRSI Raw tab.
+
+    Detection itself uses no coregistration; it runs here, after
+    registration, only so each metabolite's detection can also be scored
+    against the subject's own SynthSeg lateral ventricles moved into MRSI
+    space. Without SynthSeg labels or a transform the section still renders,
+    just without the Dice chart.
+    """
+    reference = None
+    mrsi_to_t1 = getattr(registration, "mrsi_to_t1", None)
+    if mrsi_to_t1 is not None:
+        reference = ventricle_reference_mask(config, subject, session, raw_t1, mrsi.reference, mrsi_to_t1.inverse)
+    return build_ventricle_qc_sections(config, subject, session, mrsi.raw_maps, reference_ventricles=reference)
 
 
 def _step_registration(config, subject, session, mrsi, anat, debug, subject_template=None):

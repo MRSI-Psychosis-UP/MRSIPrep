@@ -1,162 +1,28 @@
-"""Native-space ventricle visibility QC (MRSI Raw QC tab, after the
-per-metabolite slice montages).
+"""Ventricle visibility section (MRSI Raw QC tab, after the per-metabolite
+slice montages).
 
-Purely a visual check, run in each recording's own native MRSI grid,
-before any T1w coregistration touches the data: a cheap, prior-only
-placement (translation + per-axis scale from brainmask centroid/extent,
-no iterative registration) drops the Harvard-Oxford lateral-ventricle
-prior into native space, then a local darker-than-surroundings threshold
-detects what (if anything) actually looks like ventricle in each
-metabolite's own raw signal. The slice with the most detected voxels is
-rendered with the detected outline for visual inspection -- deliberately
-not reduced to a pass/fail metric, since a naive summary ratio here has
-already been shown to invert direction on real data (see
-experiments/native_space_ventricle_qc.py); the outline itself, on its
-best slice, is the informative artifact.
+Rendering only: detection and Dice scoring live in
+:mod:`mrsiprep.qc.ventricles`. This module picks one display slice shared by
+all metabolites, draws the detected outlines on it, and, when the subject's own
+ventricles were available, adds a bar chart of each metabolite's Dice and
+writes the scores to a ``desc-ventricleqc`` TSV.
 """
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import numpy as np
 
-from mrsiprep.io.naming import coverage_report_dir, qc_report_derivative
+from mrsiprep.io.naming import coverage_report_dir, mrsi_derivative, qc_report_derivative
+from mrsiprep.qc.ventricles import DICE_GOOD as VENTRICLE_DICE_GOOD
+from mrsiprep.qc.ventricles import run_ventricle_qc, write_ventricle_qc_tsv
 
-_LEFT_LATERAL_VENTRICLE_IDX = 2
-_RIGHT_LATERAL_VENTRICLE_IDX = 13
-_HO_ATLAS_RELATIVE = Path("data/atlases/HarvardOxford/HarvardOxford-sub-prob-2mm.nii.gz")
-_MNI_BRAIN_MASK_RELATIVE = Path("data/standard/MNI152_T1_2mm_brain_mask.nii.gz")
-
-
-def _fsl_standard_path(relative: Path) -> Path | None:
-    fsl_dir = os.environ.get("FSLDIR")
-    if not fsl_dir:
-        return None
-    candidate = Path(fsl_dir) / relative
-    return candidate if candidate.exists() else None
-
-
-def _load_canonical(path: Path) -> tuple[np.ndarray, np.ndarray]:
-    import nibabel as nib
-
-    img = nib.as_closest_canonical(nib.load(str(path)))
-    data = np.asarray(img.get_fdata())
-    if data.ndim == 4:
-        data = data[..., 0]
-    return data, img.affine
-
-
-def _lateral_ventricle_prior() -> tuple[np.ndarray, np.ndarray] | None:
-    """Combined left+right lateral-ventricle probability (0-100), from
-    FSL's Harvard-Oxford subcortical atlas. Returns None if FSLDIR or the
-    atlas data isn't available, so callers can skip this QC section
-    gracefully rather than fail the whole report over an optional check.
-    """
-    atlas_path = _fsl_standard_path(_HO_ATLAS_RELATIVE)
-    if atlas_path is None:
-        return None
-    import nibabel as nib
-
-    img = nib.as_closest_canonical(nib.load(str(atlas_path)))
-    data = np.asarray(img.get_fdata())
-    combined = np.clip(data[..., _LEFT_LATERAL_VENTRICLE_IDX] + data[..., _RIGHT_LATERAL_VENTRICLE_IDX], 0, 100)
-    return combined, img.affine
-
-
-def _mni_brain_mask() -> tuple[np.ndarray, np.ndarray] | None:
-    """Brain mask of the run's reference template.
-
-    Taken from the same template the pipeline normalizes into
-    (:mod:`mrsiprep.config.templates`) rather than from FSL's ``$FSLDIR``
-    standard directory: FSL ships the MNI152NLin6Asym lineage, so the old
-    source described a different space than the data being checked. Falls back
-    to FSL's copy only if TemplateFlow cannot provide one, so the QC section
-    degrades rather than disappearing.
-    """
-    import nibabel as nib
-
-    from mrsiprep.config.templates import TemplateError, template_brain_mask
-
-    try:
-        img = nib.as_closest_canonical(template_brain_mask())
-        return np.asarray(img.get_fdata()) > 0, img.affine
-    except (TemplateError, OSError):
-        mask_path = _fsl_standard_path(_MNI_BRAIN_MASK_RELATIVE)
-        if mask_path is None:
-            return None
-        data, affine = _load_canonical(mask_path)
-        return data > 0, affine
-
-
-def _world_bbox_center_and_extent(mask: np.ndarray, affine: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    import nibabel as nib
-
-    idx = np.argwhere(mask)
-    world = nib.affines.apply_affine(affine, idx)
-    return world.mean(axis=0), world.max(axis=0) - world.min(axis=0)
-
-
-def _mni_to_native_affine(
-    native_mask: np.ndarray, native_affine: np.ndarray, mni_mask: np.ndarray, mni_affine: np.ndarray
-) -> tuple[np.ndarray, np.ndarray, np.ndarray] | None:
-    """Cheap translation + per-axis-scale placement from brainmask
-    centroid/extent, no optimization. Per-axis (not isotropic) scaling
-    matters because whole-brain MRSI's z-FOV is often heavily truncated
-    relative to a full MNI head, so a single averaged scale factor
-    mismatches z badly and can place the prior outside the true ventricle
-    location entirely.
-    """
-    if not native_mask.any() or not mni_mask.any():
-        return None
-    mni_center, mni_extent = _world_bbox_center_and_extent(mni_mask, mni_affine)
-    native_center, native_extent = _world_bbox_center_and_extent(native_mask, native_affine)
-    if np.any(mni_extent <= 0):
-        return None
-    scale = native_extent / mni_extent
-    return mni_center, native_center, scale
-
-
-def _warp_prior_to_native(
-    mni_prob: np.ndarray,
-    mni_affine: np.ndarray,
-    native_shape: tuple[int, int, int],
-    native_affine: np.ndarray,
-    mni_center: np.ndarray,
-    native_center: np.ndarray,
-    scale: np.ndarray,
-    threshold: float = 50.0,
-) -> np.ndarray:
-    import nibabel as nib
-    from scipy.ndimage import map_coordinates
-
-    native_idx = np.array(np.meshgrid(*(np.arange(dim) for dim in native_shape), indexing="ij")).reshape(3, -1).T
-    native_world = nib.affines.apply_affine(native_affine, native_idx)
-    mni_world = mni_center + (native_world - native_center) / scale
-    mni_vox = nib.affines.apply_affine(np.linalg.inv(mni_affine), mni_world)
-    sampled = map_coordinates(mni_prob, mni_vox.T, order=1, mode="constant", cval=0.0)
-    return (sampled >= threshold).reshape(native_shape)
-
-
-def _detect_ventricle_mask(
-    signal: np.ndarray, prior_roi: np.ndarray, brainmask: np.ndarray, search_dilate: int = 2, threshold_percentile: float = 35.0
-) -> np.ndarray:
-    """Data-driven detection within a dilation of the warped prior: keep
-    voxels darker than a percentile of the local reference shell, so the
-    result adapts to each recording's own signal/noise floor instead of
-    trusting the prior placement alone. If nothing nearby is actually
-    darker than its surroundings, this comes back empty/small -- itself
-    informative, not a failure.
-    """
-    from scipy.ndimage import binary_dilation
-
-    search_region = binary_dilation(prior_roi, iterations=search_dilate) & brainmask
-    reference_shell = binary_dilation(search_region, iterations=1) & ~search_region & brainmask
-    if reference_shell.sum() == 0:
-        return np.zeros_like(prior_roi)
-    threshold = np.percentile(signal[reference_shell], threshold_percentile)
-    return search_region & (signal <= threshold)
+# Top of the bar colour scale (full green). At ~5 mm the lateral ventricles are
+# only a few voxels thick, so even a clean map rarely exceeds Dice ~0.3-0.4;
+# ending the scale at 1.0 would leave every good scan pale yellow.
+VENTRICLE_DICE_FULL_GREEN = 0.5
+MAX_MONTAGE_COLUMNS = 5
 
 
 def _prior_slice_bias(prior_roi: np.ndarray) -> np.ndarray:
@@ -232,9 +98,6 @@ def _consensus_slice(counts: list[np.ndarray], biases: list[np.ndarray], min_vox
     return best
 
 
-MAX_MONTAGE_COLUMNS = 5
-
-
 def _render_ventricle_montage(panels: list[tuple[str, np.ndarray, np.ndarray, np.ndarray]], z: int, out_path: Path) -> Path:
     """One combined figure, one subplot per metabolite, at most
     ``MAX_MONTAGE_COLUMNS`` per row -- e.g. 9 metabolites lays out as 5
@@ -277,52 +140,78 @@ def _render_ventricle_montage(panels: list[tuple[str, np.ndarray, np.ndarray, np
     return out_path
 
 
-def build_ventricle_qc_sections(config, subject: str, session: str | None, raw_maps: dict[str, Path]) -> list[tuple[str, str]]:
-    """One rendered slice per metabolite: wherever that metabolite's own
-    raw signal shows the most plausible ventricle darkening, near the
-    anatomically expected location. Native MRSI space only, run before any
-    coregistration -- an acquisition-quality check, not a registration
-    check. Returns [] (no section, not an error) if FSL's standard-space
-    data isn't available, since this is a supplementary check on top of
-    the required per-metabolite montages above it, not a hard dependency.
+def _render_dice_bars(dice: dict[str, float], out_path: Path) -> Path:
+    """Bar chart of Dice per metabolite plus the median across metabolites.
+
+    Colour runs from deep red (0) through amber at :data:`VENTRICLE_DICE_GOOD`
+    to deep green at :data:`VENTRICLE_DICE_FULL_GREEN` and above; the
+    threshold is also drawn as a dashed line and every bar carries its value,
+    so the reading never depends on colour alone.
     """
-    prior = _lateral_ventricle_prior()
-    mni_brain = _mni_brain_mask()
-    if prior is None or mni_brain is None:
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.colors import TwoSlopeNorm
+
+    names = list(dice) + [f"median (N={len(dice)})"]
+    values = list(dice.values()) + [float(np.median(list(dice.values())))]
+    norm = TwoSlopeNorm(vmin=0.0, vcenter=VENTRICLE_DICE_GOOD, vmax=VENTRICLE_DICE_FULL_GREEN)
+    cmap = plt.get_cmap("RdYlGn")
+    x = np.arange(len(names), dtype=float)
+    x[-1] += 0.6  # set the summary bar apart from the metabolites
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig, ax = plt.subplots(figsize=(max(5.5, 0.6 * len(names) + 2.0), 3.2), constrained_layout=True)
+    ax.bar(x, values, width=0.72, color=[cmap(norm(min(v, VENTRICLE_DICE_FULL_GREEN))) for v in values], edgecolor="#444", linewidth=[0.4] * len(dice) + [1.4])
+    ax.axhline(VENTRICLE_DICE_GOOD, color="#444", linestyle="--", linewidth=1, label=f"good ≥ {VENTRICLE_DICE_GOOD:g}")
+    ax.legend(loc="lower left", bbox_to_anchor=(0, 1.0), frameon=False, fontsize=8, handlelength=2.2)
+    top = max(0.4, max(values) + 0.1)
+    for xi, v in zip(x, values):
+        ax.text(xi, v + 0.01 * top, f"{v:.2f}", ha="center", va="bottom", fontsize=8)
+    ax.set_xticks(x, names, rotation=45, ha="right", fontsize=8)
+    ax.set_ylim(0, top)
+    ax.set_xlim(x[0] - 0.6, x[-1] + 0.6)
+    ax.set_ylabel("Dice with lateral ventricles", fontsize=9)
+    ax.spines[["top", "right"]].set_visible(False)
+    sm = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
+    cb = fig.colorbar(sm, ax=ax, pad=0.01, fraction=0.04)
+    cb.set_ticks([0, VENTRICLE_DICE_GOOD, VENTRICLE_DICE_FULL_GREEN])
+    cb.ax.tick_params(labelsize=7)
+    fig.savefig(out_path, dpi=150)
+    plt.close(fig)
+    return out_path
+
+
+def build_ventricle_qc_sections(
+    config, subject: str, session: str | None, raw_maps: dict[str, Path], reference_ventricles: Path | None = None
+) -> list[tuple[str, str]]:
+    """The ventricle section of the MRSI Raw tab.
+
+    Runs :func:`mrsiprep.qc.ventricles.run_ventricle_qc` and renders its
+    result: every metabolite's detection on one shared slice and, when
+    ``reference_ventricles`` (the subject's ventricles on the same native
+    grid, see :func:`mrsiprep.qc.ventricles.ventricle_reference_mask`) is
+    given, a Dice bar chart and TSV. Returns [] (no section, not an error)
+    if FSL's standard-space data isn't available, since this is a
+    supplementary check on top of the required per-metabolite montages
+    above it, not a hard dependency.
+    """
+    result = run_ventricle_qc(raw_maps, reference_ventricles)
+    if result is None:
         return []
-    mni_vent_prob, mni_vent_affine = prior
-    mni_brain_mask, mni_brain_affine = mni_brain
-
-    out = qc_report_derivative(config.derivative_dir, subject, session, "mrsi-raw")
-    figures_dir = coverage_report_dir(config.derivative_dir, subject, session) / "figures"
-
-    panels: list[tuple[str, np.ndarray, np.ndarray, np.ndarray]] = []
-    counts: list[np.ndarray] = []
-    biases: list[np.ndarray] = []
-    for met in sorted(raw_maps):
-        signal, affine = _load_canonical(raw_maps[met])
-        brainmask = np.isfinite(signal) & (signal > 0)
-        placement = _mni_to_native_affine(brainmask, affine, mni_brain_mask, mni_brain_affine)
-        if placement is None:
-            continue
-        mni_center, native_center, scale = placement
-        prior_roi = _warp_prior_to_native(mni_vent_prob, mni_vent_affine, signal.shape, affine, mni_center, native_center, scale)
-        prior_roi &= brainmask
-        detected = _detect_ventricle_mask(signal, prior_roi, brainmask)
-        panels.append((met, signal, prior_roi, detected))
-        counts.append(_slice_counts(detected))
-        biases.append(_prior_slice_bias(prior_roi))
-
+    detections = result.detections
     # Metabolites acquired on different grids cannot share a slice index;
     # this is not expected within one recording, but silently rendering
     # mismatched indices would be worse than skipping the check.
-    if panels and len({panel[1].shape for panel in panels}) > 1:
+    if detections and len({det.signal.shape for det in detections}) > 1:
         return []
-    consensus_z = _consensus_slice(counts, biases)
-    if not panels or consensus_z is None:
+    consensus_z = _consensus_slice([_slice_counts(det.detected) for det in detections], [_prior_slice_bias(det.prior) for det in detections])
+    if not detections or (consensus_z is None and not result.dice):
         return []
-    png_path = figures_dir / f"{out.stem}_ventricle-qc.png"
-    _render_ventricle_montage(panels, consensus_z, png_path)
+
+    out = qc_report_derivative(config.derivative_dir, subject, session, "mrsi-raw")
+    figures_dir = coverage_report_dir(config.derivative_dir, subject, session) / "figures"
     # Legend, not prose: the reader needs to know what each colour is and
     # which slice they are looking at. The interpretation ("a ragged outline
     # means X") was several sentences of text that told an MRSI reader what
@@ -332,14 +221,32 @@ def build_ventricle_qc_sections(config, subject: str, session: str | None, raw_m
     swatch = (
         "display:inline-block;width:24px;height:0;vertical-align:middle;margin-right:4px;border-top:{}"
     )
-    body = (
-        "<p style='margin:0 0 0.6em'>"
-        f"<span style='{swatch.format('3px solid #d62728')}'></span>detected ventricle"
-        "<span style='display:inline-block;width:1.6em'></span>"
-        f"<span style='{swatch.format('2px dashed #bbb')}'></span>MNI prior"
-        "<span style='display:inline-block;width:1.6em'></span>"
-        f"<span style='color:#666'>native MRSI space, pre-coregistration &middot; all metabolites at z={consensus_z}</span>"
-        "</p>"
-        f"<img src='figures/{png_path.name}'>"
-    )
-    return [("Ventricle visibility (pre-coregistration)", body)]
+    body = ""
+    if consensus_z is not None:
+        png_path = figures_dir / f"{out.stem}_ventricle-qc.png"
+        _render_ventricle_montage([(det.metabolite, det.signal, det.prior, det.detected) for det in detections], consensus_z, png_path)
+        body += (
+            "<p style='margin:0 0 0.6em'>"
+            f"<span style='{swatch.format('3px solid #d62728')}'></span>detected ventricle"
+            "<span style='display:inline-block;width:1.6em'></span>"
+            f"<span style='{swatch.format('2px dashed #bbb')}'></span>MNI prior"
+            "<span style='display:inline-block;width:1.6em'></span>"
+            f"<span style='color:#666'>native MRSI space, pre-coregistration &middot; all metabolites at z={consensus_z}</span>"
+            "</p>"
+            f"<img src='figures/{png_path.name}'>"
+        )
+    else:
+        body += "<p style='margin:0 0 0.6em;color:#666'>No ventricle-like darkening detected in any metabolite.</p>"
+
+    if result.dice:
+        write_ventricle_qc_tsv(result, mrsi_derivative(config.derivative_dir, subject, session, desc="ventricleqc", suffix_override="tsv"))
+        bars = _render_dice_bars({row.metabolite: row.dice for row in result.dice}, figures_dir / f"{out.stem}_ventricle-dice.png")
+        body += (
+            "<p style='margin:1em 0 0.6em'>"
+            f"<b>Dice with the subject's lateral ventricles</b> &middot; median {result.median_dice:.2f} "
+            f"<span style='color:#666'>(SynthSeg, moved to MRSI space by the MRSI&rarr;T1w transform; "
+            f"green from {VENTRICLE_DICE_GOOD:g})</span>"
+            "</p>"
+            f"<img src='figures/{bars.name}'>"
+        )
+    return [("Ventricle visibility", body)]

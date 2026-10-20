@@ -63,6 +63,7 @@ from mrsiprep.workflows.steps import (  # noqa: F401
     _step_synthseg_parcellation_qc,
     _step_tissue_probmaps,
     _step_tissue_segmentation,
+    _step_ventricle_qc,
     _validate_backend_inputs,
 )
 

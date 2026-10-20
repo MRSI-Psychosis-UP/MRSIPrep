@@ -238,7 +238,7 @@ def step_reports(config, subject, session, ctx):
     from mrsiprep.reports.runtime_overview import build_runtime_qc_sections
     from mrsiprep.utils.debug import Debug, collect_timings
     from mrsiprep.utils.provenance import write_provenance
-    from mrsiprep.workflows.participant import _step_reports
+    from mrsiprep.workflows.participant import _step_reports, _step_ventricle_qc
 
     debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""))
     anat = ctx["anat"]
@@ -279,7 +279,12 @@ def step_reports(config, subject, session, ctx):
     }
     qc_sections = {
         "tissue": ctx["qc_sections_tissue"],
-        "mrsi_raw": ctx["qc_sections_mrsi_raw"],
+        # The ventricle section closes the MRSI Raw tab; it is built here so it
+        # can be scored against the subject's ventricles via the registration.
+        "mrsi_raw": [
+            *(ctx["qc_sections_mrsi_raw"] or []),
+            *_step_ventricle_qc(config, subject, session, ctx.get("raw_t1"), mrsi, ctx.get("registration")),
+        ],
         "mrsi_preproc": ctx["qc_sections_mrsi_preproc"],
         "mrsi_pvc": ctx.get("qc_sections_mrsi_pvc"),
         "t1_correction": ctx["qc_sections_t1_correction"],

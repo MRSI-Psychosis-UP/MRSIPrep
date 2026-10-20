@@ -147,7 +147,8 @@ class StepMrsiPreprocessingTests(unittest.TestCase):
             mrsi, qc_raw, qc_preproc, qc_t1corr = P._step_mrsi_preprocessing(SimpleNamespace(), "01", "01", object(), _debug())
         t1_corr.assert_not_called()
         self.assertIsNone(qc_t1corr)
-        self.assertEqual(qc_raw, ["raw", "ventricle"])
+        # The ventricle section moved to the reports step (_step_ventricle_qc).
+        self.assertEqual(qc_raw, ["raw"])
         self.assertEqual(qc_preproc, ["preproc"])
 
     def test_with_t1_correction_builds_that_qc_section(self):
@@ -183,6 +184,28 @@ class StepMrsiPreprocessingTests(unittest.TestCase):
         ):
             P._step_mrsi_preprocessing(SimpleNamespace(), "01", "01", object(), _debug())
         run_mrsi.assert_called_once_with(unittest.mock.ANY, "01", "01", unittest.mock.ANY, t1_path=None)
+
+
+class StepVentricleQcTests(unittest.TestCase):
+    def test_scores_against_the_reference_built_from_the_inverse_transform(self):
+        mrsi = SimpleNamespace(reference=Path("ref.nii.gz"), raw_maps={"CrPCr": Path("cr.nii.gz")})
+        registration = SimpleNamespace(mrsi_to_t1=SimpleNamespace(inverse=[Path("a.mat"), Path("w.nii.gz")]))
+        with patch("mrsiprep.workflows.steps.ventricle_reference_mask", return_value=Path("vent.nii.gz")) as ref, patch(
+            "mrsiprep.workflows.steps.build_ventricle_qc_sections", return_value=["ventricle"]
+        ) as build:
+            result = P._step_ventricle_qc(SimpleNamespace(), "01", "01", Path("t1.nii.gz"), mrsi, registration)
+        ref.assert_called_once_with(unittest.mock.ANY, "01", "01", Path("t1.nii.gz"), Path("ref.nii.gz"), [Path("a.mat"), Path("w.nii.gz")])
+        build.assert_called_once_with(unittest.mock.ANY, "01", "01", mrsi.raw_maps, reference_ventricles=Path("vent.nii.gz"))
+        self.assertEqual(result, ["ventricle"])
+
+    def test_without_registration_renders_without_a_reference(self):
+        mrsi = SimpleNamespace(reference=Path("ref.nii.gz"), raw_maps={})
+        with patch("mrsiprep.workflows.steps.ventricle_reference_mask") as ref, patch(
+            "mrsiprep.workflows.steps.build_ventricle_qc_sections", return_value=[]
+        ) as build:
+            P._step_ventricle_qc(SimpleNamespace(), "01", "01", Path("t1.nii.gz"), mrsi, None)
+        ref.assert_not_called()
+        build.assert_called_once_with(unittest.mock.ANY, "01", "01", {}, reference_ventricles=None)
 
 
 class StepRegistrationTests(unittest.TestCase):

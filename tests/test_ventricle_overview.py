@@ -8,14 +8,14 @@ import numpy as np
 
 from mrsiprep.config.settings import MRSIPrepConfig
 from mrsiprep.io.naming import coverage_report_dir
+from mrsiprep.qc.ventricles import _world_bbox_center_and_extent
+from mrsiprep.qc.ventricles import detect_ventricle_mask as _detect_ventricle_mask
+from mrsiprep.qc.ventricles import mni_to_native_placement as _mni_to_native_affine
+from mrsiprep.qc.ventricles import warp_prior_to_native as _warp_prior_to_native
 from mrsiprep.reports.ventricle_overview import (
     _consensus_slice,
     _prior_slice_bias,
     _slice_counts,
-    _detect_ventricle_mask,
-    _mni_to_native_affine,
-    _warp_prior_to_native,
-    _world_bbox_center_and_extent,
     build_ventricle_qc_sections,
 )
 
