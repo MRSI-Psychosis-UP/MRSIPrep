@@ -104,17 +104,19 @@ def build_parser() -> argparse.ArgumentParser:
     t1_correction = parser.add_argument_group("T1 saturation correction")
     t1_correction.add_argument(
         "--t1-correction",
-        choices=["none", "literature"],
+        choices=["none", "literature", "voxelwise"],
         default="none",
         help="Correct metabolite maps for incomplete T1 relaxation recovery (T1 saturation) using the "
         "steady-state spoiled-gradient-echo signal equation (default: 'none', no correction applied). "
         "'literature' applies a single scalar correction factor per metabolite, derived from the "
-        "acquisition's TR/flip angle (read from mrsinmrs.json) and a curated literature T1 value per "
-        "metabolite per field strength (see mrsiprep/config/t1_literature.json). Requires a dataset-level "
-        "mrsinmrs.json with unambiguous TR/FlipAngle/MagneticFieldStrength entries -- fails loudly, "
-        "per-recording, if these or a requested metabolite's T1 value are missing, rather than silently "
-        "skipping or substituting. A future 'voxelwise' mode (per-voxel correction using a measured B1+ "
-        "map) is planned but not yet implemented; mrsiprep does not currently ingest B1+ maps.",
+        "acquisition's nominal TR/flip angle (read from mrsinmrs.json) and a curated literature T1 value "
+        "per metabolite per field strength (see mrsiprep/config/t1_literature.json). 'voxelwise' applies "
+        "a per-voxel correction factor per metabolite instead, using a measured flip-angle (B1+) map "
+        "(desc-b1map in the MRSI input layout, same grid as the metabolite maps) in place of the nominal "
+        "flip angle -- TR and the literature T1 value are still scalar; requires that map to be present, "
+        "there is no fallback to 'literature' mode. Both modes require a dataset-level mrsinmrs.json with "
+        "unambiguous TR/FlipAngle/MagneticFieldStrength entries -- fails loudly, per-recording, if these "
+        "or a requested metabolite's T1 value are missing, rather than silently skipping or substituting.",
     )
     t1_correction.add_argument(
         "--t1-correction-water-status",

@@ -36,7 +36,11 @@ class DerivativeMapPathsTests(unittest.TestCase):
             water_map=Path("in-water.nii.gz"),
         )
 
-        metabolite_maps, crlb_maps, snr_map, linewidth_map, water_map = _derivative_map_paths(config, "S001", "V1", inputs)
+        inputs.flip_angle_map = Path("in-b1map.nii.gz")
+
+        metabolite_maps, crlb_maps, snr_map, linewidth_map, water_map, flip_angle_map = _derivative_map_paths(
+            config, "S001", "V1", inputs
+        )
 
         self.assertEqual(
             metabolite_maps["CrPCr"],
@@ -56,16 +60,23 @@ class DerivativeMapPathsTests(unittest.TestCase):
             water_map,
             mrsi_derivative(config.derivative_dir, "S001", "V1", space="mrsi", met="water", desc="signal", suffix_override="mrsi"),
         )
+        self.assertEqual(
+            flip_angle_map,
+            mrsi_derivative(config.derivative_dir, "S001", "V1", space="orig", desc="b1map", suffix_override="mrsi"),
+        )
 
     def test_omits_snr_linewidth_and_water_when_not_provided(self):
         config = _config()
         inputs = MRSIInputs(metabolite_maps={"CrPCr": Path("in-cr.nii.gz")})
 
-        _metabolite_maps, _crlb_maps, snr_map, linewidth_map, water_map = _derivative_map_paths(config, "S001", "V1", inputs)
+        _metabolite_maps, _crlb_maps, snr_map, linewidth_map, water_map, flip_angle_map = _derivative_map_paths(
+            config, "S001", "V1", inputs
+        )
 
         self.assertIsNone(snr_map)
         self.assertIsNone(linewidth_map)
         self.assertIsNone(water_map)
+        self.assertIsNone(flip_angle_map)
 
 
 class RunMrsiWorkflowOrientationTests(unittest.TestCase):
@@ -90,7 +101,7 @@ class RunMrsiWorkflowOrientationTests(unittest.TestCase):
         # correct_mrsi_orientation must never see inputs.metabolite_maps
         # directly -- those are input BIDS paths, commonly mounted
         # read-only, not the writable derivatives copies this run owns.
-        derivative_paths = ({"CrPCr": Path("/out/derivatives/mrsi/orig/cr.nii.gz")}, {}, None, None, None)
+        derivative_paths = ({"CrPCr": Path("/out/derivatives/mrsi/orig/cr.nii.gz")}, {}, None, None, None, None)
         patches = self._patches()
         with patches[0], patches[1], patches[2], patches[3], patches[4], patch(
             "mrsiprep.workflows.mrsi._derivative_map_paths", return_value=derivative_paths
@@ -109,7 +120,7 @@ class RunMrsiWorkflowOrientationTests(unittest.TestCase):
         # itself gets updated to point at the corrected copies too.
         derivative_maps = {"CrPCr": Path("/out/derivatives/mrsi/orig/cr-corrected.nii.gz")}
         derivative_water = Path("/out/derivatives/mrsi/orig/water-corrected.nii.gz")
-        derivative_paths = (derivative_maps, {}, None, None, derivative_water)
+        derivative_paths = (derivative_maps, {}, None, None, derivative_water, None)
         patches = self._patches()
         with patches[0], patches[1] as ensure_brainmask, patches[2] as filter_maps, patches[3], patches[4], patch(
             "mrsiprep.workflows.mrsi._derivative_map_paths", return_value=derivative_paths

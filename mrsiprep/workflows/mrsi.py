@@ -15,7 +15,7 @@ from mrsiprep.mrsi.masks import ensure_brainmask
 from mrsiprep.mrsi.orientation import correct_mrsi_orientation
 from mrsiprep.mrsi.quality import make_quality_masks
 from mrsiprep.mrsi.reference import generate_reference
-from mrsiprep.mrsi.t1_correction import apply_t1_correction, resolve_acquisition_params
+from mrsiprep.mrsi.t1_correction import apply_t1_correction, apply_t1_correction_voxelwise, resolve_acquisition_params
 
 
 @dataclass
@@ -30,15 +30,19 @@ class MRSIResult:
     :ivar preproc_maps: Metabolite maps after spike detection and
         biharmonic repair (see :func:`mrsiprep.mrsi.filtering.filter_metabolite_maps`).
     :ivar corrected_maps: Identical to ``preproc_maps`` unless
-        ``config.t1_correction == "literature"``, in which case this holds
-        the T1-saturation-corrected maps (see
-        :func:`mrsiprep.mrsi.t1_correction.apply_t1_correction`). Partial
-        volume correction happens later (see
+        ``config.t1_correction`` is ``"literature"`` or ``"voxelwise"``, in
+        which case this holds the T1-saturation-corrected maps (see
+        :func:`mrsiprep.mrsi.t1_correction.apply_t1_correction`/
+        :func:`mrsiprep.mrsi.t1_correction.apply_t1_correction_voxelwise`).
+        Partial volume correction happens later (see
         :func:`mrsiprep.mrsi.pvc.run_pvc`), not in this workflow, and
         always consumes ``corrected_maps`` as its input.
     :ivar t1_correction_provenance: Per-metabolite T1-correction summary
-        rows (TR, flip angle, T1, factor, source, warnings), or ``None``
-        when ``config.t1_correction == "none"``.
+        rows (TR, T1, source, warnings, plus either a scalar flip
+        angle/factor in ``"literature"`` mode or the flip-angle map path
+        and a median/non-physical-voxel-fraction summary in
+        ``"voxelwise"`` mode), or ``None`` when ``config.t1_correction ==
+        "none"``.
     :ivar crlb_maps: Per-metabolite Cramér-Rao lower bound maps, copied
         through unchanged from the raw inputs.
     :ivar snr_map: Whole-brain signal-to-noise-ratio map, if the input
@@ -47,6 +51,9 @@ class MRSIResult:
     :ivar water_map: Water-reference image, if provided (used for coil
         combination / normalization upstream of mrsiprep, not recomputed
         here).
+    :ivar flip_angle_map: Measured flip-angle (B1+) map, if provided
+        (``desc-b1map``); only consumed when ``config.t1_correction ==
+        "voxelwise"``, otherwise carried through unused.
     :ivar brainmask: MRSI-native brainmask, either taken from the inputs
         or derived when missing (see :func:`mrsiprep.mrsi.masks.ensure_brainmask`).
     :ivar reference: The reference-metabolite image used to drive
@@ -69,6 +76,7 @@ class MRSIResult:
     qcmasks: dict[str, Path]
     qc_summary: Path
     t1_correction_provenance: list[dict] | None = None
+    flip_angle_map: Path | None = None
 
 
 def _same_file(a: Path, b: Path) -> bool:
@@ -93,6 +101,7 @@ def _copy_native_maps(config, subject: str, session: str | None, inputs: MRSIInp
         (inputs.snr_map, {"desc": "snr"}, "orig"),
         (inputs.linewidth_map, {"desc": "fwhm"}, "orig"),
         (inputs.water_map, {"met": "water", "desc": "signal"}, "mrsi"),
+        (inputs.flip_angle_map, {"desc": "b1map"}, "orig"),
     ]
     for met, path in inputs.crlb_maps.items():
         links.append((path, {"met": met, "desc": "crlb"}, "orig"))
@@ -140,7 +149,9 @@ def _copy_native_maps(config, subject: str, session: str | None, inputs: MRSIInp
         os.replace(tmp_target, target)
 
 
-def _derivative_map_paths(config, subject: str, session: str | None, inputs: MRSIInputs) -> tuple[dict[str, Path], dict[str, Path], Path | None, Path | None, Path | None]:
+def _derivative_map_paths(
+    config, subject: str, session: str | None, inputs: MRSIInputs
+) -> tuple[dict[str, Path], dict[str, Path], Path | None, Path | None, Path | None, Path | None]:
     """The mrsi/orig/ derivative-tree paths ``_copy_native_maps`` just wrote
     for each of ``inputs``' maps, in the same shape as the input dicts.
 
@@ -172,7 +183,12 @@ def _derivative_map_paths(config, subject: str, session: str | None, inputs: MRS
         if inputs.water_map is not None
         else None
     )
-    return metabolite_maps, crlb_maps, snr_map, linewidth_map, water_map
+    flip_angle_map = (
+        mrsi_derivative(config.derivative_dir, subject, session, space="orig", desc="b1map", suffix_override="mrsi")
+        if inputs.flip_angle_map is not None
+        else None
+    )
+    return metabolite_maps, crlb_maps, snr_map, linewidth_map, water_map, flip_angle_map
 
 
 def run_mrsi_workflow(config, subject: str, session: str | None, inputs: MRSIInputs, t1_path: Path | None = None) -> MRSIResult:
@@ -194,8 +210,8 @@ def run_mrsi_workflow(config, subject: str, session: str | None, inputs: MRSIInp
         ``None`` for session-less datasets.
     :param inputs: The recording's raw MRSI inputs as discovered by
         :func:`mrsiprep.io.loaders.load_mrsi_inputs` (metabolite/CRLB
-        maps, SNR/linewidth/water maps, brainmask -- any of which may be
-        ``None`` except ``metabolite_maps``).
+        maps, SNR/linewidth/water/flip-angle maps, brainmask -- any of
+        which may be ``None`` except ``metabolite_maps``).
     :param t1_path: The recording's registration-ready T1w anatomical.
         Required when ``config.correct_mrsi_orientation`` is set; unused
         otherwise.
@@ -206,7 +222,7 @@ def run_mrsi_workflow(config, subject: str, session: str | None, inputs: MRSIInp
     if config.correct_mrsi_orientation:
         if t1_path is None:
             raise ValueError("--correct-mrsi-orientation requires a T1w anatomical, but none was provided.")
-        metabolite_maps, crlb_maps, snr_map, linewidth_map, water_map = _derivative_map_paths(config, subject, session, inputs)
+        metabolite_maps, crlb_maps, snr_map, linewidth_map, water_map, flip_angle_map = _derivative_map_paths(config, subject, session, inputs)
         correct_mrsi_orientation(
             config,
             subject,
@@ -217,6 +233,7 @@ def run_mrsi_workflow(config, subject: str, session: str | None, inputs: MRSIInp
             snr_map=snr_map,
             linewidth_map=linewidth_map,
             water_map=water_map,
+            flip_angle_map=flip_angle_map,
         )
         # Everything downstream must read the corrected derivative copies,
         # not the (possibly misaligned, and possibly read-only) input paths
@@ -226,6 +243,7 @@ def run_mrsi_workflow(config, subject: str, session: str | None, inputs: MRSIInp
         inputs.snr_map = snr_map
         inputs.linewidth_map = linewidth_map
         inputs.water_map = water_map
+        inputs.flip_angle_map = flip_angle_map
     brainmask = ensure_brainmask(config, subject, session, inputs.brainmask, inputs.water_map, inputs.metabolite_maps)
     preproc = filter_metabolite_maps(config, subject, session, inputs.metabolite_maps, brainmask)
     corrected = preproc
@@ -235,6 +253,19 @@ def run_mrsi_workflow(config, subject: str, session: str | None, inputs: MRSIInp
         acquisition_params = resolve_acquisition_params(mrsinmrs_resolved)
         corrected, t1_correction_provenance, _ = apply_t1_correction(
             config, subject, session, preproc, acquisition_params, config.t1_correction_water_status
+        )
+    elif config.t1_correction == "voxelwise":
+        if inputs.flip_angle_map is None:
+            raise ValueError(
+                "--t1-correction voxelwise requires a per-recording flip-angle (B1+) map "
+                "(desc-b1map in the MRSI input layout), but none was found for this recording. "
+                "Use --t1-correction literature (nominal flip angle from mrsinmrs.json) or "
+                "--t1-correction none instead."
+            )
+        mrsinmrs_resolved = resolve_mrsinmrs(config.mrsinmrs, subject, session)
+        acquisition_params = resolve_acquisition_params(mrsinmrs_resolved)
+        corrected, t1_correction_provenance, _ = apply_t1_correction_voxelwise(
+            config, subject, session, preproc, inputs.flip_angle_map, acquisition_params, config.t1_correction_water_status
         )
     reference = generate_reference(config, subject, session, corrected, preferred_met=config.ref_met)
     qcmasks, qc_summary = make_quality_masks(
@@ -260,4 +291,5 @@ def run_mrsi_workflow(config, subject: str, session: str | None, inputs: MRSIInp
         qcmasks=qcmasks,
         qc_summary=qc_summary,
         t1_correction_provenance=t1_correction_provenance,
+        flip_angle_map=inputs.flip_angle_map,
     )

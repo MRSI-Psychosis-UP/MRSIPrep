@@ -132,7 +132,7 @@ def pipeline_trace(config) -> list[dict]:
     )
     pvc_ran = not config.no_pvc
     pvc_reason = "" if pvc_ran else "--no-pvc"
-    t1corr_ran = config.t1_correction == "literature"
+    t1corr_ran = config.t1_correction in {"literature", "voxelwise"}
     trace = [
         {"step": "Tissue segmentation", "ran": True, "reason": ""},
         {"step": "Anatomical preparation", "ran": True, "reason": ""},
