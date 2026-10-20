@@ -111,6 +111,49 @@ More involved, because transforms are consumed in several places. Start from
 files. A new backend must produce both forward and inverse transforms; the
 inverse is what projects atlases back into MRSI space.
 
+## Adding a QC feature
+
+QC measures live in `mrsiprep/qc/`, one module per feature. A QC module
+computes and returns results; it does not plot or write HTML. The report draws
+the results, and the pipeline only connects the two. `mrsiprep/qc/ventricles.py`
+is the worked example:
+
+| Layer | Where | Ventricle example |
+|---|---|---|
+| Compute | `mrsiprep/qc/<feature>.py` | `run_ventricle_qc(raw_maps, reference_ventricles)` returns a `VentricleQC` with per-metabolite Dice, `median_dice` and `passed` |
+| Render | `mrsiprep/reports/<feature>_overview.py` | `build_ventricle_qc_sections(...)` calls `run_ventricle_qc` and draws the montage and Dice bars |
+| Wire | `mrsiprep/workflows/steps.py` | `_step_ventricle_qc(...)` builds the reference and calls the report, from the reports step |
+
+Guidelines for a new module:
+
+- Take plain inputs (paths, arrays, transform lists) and return a small
+  dataclass, so the measure can be called from a notebook or batch script
+  without a run config. If the pipeline needs to resolve paths from the
+  config, add a thin wrapper next to the plain function, as
+  `ventricle_reference_mask` does for `resample_reference_ventricles`.
+- Return `None` when an optional input is missing (atlas, segmentation,
+  transform) instead of raising, so the QC degrades rather than failing the run.
+- Write tables as `desc-<name>` TSVs in the recording's `confounds/` folder
+  through `mrsi_derivative(...)`, and add `<name>` to `_CONFOUND_DESCS` in
+  `mrsiprep/io/naming.py`.
+- Keep pass/fail thresholds as module-level constants with a comment on where
+  the value comes from (e.g. `DICE_GOOD = 0.15` and the pilot data behind it).
+- Put compute tests in `tests/test_qc_<feature>.py` and rendering tests with
+  the report's tests; `tests/test_qc_ventricles.py` and
+  `tests/test_ventricle_overview_units.py` show the split.
+
+Called on its own:
+
+```python
+from mrsiprep.qc.ventricles import run_ventricle_qc
+
+result = run_ventricle_qc(
+    {"CrPCr": "sub-01_ses-01_space-mrsi_met-CrPCr_desc-signal_mrsi.nii.gz"},
+    reference_ventricles="sub-01_ses-01_space-mrsi_label-latvent_mask.nii.gz",
+)
+print(result.median_dice, result.passed)
+```
+
 ## A note on scope
 
 If you're adding something that doesn't fit these shapes, please open an issue
