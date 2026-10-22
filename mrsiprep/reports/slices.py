@@ -118,6 +118,30 @@ def axial_slices_center_weighted(volume_data: np.ndarray, n_slices: int, referen
     return [(fallback_index, np.rot90(np.take(volume_data, fallback_index, axis=2)))]
 
 
+def axial_slice_indices_by_mask_count(mask: np.ndarray, n_slices: int, fallback: np.ndarray) -> list[int]:
+    """Up to ``n_slices`` axial indices, ranked by how many ``True`` voxels
+    ``mask`` has on that slice (most first), so a montage actually shows
+    where the flagged voxels are rather than an anatomy-driven center
+    weighting that may miss them entirely. Falls back to
+    :func:`center_weighted_slice_indices` (restricted to ``fallback``'s
+    nonzero slices) to pad out to ``n_slices`` when ``mask`` is empty or has
+    fewer than ``n_slices`` populated slices, so the montage width stays
+    consistent even on a metabolite with few or no flagged voxels.
+    """
+    mask = np.squeeze(mask)
+    counts = mask.sum(axis=(0, 1))
+    ranked = [int(index) for index in np.argsort(counts)[::-1] if counts[index] > 0]
+    ranked = ranked[:n_slices]
+    if len(ranked) < n_slices:
+        fallback_indices = [index for index, _ in axial_slices_center_weighted(fallback, n_slices)]
+        for index in fallback_indices:
+            if len(ranked) >= n_slices:
+                break
+            if index not in ranked:
+                ranked.append(index)
+    return sorted(ranked)
+
+
 OUTLINE_COLORS = (
     "lime", "red", "yellow", "cyan", "magenta", "orange",
     "dodgerblue", "springgreen", "gold", "deeppink", "turquoise", "orchid",
@@ -742,16 +766,22 @@ def render_axial_before_after_svg_flicker(
     cmap: str = "viridis",
     colorbar_label: str | None = None,
     n_slices: int = 10,
+    spike_mask: np.ndarray | None = None,
 ) -> Path:
     """Hover-to-flicker counterpart of the MRSI Raw tab's single-row axial
-    montage: the same center-weighted slice indices
-    (:func:`axial_slices_center_weighted`), but ``before`` (e.g. raw,
-    pre-spike-filter) and ``after`` (e.g. spike-filtered) are two full
-    layers merged via :func:`compose_flicker_svg`, rather than one static
-    background with a transparent overlay -- both layers show real
-    anatomy here, so neither is naturally "the background".
+    montage: ``before`` (e.g. raw, pre-spike-filter) and ``after`` (e.g.
+    spike-filtered) are two full layers merged via
+    :func:`compose_flicker_svg`, rather than one static background with a
+    transparent overlay -- both layers show real anatomy here, so neither
+    is naturally "the background".
 
-    Slice indices are chosen from ``after``, not ``before``: an unfiltered
+    With ``spike_mask`` given, slices are chosen by where the flagged
+    voxels actually are (:func:`axial_slice_indices_by_mask_count`),
+    falling back to center-weighted indices (:func:`axial_slices_center_weighted`)
+    to pad out to ``n_slices`` -- otherwise this montage could show spike
+    repair's "before" and "after" at slices with no repaired voxels at all.
+    Without a mask, slice indices fall back to ``after``'s own
+    center-weighted indices, chosen rather than ``before``'s: an unfiltered
     acquisition spike can make a slice look nonempty by ``np.any(... > 0)``
     even where the real, post-filter signal is otherwise unremarkable, so
     anchoring to the filtered map keeps slice choice robust to spikes.
@@ -767,7 +797,10 @@ def render_axial_before_after_svg_flicker(
     before = np.squeeze(before)
     after = np.squeeze(after)
 
-    indices = [index for index, _ in axial_slices_center_weighted(after, n_slices)]
+    if spike_mask is not None:
+        indices = axial_slice_indices_by_mask_count(spike_mask, n_slices, fallback=after)
+    else:
+        indices = [index for index, _ in axial_slices_center_weighted(after, n_slices)]
     finite_after = after[np.isfinite(after)]
     vmax = float(np.percentile(finite_after, 99.5)) if finite_after.size else float(np.nanmax(after))
     vmin = 0.0
@@ -775,7 +808,7 @@ def render_axial_before_after_svg_flicker(
 
     n = len(indices)
 
-    def _render(volume, *, transparent: bool, fixed_positions: list | None):
+    def _render(volume, *, draw_colorbar: bool, transparent: bool, fixed_positions: list | None):
         fig, axes = plt.subplots(1, n, figsize=(1.8 * n, 2.2), constrained_layout=(fixed_positions is None))
         if n == 1:
             axes = [axes]
@@ -786,7 +819,19 @@ def render_axial_before_after_svg_flicker(
             ax.set_title(f"z={index}", fontsize=8)
             ax.axis("off")
         if colorbar_label is not None and image is not None:
-            fig.colorbar(image, ax=axes, fraction=0.02, pad=0.02, label=colorbar_label)
+            # Reserve identical colorbar space in both layers (constrained_layout
+            # reflows panel geometry based on what's actually drawn, so a
+            # colorbar on only one layer desyncs the two documents' axes once
+            # merged -- see render_triplanar_svg_flicker's own note on this),
+            # but only the "before" (static) layer's colorbar stays visible;
+            # the "after" (hover) layer's is hidden via alpha so the flicker
+            # doesn't show a second colorbar fading in and out on top of it.
+            cbar = fig.colorbar(image, ax=axes, fraction=0.02, pad=0.02, label=colorbar_label)
+            if not draw_colorbar:
+                for artist in (cbar.ax.yaxis.label, cbar.outline, *cbar.ax.get_yticklabels(), *cbar.ax.yaxis.get_ticklines()):
+                    artist.set_alpha(0)
+                if cbar.ax.images:
+                    cbar.ax.images[0].set_alpha(0)
         if fixed_positions is None:
             fig.canvas.draw()
             positions = [ax.get_position().frozen() for ax in axes]
@@ -799,8 +844,8 @@ def render_axial_before_after_svg_flicker(
         plt.close(fig)
         return buf.getvalue().decode(), positions
 
-    before_doc, positions = _render(before, transparent=False, fixed_positions=None)
-    after_doc, _ = _render(after, transparent=True, fixed_positions=positions)
+    before_doc, positions = _render(before, draw_colorbar=True, transparent=False, fixed_positions=None)
+    after_doc, _ = _render(after, draw_colorbar=False, transparent=True, fixed_positions=positions)
     return compose_flicker_svg(before_doc, after_doc, out_path, flicker_id)
 
 
