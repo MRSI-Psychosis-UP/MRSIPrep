@@ -826,7 +826,11 @@ def render_axial_before_after_svg_flicker(
             # but only the "before" (static) layer's colorbar stays visible;
             # the "after" (hover) layer's is hidden via alpha so the flicker
             # doesn't show a second colorbar fading in and out on top of it.
-            cbar = fig.colorbar(image, ax=axes, fraction=0.02, pad=0.02, label=colorbar_label)
+            # One shared colorbar (not one per layer) is correct here: before
+            # and after are rendered with the same vmin/vmax, so a second
+            # colorbar would be identical, not a different scale per state --
+            # the label instead says explicitly that it covers both.
+            cbar = fig.colorbar(image, ax=axes, fraction=0.02, pad=0.02, label=f"{colorbar_label} (both states)")
             if not draw_colorbar:
                 for artist in (cbar.ax.yaxis.label, cbar.outline, *cbar.ax.get_yticklabels(), *cbar.ax.yaxis.get_ticklines()):
                     artist.set_alpha(0)
