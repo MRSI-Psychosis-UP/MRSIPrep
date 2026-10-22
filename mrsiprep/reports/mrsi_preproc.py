@@ -105,15 +105,16 @@ def build_mrsi_preproc_qc_sections(
     summary_table = f"<table><tr><th>Metabolite</th><th>Spike voxels detected</th></tr>{summary_rows}</table>"
     sections: list[tuple[str, str]] = [("Filtering summary", summary_table)]
     for met in metabolites:
-        # Same axial, center-weighted slices as the MRSI Raw tab (see
-        # mrsiprep.reports.mrsi_raw_overview), so a reader can compare a
-        # given metabolite's raw-tab panel directly against its before/after
-        # flicker here. Hover-to-flicker, not side-by-side: lets the eye
-        # catch exactly which voxels changed, the same pattern used for the
-        # T1w/MNI alignment tabs.
+        # Axial montage biased toward the slices with the most spike voxels
+        # (so repaired voxels are actually visible in the shown panels),
+        # padded out with the same center-weighted indices as the MRSI Raw
+        # tab when a metabolite has few or no spikes. Hover-to-flicker, not
+        # side-by-side: lets the eye catch exactly which voxels changed, the
+        # same pattern used for the T1w/MNI alignment tabs.
         flicker_svg = figures_dir / f"{out.stem}_met-{met}_spikefilt.svg"
         render_axial_before_after_svg_flicker(
             raw_data[met], preproc_data[met], flicker_svg, flicker_id=flicker_svg.stem, cmap=_MAP_CMAP, colorbar_label=met,
+            spike_mask=spike_masks.get(met),
         )
         spike_note = f"<p>Spike voxels detected: {spike_counts[met]}</p>" if spike_counts[met] is not None else ""
         body = (
