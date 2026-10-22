@@ -11,6 +11,7 @@ stage's sections are produced.
 from __future__ import annotations
 
 import json
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 import pandas as pd
@@ -21,6 +22,18 @@ from mrsiprep.reports.preproc_overview import build_preproc_overview_sections
 from mrsiprep.reports.registration_overview import leakage_table_html
 
 _MRSINMRS_URL = "https://pubmed.ncbi.nlm.nih.gov/33559967/"
+
+
+def _mrsiprep_version() -> str:
+    """Installed mrsiprep version, or "unknown" rather than raising -- a
+    report must still render even if package metadata is unavailable (e.g.
+    an editable/non-installed checkout). Same fallback source as
+    mrsiprep.utils.provenance's own version resolution.
+    """
+    try:
+        return version("mrsiprep")
+    except PackageNotFoundError:
+        return "unknown"
 
 _TAB_STYLE = (
     ".tabs{display:flex;gap:0.25rem;border-bottom:2px solid #ddd;margin-bottom:1rem;flex-wrap:wrap}"
@@ -204,6 +217,7 @@ def generate_subject_report(config, subject: str, session: str | None, outputs: 
         f"<h1>MRSIPrep report: {project_name} &middot; sub-{subject}"
         + (f" ses-{session}" if session else "")
         + "</h1>",
+        f"<p>MRSIPrep version: <code>{_mrsiprep_version()}</code></p>",
         "<h2>Inputs</h2>",
         f"<p>BIDS directory: <code>{config.bids_dir}</code></p>",
         f"<p>Output directory: <code>{config.derivative_dir}</code></p>",
