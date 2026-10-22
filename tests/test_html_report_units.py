@@ -177,5 +177,19 @@ class GenerateSubjectReportConditionalTabsTests(GenerateSubjectReportFixture):
         self.assertIn("id='connectivity'", with_section.read_text())
 
 
+class GenerateSubjectReportVersionTests(GenerateSubjectReportFixture):
+    def test_installed_version_is_shown(self):
+        with patch("mrsiprep.reports.html.version", return_value="9.9.9"):
+            html = generate_subject_report(self.config, "01", "01", outputs={}).read_text()
+        self.assertIn("MRSIPrep version: <code>9.9.9</code>", html)
+
+    def test_falls_back_to_unknown_when_package_metadata_is_unavailable(self):
+        from importlib.metadata import PackageNotFoundError
+
+        with patch("mrsiprep.reports.html.version", side_effect=PackageNotFoundError):
+            html = generate_subject_report(self.config, "01", "01", outputs={}).read_text()
+        self.assertIn("MRSIPrep version: <code>unknown</code>", html)
+
+
 if __name__ == "__main__":
     unittest.main()
