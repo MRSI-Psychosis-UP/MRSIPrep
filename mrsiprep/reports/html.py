@@ -80,7 +80,7 @@ document.addEventListener('DOMContentLoaded', function () {
 """
 
 
-def _build_tabs(config, subject, session, out, outputs, qc_sections, mrsi_qc_body,
+def _build_tabs(config, subject, session, out, outputs, qc_sections, mrsi_raw_body, mrsi_raw_qc_body,
                 leakage_df, parcel_qc_summary, parcel_qc_html, regional_html):
     """Assemble the (id, label, body) tabs in pipeline order.
 
@@ -94,8 +94,13 @@ def _build_tabs(config, subject, session, out, outputs, qc_sections, mrsi_qc_bod
 
     # Order is deliberate and follows the pipeline: raw signal, then what was
     # done to it, then where it was put, then what was measured from it.
+    # "MRSI Raw" holds only the per-metabolite raw slice montages -- no
+    # tables or other QC info -- so it's a quick-look image gallery; every
+    # QC metric computed from the raw maps (the summary table, ventricle
+    # visibility) lives in "MRSI Raw QC" instead, right after it.
     tabs: list[tuple[str, str, str]] = [
-        ("mrsi-raw-qc", "MRSI Raw QC", mrsi_qc_body),
+        ("mrsi-raw", "MRSI Raw", mrsi_raw_body),
+        ("mrsi-raw-qc", "MRSI Raw QC", mrsi_raw_qc_body),
     ]
     if pvc_sections is not None:
         tabs.append(("mrsi-pvc", "MRSI PVC", _sections_html(pvc_sections)))
@@ -170,14 +175,20 @@ def generate_subject_report(config, subject: str, session: str | None, outputs: 
     if leakage_qc and Path(leakage_qc).exists():
         leakage_df = pd.read_csv(leakage_qc, sep="\t")
 
-    mrsi_qc_body = qc_html or "<p>No QC table available.</p>"
     mrsi_raw_sections = qc_sections.get("mrsi_raw")
-    if mrsi_raw_sections:
-        mrsi_qc_body += "<h3>Raw metabolite maps (pre-pipeline)</h3>" + _sections_html(mrsi_raw_sections)
+    mrsi_raw_body = (
+        "<h3>Raw metabolite maps (pre-pipeline)</h3>" + _sections_html(mrsi_raw_sections)
+        if mrsi_raw_sections else "<p>No raw metabolite maps available.</p>"
+    )
+
+    mrsi_raw_qc_sections = qc_sections.get("mrsi_raw_qc")
+    mrsi_raw_qc_body = qc_html or "<p>No QC table available.</p>"
+    if mrsi_raw_qc_sections:
+        mrsi_raw_qc_body += _sections_html(mrsi_raw_qc_sections)
 
     project_name = _bids_project_name(config)
     tabs = _build_tabs(
-        config, subject, session, out, outputs, qc_sections, mrsi_qc_body,
+        config, subject, session, out, outputs, qc_sections, mrsi_raw_body, mrsi_raw_qc_body,
         leakage_df, parcel_qc_summary, parcel_qc_html, regional_html,
     )
 

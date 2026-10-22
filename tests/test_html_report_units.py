@@ -65,13 +65,15 @@ class GenerateSubjectReportMinimalTests(GenerateSubjectReportFixture):
         self.assertIn("sub-01</h1>", html)
         self.assertNotIn("ses-", html.split("</h1>")[0])
 
-    def test_mrsi_raw_sections_appended_after_qc_table(self):
+    def test_mrsi_raw_sections_appear_in_their_own_tab(self):
         out = generate_subject_report(
             self.config, "01", "01", outputs={}, qc_sections={"mrsi_raw": [("Raw heading", "<p>raw body</p>")]}
         )
         html = out.read_text()
         self.assertIn("Raw metabolite maps (pre-pipeline)", html)
         self.assertIn("raw body", html)
+        mrsi_raw_panel = html[html.index("id='mrsi-raw'") : html.index("id='mrsi-raw-qc'")]
+        self.assertIn("raw body", mrsi_raw_panel)
 
 
 class GenerateSubjectReportQcSummaryTests(GenerateSubjectReportFixture):

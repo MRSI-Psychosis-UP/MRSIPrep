@@ -1,6 +1,6 @@
 """Partial-volume-corrected MRSI maps (MRSI PVC tab).
 
-Deliberately the same presentation as the MRSI Raw QC tab -- one
+Deliberately the same presentation as the MRSI Raw tab -- one
 equally-spaced axial montage per metabolite -- so the two tabs can be compared
 directly by flipping between them. The slice indices match for free: both tabs
 derive them from the volume's own z-extent via
@@ -44,7 +44,7 @@ def build_mrsi_pvc_sections(
     sections: list[tuple[str, str]] = [(
         "Partial-volume correction",
         "<p>Partial-volume-corrected metabolite maps, on the native MRSI grid, at the same "
-        "slices as the MRSI Raw QC tab so the two can be compared directly.</p>",
+        "slices as the MRSI Raw tab so the two can be compared directly.</p>",
     )]
     for met in metabolites:
         pvc_path = pvc_maps[met]

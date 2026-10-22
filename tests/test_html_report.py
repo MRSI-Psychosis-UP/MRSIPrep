@@ -38,6 +38,7 @@ def _config(tmp_path: Path, **overrides) -> types.SimpleNamespace:
 _EMPTY_QC_SECTIONS = {
     "tissue": [],
     "mrsi_raw": [],
+    "mrsi_raw_qc": [],
     "mrsi_preproc": [],
     "t1_correction": None,
     "t1w_alignment": [],
@@ -54,7 +55,7 @@ class GenerateSubjectReportTabsTests(unittest.TestCase):
             config = _config(Path(td))
             out = generate_subject_report(config, "S001", "V1", {}, _EMPTY_QC_SECTIONS)
             html = out.read_text()
-            for tab_id in ("acquisition", "mrsi-raw-qc", "preproc", "anatomical", "spike-filter", "t1w-alignment", "coverage", "mni-alignment", "parcellation", "runtime", "outputs"):
+            for tab_id in ("acquisition", "mrsi-raw", "mrsi-raw-qc", "preproc", "anatomical", "spike-filter", "t1w-alignment", "coverage", "mni-alignment", "parcellation", "runtime", "outputs"):
                 self.assertIn(f"data-tab='{tab_id}'", html, f"missing tab button: {tab_id}")
                 self.assertIn(f"id='{tab_id}'", html, f"missing tab panel: {tab_id}")
 
@@ -70,16 +71,29 @@ class GenerateSubjectReportTabsTests(unittest.TestCase):
             out = generate_subject_report(config, "S002", "V1", {}, _EMPTY_QC_SECTIONS)
             self.assertNotIn("data-tab='t1-correction'", out.read_text())
 
-    def test_mrsi_raw_sections_appear_inside_mrsi_raw_qc_tab_not_a_separate_tab(self):
+    def test_mrsi_raw_sections_appear_in_mrsi_raw_tab_only(self):
         with tempfile.TemporaryDirectory() as td:
             config = _config(Path(td))
             sections = dict(_EMPTY_QC_SECTIONS, mrsi_raw=[("Metabolite: CrPCr", "<img src='figures/raw-slices.png'>")])
             out = generate_subject_report(config, "S001", "V1", {}, sections)
             html = out.read_text()
-            self.assertNotIn("data-tab='mrsi-raw'", html, "raw maps must not get their own tab")
-            mrsi_qc_panel = html[html.index("id='mrsi-raw-qc'") : html.index("id='preproc'")]
-            self.assertIn("raw-slices.png", mrsi_qc_panel)
-            self.assertIn("Raw metabolite maps", mrsi_qc_panel)
+            self.assertIn("data-tab='mrsi-raw'", html)
+            mrsi_raw_panel = html[html.index("id='mrsi-raw'") : html.index("id='mrsi-raw-qc'")]
+            mrsi_raw_qc_panel = html[html.index("id='mrsi-raw-qc'") : html.index("id='preproc'")]
+            self.assertIn("raw-slices.png", mrsi_raw_panel)
+            self.assertIn("Raw metabolite maps", mrsi_raw_panel)
+            self.assertNotIn("raw-slices.png", mrsi_raw_qc_panel)
+
+    def test_mrsi_raw_qc_sections_appear_in_mrsi_raw_qc_tab_only(self):
+        with tempfile.TemporaryDirectory() as td:
+            config = _config(Path(td))
+            sections = dict(_EMPTY_QC_SECTIONS, mrsi_raw_qc=[("Ventricle visibility", "<p>dice chart</p>")])
+            out = generate_subject_report(config, "S001", "V1", {}, sections)
+            html = out.read_text()
+            mrsi_raw_panel = html[html.index("id='mrsi-raw'") : html.index("id='mrsi-raw-qc'")]
+            mrsi_raw_qc_panel = html[html.index("id='mrsi-raw-qc'") : html.index("id='preproc'")]
+            self.assertNotIn("dice chart", mrsi_raw_panel)
+            self.assertIn("dice chart", mrsi_raw_qc_panel)
 
     def test_connectivity_tab_present_only_when_sections_given(self):
         """Gated on qc_sections['connectivity'] being non-None, not directly
