@@ -788,6 +788,10 @@ def render_axial_before_after_svg_flicker(
     Color scale is likewise shared from ``after``'s 99.5th percentile (see
     :mod:`mrsiprep.reports.mrsi_raw_overview`'s own rationale), so a single
     spike pixel in ``before`` can't wash out every panel.
+
+    Each layer carries a "Raw (unfiltered)"/"Spike-filtered" badge on its
+    first panel, so which state is currently showing is explicit rather
+    than only inferable from remembering which way the hover flips.
     """
     import io
 
@@ -808,7 +812,7 @@ def render_axial_before_after_svg_flicker(
 
     n = len(indices)
 
-    def _render(volume, *, draw_colorbar: bool, transparent: bool, fixed_positions: list | None):
+    def _render(volume, *, state_label: str, state_color: str, draw_colorbar: bool, transparent: bool, fixed_positions: list | None):
         fig, axes = plt.subplots(1, n, figsize=(1.8 * n, 2.2), constrained_layout=(fixed_positions is None))
         if n == 1:
             axes = [axes]
@@ -818,6 +822,15 @@ def render_axial_before_after_svg_flicker(
             image = ax.imshow(plane, cmap=cmap, vmin=vmin, vmax=vmax)
             ax.set_title(f"z={index}", fontsize=8)
             ax.axis("off")
+        # Which state is currently showing must be readable without relying
+        # on the viewer remembering which way the hover flips -- a badge in
+        # the corner of the first panel, present in both layers so it stays
+        # pinned at the same spot once merged, just with different text/color.
+        axes[0].text(
+            0.03, 0.97, state_label, transform=axes[0].transAxes, ha="left", va="top", fontsize=9, fontweight="bold",
+            color="white", bbox=dict(boxstyle="round,pad=0.25", facecolor=state_color, edgecolor="none", alpha=0.9),
+        )
+        cbar = None
         if colorbar_label is not None and image is not None:
             # Reserve identical colorbar space in both layers (constrained_layout
             # reflows panel geometry based on what's actually drawn, so a
@@ -836,11 +849,18 @@ def render_axial_before_after_svg_flicker(
                     artist.set_alpha(0)
                 if cbar.ax.images:
                     cbar.ax.images[0].set_alpha(0)
+        # The colorbar's own axes must be pinned too, not just the slice
+        # panels: fig.colorbar() on an unconstrained second pass places it
+        # wherever matplotlib's default layout puts it, which is NOT where
+        # constrained_layout placed it on the first (background) pass --
+        # confirmed empirically, the foreground colorbar landed on top of
+        # the last slice panel instead of in its own reserved column.
+        pinned_axes = [*axes, cbar.ax] if cbar is not None else list(axes)
         if fixed_positions is None:
             fig.canvas.draw()
-            positions = [ax.get_position().frozen() for ax in axes]
+            positions = [ax.get_position().frozen() for ax in pinned_axes]
         else:
-            for ax, pos in zip(axes, fixed_positions):
+            for ax, pos in zip(pinned_axes, fixed_positions):
                 ax.set_position(pos)
             positions = fixed_positions
         buf = io.BytesIO()
@@ -848,8 +868,12 @@ def render_axial_before_after_svg_flicker(
         plt.close(fig)
         return buf.getvalue().decode(), positions
 
-    before_doc, positions = _render(before, draw_colorbar=True, transparent=False, fixed_positions=None)
-    after_doc, _ = _render(after, draw_colorbar=False, transparent=True, fixed_positions=positions)
+    before_doc, positions = _render(
+        before, state_label="Raw (unfiltered)", state_color="#b3432b", draw_colorbar=True, transparent=False, fixed_positions=None
+    )
+    after_doc, _ = _render(
+        after, state_label="Spike-filtered", state_color="#2f5d50", draw_colorbar=False, transparent=True, fixed_positions=positions
+    )
     return compose_flicker_svg(before_doc, after_doc, out_path, flicker_id)
 
 
