@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+## 2.0.5
+
+### Reports
+
+- **Split the "MRSI Raw QC" tab into two tabs.** "MRSI Raw" now holds only
+  the per-metabolite raw slice montages, a quick-look image gallery with no
+  other info; a new "MRSI Raw QC" tab carries everything measured from the
+  raw maps instead (the QC summary table and the ventricle-visibility/Dice
+  section), both previously crammed into one combined tab.
+- **Spike Filter tab now uses a hover-to-flicker montage**, replacing the
+  static before/after triplanar image pairs: a single SVG per metabolite,
+  at the same axial, center-weighted slices as the MRSI Raw tab (biased
+  toward the slices with the most spike voxels so repaired voxels are
+  actually visible), matching the hover pattern already used by the
+  T1w-space and Template-space alignment tabs. Each state carries an
+  explicit "Raw (unfiltered)"/"Spike-filtered" title and a single shared
+  colorbar labeled as covering both states.
+
 ## 2.0.4
 
 ### Reports
