@@ -813,7 +813,19 @@ def render_axial_before_after_svg_flicker(
     n = len(indices)
 
     def _render(volume, *, state_label: str, state_color: str, draw_colorbar: bool, transparent: bool, fixed_positions: list | None):
-        fig, axes = plt.subplots(1, n, figsize=(1.8 * n, 2.2), constrained_layout=(fixed_positions is None))
+        # Extra height (2.2 -> 3.0) plus an explicit constrained_layout pad
+        # reserve real room for the state title above the per-panel "z="
+        # titles -- at the original height the title either landed above
+        # y=1 in figure coordinates and was clipped at the SVG canvas edge,
+        # or (once the canvas was tall enough on its own) sat close enough
+        # to the panel titles to visually collide with them in a browser's
+        # <object> rendering, even though a standalone raster of the same
+        # file looked fine (confirmed empirically both ways).
+        fig, axes = plt.subplots(
+            1, n, figsize=(1.8 * n, 3.0), constrained_layout=(fixed_positions is None),
+        )
+        if fixed_positions is None:
+            fig.set_constrained_layout_pads(h_pad=0.35)
         if n == 1:
             axes = [axes]
         image = None
@@ -823,13 +835,13 @@ def render_axial_before_after_svg_flicker(
             ax.set_title(f"z={index}", fontsize=8)
             ax.axis("off")
         # Which state is currently showing must be readable without relying
-        # on the viewer remembering which way the hover flips -- a badge in
-        # the corner of the first panel, present in both layers so it stays
-        # pinned at the same spot once merged, just with different text/color.
-        axes[0].text(
-            0.03, 0.97, state_label, transform=axes[0].transAxes, ha="left", va="top", fontsize=9, fontweight="bold",
-            color="white", bbox=dict(boxstyle="round,pad=0.25", facecolor=state_color, edgecolor="none", alpha=0.9),
-        )
+        # on the viewer remembering which way the hover flips -- a large,
+        # full-width title above the whole montage (not a small in-panel
+        # badge, which was easy to miss next to ten slice panels), present
+        # in both layers so it stays pinned at the same spot once merged,
+        # just with different text/color. fig.suptitle (not an axes title)
+        # so it reads as "the whole montage's state", not one panel's.
+        fig.suptitle(state_label, fontsize=14, fontweight="bold", color=state_color, y=0.95)
         cbar = None
         if colorbar_label is not None and image is not None:
             # Reserve identical colorbar space in both layers (constrained_layout
@@ -868,11 +880,23 @@ def render_axial_before_after_svg_flicker(
         plt.close(fig)
         return buf.getvalue().decode(), positions
 
+    # Unlike the T1w/MNI alignment flicker (a sparse metabolite overlay on a
+    # full-head background, genuinely meant to stay transparent so the
+    # background shows through the overlay's empty space), both layers here
+    # are full, opaque anatomical montages covering their entire panels.
+    # The foreground must therefore be rendered opaque too (transparent=False):
+    # with a transparent background, matplotlib's SVG has no opaque rect
+    # behind the image/text, so at rest -- both layers sitting at
+    # opacity:1 until the hover animation fades the foreground out -- the
+    # background layer's own titles and colorbar show straight through,
+    # producing overlapping, unreadable double text (confirmed empirically).
+    # Opaque white here means the CSS fade genuinely swaps one clean view
+    # for the other instead of blending two half-visible ones.
     before_doc, positions = _render(
         before, state_label="Raw (unfiltered)", state_color="#b3432b", draw_colorbar=True, transparent=False, fixed_positions=None
     )
     after_doc, _ = _render(
-        after, state_label="Spike-filtered", state_color="#2f5d50", draw_colorbar=False, transparent=True, fixed_positions=positions
+        after, state_label="Spike-filtered", state_color="#2f5d50", draw_colorbar=False, transparent=False, fixed_positions=positions
     )
     return compose_flicker_svg(before_doc, after_doc, out_path, flicker_id)
 
