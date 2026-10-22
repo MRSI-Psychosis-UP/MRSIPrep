@@ -195,7 +195,7 @@ class StepPvcTests(unittest.TestCase):
 
     def test_no_pvc_leaves_the_tab_out_entirely(self):
         """--no-pvc returns the preproc maps unchanged, so a PVC tab would show
-        images identical to the ones already in MRSI Raw QC."""
+        images identical to the ones already in MRSI Raw."""
         preproc = {"CrPCr": Path("/x/pre.nii.gz")}
         ctx = {"mrsi": SimpleNamespace(preproc_maps=preproc), "tissue": None}
         with patch("mrsiprep.workflows.participant._step_pvc", return_value=(preproc, None)), patch(
@@ -358,8 +358,9 @@ class StepReportsTests(unittest.TestCase):
         )
         qc_sections = step_reports.call_args[0][4]
         self.assertEqual(qc_sections["runtime"], "runtime_qc")
-        # Ventricle QC is appended to the MRSI Raw tab at this step, with the registration.
-        self.assertEqual(qc_sections["mrsi_raw"], ["mrsi_raw_qc", "ventricle_qc"])
+        # Ventricle QC lives in its own mrsi_raw_qc key, built at this step with the registration.
+        self.assertEqual(qc_sections["mrsi_raw"], ["mrsi_raw_qc"])
+        self.assertEqual(qc_sections["mrsi_raw_qc"], ["ventricle_qc"])
         ventricle_qc.assert_called_once()
 
         write_prov.assert_called_once()

@@ -19,24 +19,9 @@ from mrsiprep.reports.slices import (
     load_canonical_data,
     load_canonical_data_with_affine,
     render_multi_slice_triplanar_svg_flicker,
+    svg_object_html as _svg_object_html,
 )
 from mrsiprep.config.templates import template_head
-
-
-def _svg_object_html(svg_path: Path) -> str:
-    """Embed an SVG reportlet via <object>, not <img>: only <object> reliably
-    runs the CSS hover-to-flicker animation baked into the SVG itself (see
-    render_triplanar_svg_flicker/render_multi_slice_triplanar_svg_flicker) --
-    an <img> sandboxes the SVG and some browsers won't animate it. Matches
-    fMRIPrep's own reportlet markup (`class="svg-reportlet"`).
-    """
-    return (
-        f"<div class='reportlet'><object class='svg-reportlet' type='image/svg+xml' "
-        f"data='figures/{svg_path.name}'>"
-        f"Problem loading figure figures/{svg_path.name}. Try reloading the report."
-        f"</object></div>"
-        f"<small>Get figure file: <a href='figures/{svg_path.name}' target='_blank'>figures/{svg_path.name}</a></small>"
-    )
 
 
 def leakage_table_html(leakage_df: pd.DataFrame | None, space: str) -> str:

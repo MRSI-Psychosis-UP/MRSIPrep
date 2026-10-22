@@ -40,7 +40,7 @@ def _value_volume(atlas: np.ndarray, parcel_to_value: dict[int, float]) -> np.nd
 
 
 
-#: Axial slices per montage, matching the MRSI Raw QC tab so the two read the
+#: Axial slices per montage, matching the MRSI Raw tab so the two read the
 #: same way.
 N_SLICES = 10
 

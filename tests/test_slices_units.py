@@ -17,7 +17,10 @@ from mrsiprep.reports.slices import (
     _panel_title,
     _prefix_svg_ids,
     _voxel_index_to_mm,
+    axial_slices_center_weighted,
+    center_weighted_slice_indices,
     compose_flicker_svg,
+    render_axial_before_after_svg_flicker,
     render_multi_slice_triplanar_png,
     render_multi_slice_triplanar_svg_flicker,
     render_triplanar_svg_flicker,
@@ -466,6 +469,114 @@ class RenderMultiSliceTriplanarSvgFlickerTests(unittest.TestCase):
         self.assertEqual(cbar_ax.get_ylabel(), "Y")
         tick_texts = [label.get_text() for label in cbar_ax.get_yticklabels()]
         self.assertTrue(any(text.strip() for text in tick_texts), f"no non-empty tick labels found: {tick_texts!r}")
+
+
+class CenterWeightedSliceIndicesTests(unittest.TestCase):
+    def test_endpoints_are_included(self):
+        indices = center_weighted_slice_indices(25, 10)
+        self.assertEqual(indices[0], 0)
+        self.assertEqual(indices[-1], 24)
+
+    def test_spacing_is_denser_near_the_center(self):
+        indices = center_weighted_slice_indices(44, 10)
+        gaps = [int(indices[i + 1] - indices[i]) for i in range(len(indices) - 1)]
+        mid = len(gaps) // 2
+        self.assertLess(min(gaps[mid - 1 : mid + 2]), gaps[0])
+        self.assertLess(min(gaps[mid - 1 : mid + 2]), gaps[-1])
+
+    def test_handles_trivial_sizes(self):
+        self.assertEqual(list(center_weighted_slice_indices(1, 10)), [0])
+
+
+class AxialSlicesCenterWeightedTests(unittest.TestCase):
+    def test_returns_up_to_n_slices_spanning_the_axis(self):
+        data = np.ones((10, 10, 20), dtype=np.float32)
+        slices = axial_slices_center_weighted(data, n_slices=10)
+        indices = [index for index, _ in slices]
+        self.assertLessEqual(len(indices), 10)
+        self.assertEqual(indices[0], 0)
+        self.assertEqual(indices[-1], 19)
+
+    def test_skips_entirely_empty_slices(self):
+        data = np.zeros((10, 10, 20), dtype=np.float32)
+        data[:, :, 5:15] = 1.0
+        slices = axial_slices_center_weighted(data, n_slices=10)
+        indices = [index for index, _ in slices]
+        self.assertTrue(all(5 <= index < 15 for index in indices))
+
+    def test_falls_back_to_center_slice_when_all_empty(self):
+        data = np.zeros((10, 10, 20), dtype=np.float32)
+        slices = axial_slices_center_weighted(data, n_slices=10)
+        self.assertEqual(len(slices), 1)
+
+    def test_reference_volume_decides_which_slices_are_skipped(self):
+        """Passing a separate reference (e.g. the filtered map) rather than
+        volume_data itself must decide which slices to keep, so a slice
+        where only the raw map happens to be nonzero (an outlier spike) but
+        the reference is empty is still skipped."""
+        data = np.zeros((6, 6, 10), dtype=np.float32)
+        data[0, 0, 0] = 999.0  # a spike in an otherwise-empty slice
+        reference = np.zeros((6, 6, 10), dtype=np.float32)
+        reference[:, :, 4:7] = 1.0
+        slices = axial_slices_center_weighted(data, n_slices=10, reference=reference)
+        indices = [index for index, _ in slices]
+        self.assertTrue(all(4 <= index < 7 for index in indices))
+
+
+class RenderAxialBeforeAfterSvgFlickerTests(unittest.TestCase):
+    def setUp(self):
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmpdir.cleanup)
+        self.out = Path(self._tmpdir.name) / "before_after.svg"
+
+    def test_writes_a_well_formed_composed_svg(self):
+        rng = np.random.default_rng(0)
+        before = rng.uniform(0, 5, size=(8, 8, 10))
+        after = before.copy()
+        after[2:4, 2:4, 2:4] = 0.0
+
+        render_axial_before_after_svg_flicker(before, after, self.out, flicker_id="sf1", colorbar_label="CrPCr")
+
+        self.assertTrue(self.out.exists())
+        ET.parse(self.out)  # must be well-formed
+
+    def test_slice_indices_are_chosen_from_after_not_before(self):
+        """An extreme raw-only spike in `before` must not make an otherwise
+        empty slice look nonempty -- slice selection should anchor to
+        `after`, matching the MRSI Raw tab's own rationale for using the
+        filtered map."""
+        before = np.zeros((6, 6, 10), dtype=np.float32)
+        before[0, 0, 0] = 999.0
+        after = np.zeros((6, 6, 10), dtype=np.float32)
+        after[:, :, 4:7] = 1.0
+
+        captured = {}
+        import matplotlib.pyplot as plt
+
+        orig_subplots = plt.subplots
+
+        def _spy_subplots(*args, **kwargs):
+            fig, axes = orig_subplots(*args, **kwargs)
+            captured["axes"] = axes
+            return fig, axes
+
+        with unittest.mock.patch.object(plt, "subplots", side_effect=_spy_subplots):
+            render_axial_before_after_svg_flicker(before, after, self.out, flicker_id="sf2", n_slices=10)
+
+        titles = [ax.get_title() for ax in captured["axes"]]
+        indices = [int(title.split("=")[1]) for title in titles if title]
+        self.assertTrue(all(4 <= index < 7 for index in indices))
+
+    def test_colorbar_present_only_when_label_given(self):
+        rng = np.random.default_rng(0)
+        before = rng.uniform(0, 5, size=(6, 6, 8))
+        after = before.copy()
+
+        render_axial_before_after_svg_flicker(before, after, self.out, flicker_id="sf3", colorbar_label=None)
+
+        tree = ET.parse(self.out)
+        text_content = "".join(tree.getroot().itertext())
+        self.assertNotIn("CrPCr", text_content)
 
 
 class MaskContourOverlayTests(unittest.TestCase):

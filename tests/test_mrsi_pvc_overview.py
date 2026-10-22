@@ -1,7 +1,7 @@
 """MRSI PVC tab sections.
 
 The contract that matters: the montage must be drawn at the *same* slices as
-the MRSI Raw QC tab, since the whole point of the tab is flipping between the
+the MRSI Raw tab, since the whole point of the tab is flipping between the
 two, and a missing map must not take the tab down with it.
 """
 
@@ -50,13 +50,13 @@ class BuildMrsiPvcSectionsTests(unittest.TestCase):
         self.assertEqual(headings[1:], ["Metabolite: CrPCr", "Metabolite: NAANAAG"])
         self.assertEqual(render.call_count, 2)
 
-    def test_says_it_matches_the_raw_qc_slices(self):
+    def test_says_it_matches_the_raw_slices(self):
         maps = self._maps("CrPCr")
         with patch(f"{MODULE}.load_canonical_data", return_value=self.volume), patch(
             f"{MODULE}._render_slice_montage"
         ):
             sections = build_mrsi_pvc_sections(self.config, "01", "01", maps)
-        self.assertIn("same slices as the MRSI Raw QC tab", sections[0][1])
+        self.assertIn("same slices as the MRSI Raw tab", sections[0][1])
 
     def test_reference_map_drives_the_intensity_scale(self):
         """The pre-PVC map is passed as the scaling reference so a metabolite

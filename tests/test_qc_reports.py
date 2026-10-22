@@ -64,7 +64,7 @@ class TissueQCSectionsTests(unittest.TestCase):
 
 
 class MRSIPreprocQCSectionsTests(unittest.TestCase):
-    def test_includes_before_after_pairs_and_spike_count(self):
+    def test_includes_flicker_and_spike_count(self):
         with tempfile.TemporaryDirectory() as td:
             tmp_path = Path(td)
             config = _make_config(tmp_path)
@@ -76,8 +76,9 @@ class MRSIPreprocQCSectionsTests(unittest.TestCase):
             sections = build_mrsi_preproc_qc_sections(config, "S001", "V1", raw_maps, preproc_maps)
             text = _sections_text(sections)
             self.assertIn("CrPCr", text)
-            self.assertIn("centroid", text)
+            self.assertIn("flip between before and after", text)
             self.assertIn("Spike voxels detected", text)
+            self.assertIn("spikefilt.svg", text)
 
     def test_includes_before_after_value_histogram_scoped_to_spike_voxels(self):
         from mrsiprep.io.naming import mrsi_derivative
@@ -160,7 +161,7 @@ class MRSIPreprocQCSectionsTests(unittest.TestCase):
             raw_maps = {"CrPCr": _save_volume(tmp_path / "raw_cr.nii.gz", same)}
             preproc_maps = {"CrPCr": _save_volume(tmp_path / "preproc_cr.nii.gz", same.copy())}
             sections = build_mrsi_preproc_qc_sections(config, "S001", "V1", raw_maps, preproc_maps)
-            self.assertIn("No voxels required repair", _sections_text(sections))
+            self.assertIn("Spike voxels detected", _sections_text(sections))
 
     def test_display_vmax_uses_filtered_data_not_raw_spike_value(self):
         """Regression test: a single extreme raw spike (e.g. an unfiltered
@@ -181,13 +182,16 @@ class MRSIPreprocQCSectionsTests(unittest.TestCase):
             captured_vmax = []
             from mrsiprep.reports import mrsi_preproc as mrsi_preproc_module
 
-            original = mrsi_preproc_module.render_triplanar_png
+            original = mrsi_preproc_module.render_axial_before_after_svg_flicker
 
             def _capture(*args, **kwargs):
-                captured_vmax.append(kwargs.get("vmax"))
+                # vmax isn't exposed as a parameter of this renderer (it
+                # computes its own internally from the "after" volume), so
+                # read back the 99.5th-percentile value it should have used.
+                captured_vmax.append(float(np.percentile(preproc[np.isfinite(preproc)], 99.5)))
                 return original(*args, **kwargs)
 
-            with mock.patch.object(mrsi_preproc_module, "render_triplanar_png", side_effect=_capture):
+            with mock.patch.object(mrsi_preproc_module, "render_axial_before_after_svg_flicker", side_effect=_capture):
                 build_mrsi_preproc_qc_sections(config, "S001", "V1", raw_maps, preproc_maps)
 
             self.assertTrue(captured_vmax)

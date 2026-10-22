@@ -24,6 +24,23 @@ STYLE = (
 )
 
 
+def svg_object_html(svg_path: Path) -> str:
+    """Embed an SVG reportlet via <object>, not <img>: only <object> reliably
+    runs the CSS hover-to-flicker animation baked into the SVG itself (see
+    render_triplanar_svg_flicker/render_multi_slice_triplanar_svg_flicker/
+    render_axial_before_after_svg_flicker) -- an <img> sandboxes the SVG and
+    some browsers won't animate it. Matches fMRIPrep's own reportlet markup
+    (`class="svg-reportlet"`).
+    """
+    return (
+        f"<div class='reportlet'><object class='svg-reportlet' type='image/svg+xml' "
+        f"data='figures/{svg_path.name}'>"
+        f"Problem loading figure figures/{svg_path.name}. Try reloading the report."
+        f"</object></div>"
+        f"<small>Get figure file: <a href='figures/{svg_path.name}' target='_blank'>figures/{svg_path.name}</a></small>"
+    )
+
+
 def load_canonical_data(path) -> np.ndarray:
     """Load a NIfTI file reoriented to closest-canonical (RAS) axes.
 
@@ -59,6 +76,46 @@ def triplanar_slices(volume_data: np.ndarray, center_ijk: tuple[int, int, int] |
         "coronal": np.rot90(volume_data[:, j, :]),
         "axial": np.rot90(volume_data[:, :, k]),
     }
+
+
+def center_weighted_slice_indices(size: int, n_slices: int) -> np.ndarray:
+    """``n_slices`` indices spanning ``[0, size-1]``, denser near the
+    center and sparser toward the edges -- a cosine warp of an otherwise
+    even spacing, matching the fact that a 3D-MRSI slab's real, usable
+    signal concentrates around its center while edge slices are mostly
+    outside true acquisition coverage (SNR falls off sharply there), so
+    the interesting range deserves more samples than the empty extremes.
+    """
+    if size <= 1:
+        return np.zeros(1, dtype=int)
+    linear = np.linspace(-1.0, 1.0, n_slices)
+    # sign(x) * (1 - cos(pi*|x|/2)) rescales [-1, 1] so points cluster near
+    # 0 and spread out near +-1, while endpoints stay fixed at +-1.
+    warped = np.sign(linear) * (1.0 - np.cos(np.pi * np.abs(linear) / 2.0))
+    positions = (warped + 1.0) / 2.0 * (size - 1)
+    return np.unique(np.round(positions).astype(int))
+
+
+def axial_slices_center_weighted(volume_data: np.ndarray, n_slices: int, reference: np.ndarray | None = None):
+    """Up to ``n_slices`` axial (axis=2 on RAS-canonical data) 2D slices of
+    ``volume_data`` at center-weighted indices, skipping any slice that's
+    entirely empty in ``reference`` (``volume_data`` itself, if none given)
+    -- common at the very edges of a padded grid. Returns a list of
+    ``(index, rotated_2d_slice)`` pairs.
+    """
+    check = reference if reference is not None else volume_data
+    size = volume_data.shape[2]
+    candidate_indices = center_weighted_slice_indices(size, n_slices)
+    slices = []
+    for index in candidate_indices:
+        check_plane = np.take(check, index, axis=2)
+        if not np.any(check_plane > 0):
+            continue
+        slices.append((int(index), np.rot90(np.take(volume_data, index, axis=2))))
+    if slices:
+        return slices
+    fallback_index = int(candidate_indices[len(candidate_indices) // 2])
+    return [(fallback_index, np.rot90(np.take(volume_data, fallback_index, axis=2)))]
 
 
 OUTLINE_COLORS = (
@@ -675,6 +732,76 @@ def render_multi_slice_triplanar_svg_flicker(
     background_doc, positions = _render(show_overlay=False, transparent=False, fixed_positions=None)
     foreground_doc, _ = _render(show_overlay=True, transparent=True, fixed_positions=positions)
     return compose_flicker_svg(background_doc, foreground_doc, out_path, flicker_id)
+
+
+def render_axial_before_after_svg_flicker(
+    before: np.ndarray,
+    after: np.ndarray,
+    out_path: str | Path,
+    flicker_id: str,
+    cmap: str = "viridis",
+    colorbar_label: str | None = None,
+    n_slices: int = 10,
+) -> Path:
+    """Hover-to-flicker counterpart of the MRSI Raw tab's single-row axial
+    montage: the same center-weighted slice indices
+    (:func:`axial_slices_center_weighted`), but ``before`` (e.g. raw,
+    pre-spike-filter) and ``after`` (e.g. spike-filtered) are two full
+    layers merged via :func:`compose_flicker_svg`, rather than one static
+    background with a transparent overlay -- both layers show real
+    anatomy here, so neither is naturally "the background".
+
+    Slice indices are chosen from ``after``, not ``before``: an unfiltered
+    acquisition spike can make a slice look nonempty by ``np.any(... > 0)``
+    even where the real, post-filter signal is otherwise unremarkable, so
+    anchoring to the filtered map keeps slice choice robust to spikes.
+    Color scale is likewise shared from ``after``'s 99.5th percentile (see
+    :mod:`mrsiprep.reports.mrsi_raw_overview`'s own rationale), so a single
+    spike pixel in ``before`` can't wash out every panel.
+    """
+    import io
+
+    import matplotlib.pyplot as plt
+
+    out_path = Path(out_path)
+    before = np.squeeze(before)
+    after = np.squeeze(after)
+
+    indices = [index for index, _ in axial_slices_center_weighted(after, n_slices)]
+    finite_after = after[np.isfinite(after)]
+    vmax = float(np.percentile(finite_after, 99.5)) if finite_after.size else float(np.nanmax(after))
+    vmin = 0.0
+    vmax = max(vmax, vmin + 1e-6)
+
+    n = len(indices)
+
+    def _render(volume, *, transparent: bool, fixed_positions: list | None):
+        fig, axes = plt.subplots(1, n, figsize=(1.8 * n, 2.2), constrained_layout=(fixed_positions is None))
+        if n == 1:
+            axes = [axes]
+        image = None
+        for ax, index in zip(axes, indices):
+            plane = np.rot90(np.take(volume, index, axis=2))
+            image = ax.imshow(plane, cmap=cmap, vmin=vmin, vmax=vmax)
+            ax.set_title(f"z={index}", fontsize=8)
+            ax.axis("off")
+        if colorbar_label is not None and image is not None:
+            fig.colorbar(image, ax=axes, fraction=0.02, pad=0.02, label=colorbar_label)
+        if fixed_positions is None:
+            fig.canvas.draw()
+            positions = [ax.get_position().frozen() for ax in axes]
+        else:
+            for ax, pos in zip(axes, fixed_positions):
+                ax.set_position(pos)
+            positions = fixed_positions
+        buf = io.BytesIO()
+        fig.savefig(buf, format="svg", transparent=transparent)
+        plt.close(fig)
+        return buf.getvalue().decode(), positions
+
+    before_doc, positions = _render(before, transparent=False, fixed_positions=None)
+    after_doc, _ = _render(after, transparent=True, fixed_positions=positions)
+    return compose_flicker_svg(before_doc, after_doc, out_path, flicker_id)
 
 
 def html_page(title: str, sections: list[tuple[str, str]]) -> str:

@@ -1,5 +1,5 @@
-"""Ventricle visibility section (MRSI Raw QC tab, after the per-metabolite
-slice montages).
+"""Ventricle visibility section (MRSI Raw QC tab, after the QC summary
+table).
 
 Rendering only: detection and Dice scoring live in
 :mod:`mrsiprep.qc.ventricles`. This module picks one display slice shared by

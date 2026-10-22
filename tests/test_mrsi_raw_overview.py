@@ -7,7 +7,8 @@ import numpy as np
 
 from mrsiprep.config.settings import MRSIPrepConfig
 from mrsiprep.io.naming import coverage_report_dir
-from mrsiprep.reports.mrsi_raw_overview import _center_weighted_indices, _equally_spaced_slices, build_mrsi_raw_qc_sections
+from mrsiprep.reports.mrsi_raw_overview import _equally_spaced_slices, build_mrsi_raw_qc_sections
+from mrsiprep.reports.slices import center_weighted_slice_indices as _center_weighted_indices
 
 
 def _make_config(tmp_path: Path) -> MRSIPrepConfig:

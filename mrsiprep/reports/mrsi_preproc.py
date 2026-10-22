@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from mrsiprep.io.naming import coverage_report_dir, mrsi_derivative, qc_report_derivative
-from mrsiprep.reports.slices import load_canonical_data, render_triplanar_png, triplanar_slices
+from mrsiprep.reports.slices import load_canonical_data, render_axial_before_after_svg_flicker, svg_object_html
 
 # One fixed colormap for every metabolite's before/after pair, so panels are
 # visually comparable across metabolites rather than each getting its own hue.
@@ -99,49 +99,27 @@ def build_mrsi_preproc_qc_sections(
             spike_masks[met] = None
             spike_counts[met] = None
 
-    repaired_union = None
-    for met in metabolites:
-        repaired = ~np.isclose(raw_data[met], preproc_data[met])
-        repaired_union = repaired if repaired_union is None else (repaired_union | repaired)
-
-    if repaired_union is not None and repaired_union.any():
-        center_ijk = tuple(int(round(coordinate)) for coordinate in np.argwhere(repaired_union).mean(axis=0))
-        note = "<p>Slices centered on the centroid of all voxels repaired by spike/missing-voxel filtering, across all metabolites.</p>"
-    else:
-        center_ijk = None
-        note = "<p>No voxels required repair for any metabolite; showing volume-center slices.</p>"
-
     summary_rows = "".join(
         f"<tr><td>{met}</td><td>{spike_counts[met] if spike_counts[met] is not None else 'n/a'}</td></tr>" for met in metabolites
     )
     summary_table = f"<table><tr><th>Metabolite</th><th>Spike voxels detected</th></tr>{summary_rows}</table>"
-    sections: list[tuple[str, str]] = [("Filtering summary", note + summary_table)]
+    sections: list[tuple[str, str]] = [("Filtering summary", summary_table)]
     for met in metabolites:
-        before_slices = triplanar_slices(raw_data[met], center_ijk)
-        after_slices = triplanar_slices(preproc_data[met], center_ijk)
-        # Shared vmin/vmax across before/after so the same colormap encodes
-        # the same intensity range in both panels, making the comparison
-        # apples-to-apples rather than each panel auto-scaling separately.
-        # vmax is a high percentile of the AFTER (filtered) data, not the
-        # raw max: the whole point of this tab is to show spikes that were
-        # orders of magnitude above real tissue signal, so using the raw
-        # map's max as vmax would let a single to-be-removed outlier spike
-        # set the scale for both panels, crushing all the real brain signal
-        # (and the fact that it's now gone) into an unreadable dark band.
-        vmin = float(min(raw_data[met].min(), preproc_data[met].min()))
-        finite_preproc = preproc_data[met][np.isfinite(preproc_data[met])]
-        vmax = float(np.percentile(finite_preproc, 99.5)) if finite_preproc.size else float(preproc_data[met].max())
-        vmax = max(vmax, vmin + 1e-6)
-        before_png = figures_dir / f"{out.stem}_met-{met}_before.png"
-        after_png = figures_dir / f"{out.stem}_met-{met}_after.png"
-        render_triplanar_png(before_slices, before_png, cmap=_MAP_CMAP, colorbar_label=met, vmin=vmin, vmax=vmax)
-        render_triplanar_png(after_slices, after_png, cmap=_MAP_CMAP, colorbar_label=met, vmin=vmin, vmax=vmax)
+        # Same axial, center-weighted slices as the MRSI Raw tab (see
+        # mrsiprep.reports.mrsi_raw_overview), so a reader can compare a
+        # given metabolite's raw-tab panel directly against its before/after
+        # flicker here. Hover-to-flicker, not side-by-side: lets the eye
+        # catch exactly which voxels changed, the same pattern used for the
+        # T1w/MNI alignment tabs.
+        flicker_svg = figures_dir / f"{out.stem}_met-{met}_spikefilt.svg"
+        render_axial_before_after_svg_flicker(
+            raw_data[met], preproc_data[met], flicker_svg, flicker_id=flicker_svg.stem, cmap=_MAP_CMAP, colorbar_label=met,
+        )
         spike_note = f"<p>Spike voxels detected: {spike_counts[met]}</p>" if spike_counts[met] is not None else ""
         body = (
-            spike_note + "<div class='row'>"
-            f"<div><h3>Before</h3><img src='figures/{before_png.name}'></div>"
-            f"<div><h3>After</h3><img src='figures/{after_png.name}'></div>"
-            "</div>"
+            spike_note
+            + "<p>Hover over the figure to flip between before and after spike filtering.</p>"
+            + svg_object_html(flicker_svg)
         )
         whole_hist_png = figures_dir / f"{out.stem}_met-{met}_histogram-whole.png"
         _render_value_histogram(
