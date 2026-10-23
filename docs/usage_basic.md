@@ -99,6 +99,21 @@ FreeSurfer column (shown only with `--parcellation-mode chimera`,
 indicating whether a valid prior `recon-all` output already exists and will
 be reused), and the MRSI→T1/T1→MNI transform status.
 
+By default, preflight also force-reads every T1w/MRSI input file in full
+(not just checking that it exists) and skips a recording whose input is
+missing or corrupt/truncated. On a very large dataset over a slow
+filesystem, this full-read pass itself can be the slow part of
+`--validate-only`; `--skip-file-integrity-check` falls back to
+existence-only checks instead:
+
+```bash
+  --validate-only --skip-file-integrity-check
+```
+
+Only use this once you already trust the dataset's integrity (e.g. a
+re-validation of data already processed once), since it trades the
+corrupt-file safety net for speed.
+
 Rebuild just the QC tables, figures, and HTML report for already-processed
 recordings, without repeating any expensive step:
 
@@ -166,6 +181,24 @@ between runs to reclaim space: the next run will simply recompute
 everything from scratch (the permanent derivatives in `mrsiprep/` are
 unaffected either way, though already-cached recordings will then rerun
 since their node cache is gone).
+
+For example, to force SynthSeg tissue segmentation to recompute for an
+already-processed recording (e.g. after changing `--synthseg-mode`) without
+discarding every other cached stage:
+
+```bash
+docker run --rm -v /path/to/bids:/data:ro -v /path/to/out:/out \
+  mrsiup/mrsiprep:cpu /data /out participant \
+  --participant-label 01 --session-label 01 \
+  --metabolites CrPCr,NAANAAG --ref-met CrPCr \
+  --overwrite-seg
+```
+
+`--overwrite-filt`, `--overwrite-pve`, `--overwrite-t1corr`, and
+`--overwrite-chimera` work identically, each forcing recomputation of one
+specific stage (spike filtering, partial-volume correction, T1 saturation
+correction, and Chimera parcellation respectively) while leaving every
+other cached stage untouched; `--overwrite` forces every stage at once.
 
 ## Verbosity, logging, and provenance
 
@@ -284,6 +317,21 @@ If you have citation-backed values for a nucleus, contributing them to
 `mrsiprep/config/nuclei.json` is a welcome PR — see
 [Extending MRSIPrep](extending.md).
 
+**`--quality-metrics` controls which per-voxel quality maps are required
+inputs**, separately from the thresholds above: by default all of SNR,
+linewidth, and CRLB must be present or the recording fails preflight
+validation. If a quantification tool only exports CRLB (common for
+non-LCModel pipelines), narrow the requirement instead of having every
+recording rejected:
+
+```bash
+  --quality-metrics crlb
+```
+
+Maps that are present are always applied as voxel-inclusion thresholds
+regardless of this flag (via `--snr-min`/`--linewidth-max`/`--crlb-max`);
+it only controls whether a *missing* map is an error.
+
 ## Tissue backends
 
 ```bash
@@ -326,6 +374,44 @@ docker run --rm \
   --tissue-backend none
 ```
 
+## Spike filtering
+
+Raw quantified metabolite maps can contain spurious, high-amplitude voxel
+clusters (fit instability, motion, spectral artifacts) that are not genuine
+metabolic signal. By default MRSIPrep detects and repairs these (median
+filtering + biharmonic inpainting) before any other stage uses the map.
+Disable it entirely with `--no-filter`, e.g. when validating against data
+you already know is spike-free and want to skip the extra processing time:
+
+```bash
+  --no-filter
+```
+
+The repaired region is smoothed back into its surroundings with a
+Gaussian of width `--filter-fwhm-mm` (default: derived from the native
+MRSI voxel size, mean voxel dimension $\times\sqrt{2}$). Override it
+directly if the default over- or under-smooths a repaired cluster relative
+to your acquisition's native resolution:
+
+```bash
+  --filter-fwhm-mm 6.0
+```
+
+## CSF partial-volume threshold
+
+When `--registration-t1-target brain-csf` is used (adding CSF back into the
+otherwise skull-stripped T1w registration target, so CSF-contaminated MRSI
+signal near the ventricles doesn't register as if it fell entirely outside
+the brain), `--csf-pv-threshold` sets how confident the CAT12 CSF
+probability map must be before a voxel is added back:
+
+```bash
+  --registration-t1-target brain-csf --csf-pv-threshold 0.5
+```
+
+Lower it to include more borderline-CSF voxels in the registration target;
+raise it (default `0.95`) to keep the target closer to a strict brain mask.
+
 ## MRSI orientation correction
 
 Post-quantification MRSI maps occasionally come out of the vendor/quantification
@@ -356,34 +442,9 @@ MRSI-to-T1w registration that runs afterward already tolerates ordinary
 misalignment. Uses `--registration-backend` (ANTs `Rigid`, or FLIRT `dof=6`
 for `fsl`).
 
-## Command-Line Arguments
-
-```{argparse}
-:module: mrsiprep.cli.parser
-:func: build_parser
-:prog: mrsiprep
-```
-
-By default, when a subject/session has more than one candidate raw T1w
-acquisition, MRSIPrep picks one heuristically (preferring
-`acq-memprage`/`mprage`/`mp2rage` and `run-01`). `--bids-filter-file` lets you
-override that choice explicitly:
-
-```json
-{"t1w": {"acquisition": "memprage", "run": "01"}}
-```
-
-Only the `"t1w"` key is currently supported (any other top-level key is
-rejected with an error rather than silently ignored). Filter values use
-either MRSIPrep's short BIDS entity names (`acq`, `run`, `ses`, `sub`) or the
-long PyBIDS-style names shown above (`acquisition`, `run`, `session`,
-`subject`) interchangeably. A value of `null` requires the entity to be
-absent from the filename.
-
-See [MNI Normalization Usage](usage_normalization.md) for `--output-spaces`
-and `--output-mrsi-t1w`, and
-[Longitudinal (Subject-Template) Normalization](usage_longitudinal.md) for
-`--longitudinal`.
+See [Command-Line Arguments](cli_reference.md) for the full flag reference,
+including `--bids-filter-file` for disambiguating multiple candidate raw T1w
+acquisitions.
 
 ## Output layout
 
@@ -426,44 +487,6 @@ mrsiprep-import-gui
 The import helpers preserve the MRSI-Metabolic-Connectome derivative layout:
 `derivatives/mrsi-orig`, `derivatives/cat12`, and `derivatives/skullstrip`.
 
-## Limitations and scope
-
-MRSIPrep is a BIDS App for whole-brain quantified MRSI derivatives, not a
-general-purpose neuroimaging pipeline. In particular:
-
-- It has no fieldmap/BOLD/functional-MRI handling: those are out of scope
-  entirely, since the inputs are already-quantified MRSI metabolite maps
-  rather than raw k-space or functional time series.
-- Registration can use ANTs (default, rigid+affine+SyN, generally most
-  accurate) or FSL via `--registration-backend fsl` (FLIRT+FNIRT deformable
-  by default; pass `--no-fsl-deformable` for FLIRT-only, faster but less
-  accurate); there is no TemplateFlow catalog, and normalization targets are
-  limited to MNI152 (`MNI152NLin2009cAsym`) plus native T1w/MRSI space, see
-  [MNI Normalization Usage](usage_normalization.md).
-- `--longitudinal` builds one ANTs subject-template across sessions
-  (requires `--registration-backend ants`), see
-  [Longitudinal (Subject-Template) Normalization](usage_longitudinal.md); it
-  does not otherwise change per-session processing, and assumes reasonably
-  stable anatomy across a subject's sessions.
-- Chimera parcellation requires FreeSurfer and a valid `FS_LICENSE`; the
-  default `--parcellation-mode synthseg` does not.
-
-## Troubleshooting
-
-- Start with a full-detail run log at `<out>/mrsiprep/logs/mrsiprep_<timestamp>.log`,
-  and the per-recording logbook at `sub-*/ses-*/logs/sub-*_ses-*_desc-mrsiprep_log.txt`
-  for a single subject/session's history out of a larger batch (see
-  "Verbosity, logging, and provenance" above).
-- Re-run the same recording with `--verbose 2` (step-level detail) or
-  `--verbose 3` (raw ANTs/`recon-all`/`mri_synthseg` subprocess output) to
-  see exactly where a failure occurs.
-- `--validate-only` checks all selected subject/session inputs before any
-  expensive processing starts, run it first when troubleshooting a batch.
-- `--check-external-libs` verifies required external binaries
-  (ANTs/FSL/FreeSurfer/PETPVC/Chimera, as applicable to the selected mode)
-  are present and exits.
-- By default a batch run logs a recording's failure and continues with the
-  rest; pass `--stop-on-first-crash` to abort immediately instead, which is
-  often easier when debugging a single problematic recording.
-- Report issues at
-  [github.com/MRSI-Psychosis-UP/MRSIPrep/issues](https://github.com/MRSI-Psychosis-UP/MRSIPrep/issues).
+See [Limitations and scope](limitations.md) for what MRSIPrep does not
+cover, and [Troubleshooting](troubleshooting.md) for diagnosing a failed or
+unexpected run.
