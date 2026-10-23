@@ -205,6 +205,9 @@ usage_normalization
 usage_longitudinal
 usage_parcellation
 usage_t1_correction
+cli_reference
+limitations
+troubleshooting
 ```
 
 ```{toctree}
