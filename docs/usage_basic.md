@@ -1,38 +1,42 @@
 # Basic Usage
 
 MRSIPrep runs as a Docker container; there is no supported host installation
-of the pipeline itself. Either invoke `docker run` directly, or install the
-[`mrsiprep-docker`](https://pypi.org/project/mrsiprep-docker/) wrapper from
-PyPI (`pip install mrsiprep-docker`), which builds the equivalent `docker
-run` command for you. See [Installation](installation.md) for both options.
-The examples below use plain `docker run`; drop the bind-mount flags and
-image name for the equivalent `mrsiprep-docker` command.
+of the pipeline itself. Install the
+[`mrsiprep-docker`](https://pypi.org/project/mrsiprep-docker/) wrapper
+(`pip install mrsiprep-docker`), which builds and runs the equivalent
+`docker run` command for you. See [Installation](installation.md) for
+details.
+
+A minimal run looks like this:
 
 ```bash
-docker run --rm \
-  -v /path/to/bids:/data:ro \
-  -v /path/to/derivatives:/out \
-  mrsiup/mrsiprep:cpu \
-  /data /out participant \
-  --participant-label S001 \
-  --session-label V1 \
+mrsiprep-docker /path/to/bids /path/to/derivatives participant \
+  --participant-label S001 --session-label V1 \
   --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \
-  --ref-met CrPCr \
-  --synthseg-mode fast \
-  --nthreads 8
+  --ref-met CrPCr
 ```
 
-That default run registers the imported MRSI signal maps to a
-SynthSeg-extracted T1w image, resamples into MNI space, and parcellates with
-SynthSeg cortical/subcortical labels. Its parcel QC table reports the
-percentage of each anatomical T1w parcel covered by MRSI, parcelwise CRLB,
-and valid-voxel fractions. With `--parcellation-mode synthseg` (the default)
-it runs no Chimera and no `recon-all`, so no FreeSurfer licence is needed.
+This registers the imported MRSI signal maps to a SynthSeg-extracted T1w
+image, resamples into MNI space, and parcellates with SynthSeg
+cortical/subcortical labels -- the default `--parcellation-mode synthseg`
+needs no Chimera and no `recon-all`/FreeSurfer licence.
 
-SynthSeg-based brain extraction always retains the whole brain (GM, WM,
-ventricles, and inner/outer CSF, including extra-ventricular CSF label 24).
-Only SynthSeg background (label 0) is excluded from the brain mask, so FAST
-sees the complete CSF compartment when estimating tissue probabilities.
+## Command builder
+
+Prefer a form over memorizing flags? `mrsiprep-build-command` launches a
+local browser-based form (built with Streamlit) that assembles a runnable
+`mrsiprep` command for you to copy and run:
+
+```bash
+pip install "mrsiprep[command-builder]"
+mrsiprep-build-command
+```
+
+It's generated directly from the CLI's own argument parser, so its fields
+always match the real flag set. Options are grouped the same way as the
+[Command-Line Arguments](cli_reference.md) reference, the generated command
+updates live as you fill in the form, and selecting `--registration-backend`
+only shows the ANTs- or FSL-specific options for that backend.
 
 ## Try it now: demo on the public SynthMRSI-Project dataset
 
@@ -46,24 +50,16 @@ curl -L -o SynthMRSI-Project.zip \
   "https://zenodo.org/records/22014466/files/SynthMRSI-Project.zip"
 unzip SynthMRSI-Project.zip -d SynthMRSI-Project
 
-# 2. Pull the CPU image
-docker pull mrsiup/mrsiprep:cpu
-
-# 3. Run a single subject with the default settings (a couple of minutes on a
+# 2. Run a single subject with the default settings (a couple of minutes on a
 #    modern multi-core machine)
-docker run --rm \
-  -v "$(pwd)/SynthMRSI-Project:/data:ro" \
-  -v "$(pwd)/SynthMRSI-Project/derivatives:/out" \
-  mrsiup/mrsiprep:cpu \
-  /data /out participant \
-  --participant-label 01 \
-  --session-label 01 \
+mrsiprep-docker SynthMRSI-Project SynthMRSI-Project/derivatives participant \
+  --participant-label 01 --session-label 01 \
   --t1 acq-mprage_T1w \
   --metabolites NAANAAG,GPCPCh,CrPCr,GluGln,Ins \
   --ref-met CrPCr \
   --nthreads 8 --nproc 1 --verbose 2
 
-# 4. Open the QC report to confirm it worked
+# 3. Open the QC report to confirm it worked
 xdg-open SynthMRSI-Project/derivatives/mrsiprep/sub-01/ses-01/reports/sub-01_ses-01_desc-report.html
 ```
 
@@ -75,139 +71,10 @@ See [PUBLIC_DATASET.md](https://github.com/MRSI-Psychosis-UP/MRSIPrep/blob/main/
 in the repository for the dataset's full description, ground-truth files,
 and expected output layout.
 
-Check all selected subject/session inputs without running preprocessing:
-
-```bash
-docker run --rm \
-  -v /path/to/bids:/data:ro \
-  -v /path/to/derivatives:/out \
-  mrsiup/mrsiprep:cpu \
-  /data /out participant \
-  --participants participants.tsv \
-  --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \
-  --ref-met CrPCr \
-  --validate-only
-```
-
-`--validate-only` reports every invalid recording before any expensive
-segmentation, registration, parcellation, or PVC step starts. Use it before
-starting an expensive batch run.
-
-The preflight table shows, per recording: T1w reference, MRSI file count,
-CRLB/SNR/FWHM quality map availability, brainmask, tissue files, a
-FreeSurfer column (shown only with `--parcellation-mode chimera`,
-indicating whether a valid prior `recon-all` output already exists and will
-be reused), and the MRSI→T1/T1→MNI transform status.
-
-By default, preflight also force-reads every T1w/MRSI input file in full
-(not just checking that it exists) and skips a recording whose input is
-missing or corrupt/truncated. On a very large dataset over a slow
-filesystem, this full-read pass itself can be the slow part of
-`--validate-only`; `--skip-file-integrity-check` falls back to
-existence-only checks instead:
-
-```bash
-  --validate-only --skip-file-integrity-check
-```
-
-Only use this once you already trust the dataset's integrity (e.g. a
-re-validation of data already processed once), since it trades the
-corrupt-file safety net for speed.
-
-Rebuild just the QC tables, figures, and HTML report for already-processed
-recordings, without repeating any expensive step:
-
-```bash
-docker run --rm \
-  -v /path/to/bids:/data:ro \
-  -v /path/to/derivatives:/out \
-  mrsiup/mrsiprep:cpu \
-  /data /out participant \
-  --participant-label S001 \
-  --session-label V1 \
-  --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \
-  --ref-met CrPCr \
-  --reports-only
-```
-
-`--reports-only` reuses tissue segmentation, registration, parcellation, and
-every other already-completed step's output derivatives as-is, and only
-regenerates QC tables, figures, and `desc-report.html`. Useful after
-updating MRSIPrep to pick up report-only changes (a new QC panel, a fixed
-figure) without rerunning SynthSeg/ANTs/Chimera. It fails a recording with a
-clear error, rather than silently recomputing, if a required upstream
-derivative is missing -- so it is not a substitute for a normal run on data
-that hasn't been processed yet.
-
-A full example report, rendered end-to-end on the public SynthMRSI-Project
-subject above (`--parcellation-mode chimera`, `--write-connectivity`), is
-available to preview without running anything:
-[`docs/examples/sub-01_ses-01/sub-01_ses-01_desc-report.html`](https://github.com/MRSI-Psychosis-UP/MRSIPrep/blob/main/docs/examples/sub-01_ses-01/sub-01_ses-01_desc-report.html)
-(download the whole
-[`docs/examples/sub-01_ses-01/`](https://github.com/MRSI-Psychosis-UP/MRSIPrep/tree/main/docs/examples/sub-01_ses-01)
-folder to view it rendered in a browser, since GitHub shows raw `.html`
-as source rather than executing it).
-
-## The Nipype workflow engine
-
-Every processing run is orchestrated by a per-recording
-[Nipype](https://nipype.readthedocs.io/) workflow
-(`mrsiprep/workflows/nipype_engine/`) rather than a hand-rolled script. This
-is transparent to normal use (the CLI, its arguments, and the console output
-are unchanged) but it has two practical consequences:
-
-- **Rerunning a completed subject/session skips already-finished steps.**
-  Each of the 16 pipeline steps (input preparation, tissue segmentation,
-  anatomical prep, MRSI preprocessing, registration, tissue probability maps,
-  tissue QC, PVC, resampling, leakage QC, SynthSeg parcellation/QC,
-  Chimera/atlas parcellation, regional extraction, connectivity, metprofiles
-  export, reports) is a cached Nipype node, keyed
-  on the step name plus the full run configuration. If nothing about the
-  configuration or the subject/session changed since a prior successful run,
-  the step is skipped rather than recomputed: a rerun of an already-fully
-  processed recording typically finishes in a few seconds instead of tens of
-  minutes. Pass `--overwrite` (or one of the step-specific `--overwrite-*`
-  flags) to force recomputation regardless of the cache.
-- **`--nproc` fans out across recordings**, each running its own independent
-  Nipype workflow; within one recording the steps run as a linear chain
-  (they are an inherent data-dependency chain, not independently
-  parallelizable).
-
-The engine's own working files (node caches, intermediate SynthSeg/FAST
-outputs, scratch resampled maps used only to build QC figures) live under
-`--work-dir` (default `<output_dir>/work`), separate from the permanent
-derivatives in `<output_dir>/mrsiprep/`. It is safe to delete `--work-dir`
-between runs to reclaim space: the next run will simply recompute
-everything from scratch (the permanent derivatives in `mrsiprep/` are
-unaffected either way, though already-cached recordings will then rerun
-since their node cache is gone).
-
-For example, to force SynthSeg tissue segmentation to recompute for an
-already-processed recording (e.g. after changing `--synthseg-mode`) without
-discarding every other cached stage:
-
-```bash
-docker run --rm -v /path/to/bids:/data:ro -v /path/to/out:/out \
-  mrsiup/mrsiprep:cpu /data /out participant \
-  --participant-label 01 --session-label 01 \
-  --metabolites CrPCr,NAANAAG --ref-met CrPCr \
-  --overwrite-seg
-```
-
-`--overwrite-filt`, `--overwrite-pve`, `--overwrite-t1corr`, and
-`--overwrite-chimera` work identically, each forcing recomputation of one
-specific stage (spike filtering, partial-volume correction, T1 saturation
-correction, and Chimera parcellation respectively) while leaving every
-other cached stage untouched; `--overwrite` forces every stage at once.
-
 ## Verbosity, logging, and provenance
 
 ```bash
-docker run --rm \
-  -v /path/to/bids:/data:ro \
-  -v /path/to/derivatives:/out \
-  mrsiup/mrsiprep:cpu \
-  /data /out participant \
+mrsiprep-docker /path/to/bids /path/to/derivatives participant \
   --participants participants.tsv \
   --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \
   --ref-met CrPCr \
@@ -280,68 +147,91 @@ tissue backend additionally requires FSL `fast`, and PVC requires PETPVC;
 `FS_LICENSE`. `--check-external-libs` reports exactly which binaries the
 current configuration needs and whether they were found.
 
-## Nucleus
+## Caching and reruns
 
-MRSIPrep defaults to proton (`1H`) MRSI. Declare a different nucleus either on
-the command line:
+Every processing run is orchestrated by a per-recording
+[Nipype](https://nipype.readthedocs.io/) workflow
+(`mrsiprep/workflows/nipype_engine/`) rather than a hand-rolled script. This
+is transparent to normal use (the CLI, its arguments, and the console output
+are unchanged) but it has two practical consequences:
+
+- **Rerunning a completed subject/session skips already-finished steps.**
+  Each of the 16 pipeline steps (input preparation, tissue segmentation,
+  anatomical prep, MRSI preprocessing, registration, tissue probability maps,
+  tissue QC, PVC, resampling, leakage QC, SynthSeg parcellation/QC,
+  Chimera/atlas parcellation, regional extraction, connectivity, metprofiles
+  export, reports) is a cached Nipype node, keyed
+  on the step name plus the full run configuration. If nothing about the
+  configuration or the subject/session changed since a prior successful run,
+  the step is skipped rather than recomputed: a rerun of an already-fully
+  processed recording typically finishes in a few seconds instead of tens of
+  minutes.
+- **`--nproc` fans out across recordings**, each running its own independent
+  Nipype workflow; within one recording the steps run as a linear chain
+  (they are an inherent data-dependency chain, not independently
+  parallelizable).
+
+The engine's own working files (node caches, intermediate SynthSeg/FAST
+outputs, scratch resampled maps used only to build QC figures) live under
+`--work-dir` (default `<output_dir>/work`), separate from the permanent
+derivatives in `<output_dir>/mrsiprep/`. It is safe to delete `--work-dir`
+between runs to reclaim space: the next run will simply recompute
+everything from scratch (the permanent derivatives in `mrsiprep/` are
+unaffected either way, though already-cached recordings will then rerun
+since their node cache is gone).
+
+**Force recomputation.** Pass `--overwrite` to ignore the cache entirely, or
+one of the step-specific flags to force just one stage while leaving every
+other cached stage untouched: `--overwrite-filt` (spike filtering),
+`--overwrite-seg` (tissue segmentation), `--overwrite-pve` (partial-volume
+correction), `--overwrite-t1corr` (T1 saturation correction),
+`--overwrite-t1-reg`/`--overwrite-template-reg` (registration transforms),
+`--overwrite-transform` (resampling through existing transforms), or
+`--overwrite-chimera` (Chimera parcellation). For example, to force SynthSeg
+to recompute after changing `--synthseg-mode`, without discarding every
+other cached stage:
 
 ```bash
-  --nucleus 31P
+mrsiprep-docker /path/to/bids /path/to/out participant \
+  --participant-label 01 --session-label 01 \
+  --metabolites CrPCr,NAANAAG --ref-met CrPCr \
+  --overwrite-seg
 ```
 
-or, preferably, once per dataset in `mrsinmrs.json` (the `Nucleus` field is part
-of the MRSinMRS reporting standard), where it also shows up in every report:
-
-```json
-{"CommonMetadata": {"Nucleus": "31P"}}
-```
-
-The CLI flag wins when both are present. Common aliases (`proton`, `phosphorus`,
-`deuterium`, `P31`, …) are accepted and normalized.
-
-The nucleus selects the voxel-quality thresholds and the metabolite alias
-spellings used to locate input maps, and is recorded in the QC report and
-`provenance.json`.
-
-**Non-proton nuclei need explicit thresholds.** `31P` and `2H` ship with no
-curated `--snr-min`/`--linewidth-max`/`--crlb-max` defaults, because their SNR
-regimes differ substantially from proton's and a guessed value would look
-authoritative while being wrong. MRSIPrep therefore refuses to start without
-them:
+**Check inputs before a batch run.** `--validate-only` reports every
+invalid recording before any expensive segmentation, registration,
+parcellation, or PVC step starts, via a preflight table (T1w reference,
+MRSI file count, quality-map availability, transform status, and so on):
 
 ```bash
-  --nucleus 31P --snr-min 2 --linewidth-max 0.3 --crlb-max 50
+mrsiprep-docker /path/to/bids /path/to/derivatives participant \
+  --participants participants.tsv \
+  --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \
+  --ref-met CrPCr \
+  --validate-only
 ```
 
-If you have citation-backed values for a nucleus, contributing them to
-`mrsiprep/config/nuclei.json` is a welcome PR — see
-[Extending MRSIPrep](extending.md).
-
-**`--quality-metrics` controls which per-voxel quality maps are required
-inputs**, separately from the thresholds above: by default all of SNR,
-linewidth, and CRLB must be present or the recording fails preflight
-validation. If a quantification tool only exports CRLB (common for
-non-LCModel pipelines), narrow the requirement instead of having every
-recording rejected:
+**Rebuild just the report.** `--reports-only` reuses every already-completed
+step's output derivatives as-is and only regenerates QC tables, figures, and
+`desc-report.html` -- useful after updating MRSIPrep to pick up a
+report-only change without rerunning SynthSeg/ANTs/Chimera. It fails a
+recording with a clear error (rather than silently recomputing) if a
+required upstream derivative is missing, so it is not a substitute for a
+normal run on unprocessed data:
 
 ```bash
-  --quality-metrics crlb
+mrsiprep-docker /path/to/bids /path/to/derivatives participant \
+  --participant-label S001 --session-label V1 \
+  --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \
+  --ref-met CrPCr \
+  --reports-only
 ```
-
-Maps that are present are always applied as voxel-inclusion thresholds
-regardless of this flag (via `--snr-min`/`--linewidth-max`/`--crlb-max`);
-it only controls whether a *missing* map is an error.
 
 ## Tissue backends
 
 ```bash
-docker run --rm \
-  -v /path/to/bids:/data:ro \
-  -v /path/to/derivatives:/out \
-  mrsiup/mrsiprep:cpu \
-  /data /out participant \
-  --participant-label S001 \
-  --session-label V1 \
+mrsiprep-docker /path/to/bids /path/to/derivatives participant \
+  --participant-label S001 --session-label V1 \
   --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \
   --ref-met CrPCr \
   --parcellation-mode chimera \
@@ -366,13 +256,8 @@ Disable tissue segmentation and PVC entirely with `--tissue-backend none`
 (equivalent to also passing `--no-pvc`):
 
 ```bash
-docker run --rm \
-  -v /path/to/bids:/data:ro \
-  -v /path/to/derivatives:/out \
-  mrsiup/mrsiprep:cpu \
-  /data /out participant \
-  --participant-label S001 \
-  --session-label V1 \
+mrsiprep-docker /path/to/bids /path/to/derivatives participant \
+  --participant-label S001 --session-label V1 \
   --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \
   --ref-met CrPCr \
   --parcellation-mode chimera \
@@ -430,13 +315,8 @@ metabolite/CRLB/SNR/FWHM map, in place, at native MRSI resolution (shape and
 voxel spacing are unchanged; only position/orientation is corrected).
 
 ```bash
-docker run --rm \
-  -v /path/to/bids:/data:ro \
-  -v /path/to/derivatives:/out \
-  mrsiup/mrsiprep:cpu \
-  /data /out participant \
-  --participant-label S001 \
-  --session-label V1 \
+mrsiprep-docker /path/to/bids /path/to/derivatives participant \
+  --participant-label S001 --session-label V1 \
   --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \
   --ref-met CrPCr \
   --correct-mrsi-orientation
@@ -491,26 +371,6 @@ mrsiprep-import-gui
 
 The import helpers preserve the MRSI-Metabolic-Connectome derivative layout:
 `derivatives/mrsi-orig`, `derivatives/cat12`, and `derivatives/skullstrip`.
-
-## Command builder
-
-For users who prefer a form over memorizing flags, `mrsiprep-build-command`
-launches a local browser-based form (built with Streamlit) that assembles a
-runnable `mrsiprep` command. It is generated directly from the CLI's own
-argument parser, so its fields always match the real flag set — it never
-runs mrsiprep itself, only builds and displays the command for you to copy
-and run.
-
-```bash
-pip install "mrsiprep[command-builder]"
-mrsiprep-build-command
-```
-
-The generated command updates live at the top of the page as you fill in
-the form below it. Options are grouped the same way as the
-[Command-Line Arguments](cli_reference.md) reference, and selecting
-`--registration-backend` only shows the ANTs- or FSL-specific options for
-that backend, instead of all of them at once.
 
 See [Limitations and scope](limitations.md) for what MRSIPrep does not
 cover, and [Troubleshooting](troubleshooting.md) for diagnosing a failed or

@@ -204,7 +204,6 @@ usage_basic
 usage_normalization
 usage_longitudinal
 usage_parcellation
-usage_t1_correction
 cli_reference
 limitations
 troubleshooting
@@ -219,6 +218,15 @@ benchmarks
 benchmark_smoothing
 vba_benchmark
 cross_sequence_benchmark
+```
+
+```{toctree}
+:maxdepth: 2
+:caption: 'Future Development:'
+:hidden:
+
+future_development
+usage_t1_correction
 ```
 
 ```{toctree}
