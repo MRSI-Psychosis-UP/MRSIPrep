@@ -81,51 +81,38 @@ def _widget_for(action: argparse.Action):
     return raw or None
 
 
-def main() -> None:
-    st.set_page_config(page_title="MRSIPrep Command Builder", layout="wide")
-    st.title("MRSIPrep Command Builder")
-    st.caption(
-        "Builds a runnable `mrsiprep` command from the actual CLI definition. "
-        "This page does not execute anything -- copy the generated command and run it yourself."
-    )
+# Registration-backend-specific flags: only shown once a backend is picked,
+# and only the flags relevant to that specific backend (keyed by the dest
+# this app renders its own --registration-backend selectbox under).
+FSL_ONLY_FLAGS = {
+    "--fsl-mrsi-to-t1-dof",
+    "--fsl-mrsi-to-t1-init",
+    "--fsl-t1-to-template-dof",
+    "--fsl-cost",
+    "--fsl-deformable",
+    "--fsl-fnirt-warpres",
+    "--fsl-fnirt-lambda",
+}
+ANTS_ONLY_FLAGS = {
+    "--ants-mrsi-to-t1-transform",
+    "--ants-t1-to-template-transform",
+}
+BACKEND_SPECIFIC_FLAGS = FSL_ONLY_FLAGS | ANTS_ONLY_FLAGS
 
-    parser = build_parser()
-    positionals = [a for a in parser._actions if not a.option_strings and a.dest != "help"]
-    optionals = [
-        a for a in parser._actions
-        if a.option_strings
-        and _dest_label(a) not in EXCLUDED_FLAGS
-        and _dest_label(a) not in NEGATIVE_FLAG_PAIRS
+
+def _build_command(positional_values: dict, optionals: list[argparse.Action], values: dict) -> str:
+    parts = [
+        "mrsiprep",
+        shlex.quote(str(positional_values.get("bids_dir") or "<bids_dir>")),
+        shlex.quote(str(positional_values.get("output_dir") or "<output_dir>")),
+        "participant",
     ]
-
-    st.header("Required arguments")
-    col1, col2 = st.columns(2)
-    with col1:
-        bids_dir = st.text_input("bids_dir", help=POSITIONAL_HELP.get("bids_dir", ""))
-    with col2:
-        output_dir = st.text_input("output_dir", help=POSITIONAL_HELP.get("output_dir", ""))
-
-    positional_values = {"bids_dir": bids_dir, "output_dir": output_dir}
-    for action in positionals:
-        if action.dest in positional_values:
-            continue
-        positional_values[action.dest] = _widget_for(action)
-
-    st.header("Options")
-    st.caption("Grouped as they appear in `mrsiprep --help`; only changed values are included in the command.")
-
-    values: dict[str, object] = {}
-    for action in optionals:
-        with st.expander(_dest_label(action), expanded=False):
-            values[_dest_label(action)] = _widget_for(action)
-
-    st.header("Generated command")
-    parts = ["mrsiprep", shlex.quote(str(positional_values.get("bids_dir") or "<bids_dir>")),
-              shlex.quote(str(positional_values.get("output_dir") or "<output_dir>")), "participant"]
 
     for action in optionals:
         flag = _dest_label(action)
-        value = values.get(flag)
+        if flag not in values:
+            continue
+        value = values[flag]
         if value in (None, "", False, []):
             continue
         if value is True:
@@ -143,8 +130,87 @@ def main() -> None:
             parts.append(flag)
             parts.append(shlex.quote(str(value)))
 
-    command = " ".join(parts)
-    st.code(command, language="bash")
+    return " ".join(parts)
+
+
+def main() -> None:
+    st.set_page_config(page_title="MRSIPrep Command Builder", layout="wide")
+    st.title("MRSIPrep Command Builder")
+    st.caption(
+        "Builds a runnable `mrsiprep` command from the actual CLI definition. "
+        "This page does not execute anything -- copy the generated command and run it yourself."
+    )
+
+    parser = build_parser()
+    positionals = [a for a in parser._actions if not a.option_strings and a.dest != "help"]
+    optionals = [
+        a for a in parser._actions
+        if a.option_strings
+        and _dest_label(a) not in EXCLUDED_FLAGS
+        and _dest_label(a) not in NEGATIVE_FLAG_PAIRS
+    ]
+
+    st.header("Generated command")
+    st.caption("Updates live as you fill in the form below. Copy and run it yourself -- this page never executes it.")
+    command_slot = st.empty()
+
+    st.header("Required arguments")
+    col1, col2 = st.columns(2)
+    with col1:
+        bids_dir = st.text_input("bids_dir", help=POSITIONAL_HELP.get("bids_dir", ""))
+    with col2:
+        output_dir = st.text_input("output_dir", help=POSITIONAL_HELP.get("output_dir", ""))
+    if output_dir:
+        st.caption(f"This will create a folder `{output_dir.rstrip('/')}/mrsiprep`.")
+
+    positional_values = {"bids_dir": bids_dir, "output_dir": output_dir}
+    for action in positionals:
+        if action.dest in positional_values:
+            continue
+        positional_values[action.dest] = _widget_for(action)
+
+    st.header("Options")
+    st.caption("Grouped to match the Read the Docs CLI reference; only changed values are included in the command.")
+
+    # Preserve the parser's own argument_group order and titles.
+    groups: dict[str, list[argparse.Action]] = {}
+    for action in optionals:
+        title = getattr(action.container, "title", None) or "Other options"
+        groups.setdefault(title, []).append(action)
+
+    values: dict[str, object] = {}
+    for title, actions in groups.items():
+        with st.expander(title, expanded=False):
+            backend_choice = None
+            for action in actions:
+                flag = _dest_label(action)
+
+                if flag == "--registration-backend":
+                    backend_choice = _widget_for(action)
+                    values[flag] = backend_choice
+                    continue
+
+                if flag in BACKEND_SPECIFIC_FLAGS:
+                    # Rendered right after the backend selectbox is known,
+                    # further down this same expander -- skip here.
+                    continue
+
+                values[flag] = _widget_for(action)
+
+            if backend_choice is not None:
+                # choices are "ants" or one of the fsl spellings
+                # ("fsl"/"flirt-fnirt"/"flirt_fnirt"/"flirt/fnirt").
+                wanted = ANTS_ONLY_FLAGS if backend_choice == "ants" else FSL_ONLY_FLAGS
+                for action in actions:
+                    flag = _dest_label(action)
+                    if flag in wanted:
+                        values[flag] = _widget_for(action)
+
+        # Keep the generated command live-updated as each expander's
+        # widgets are filled in, without waiting for the full script rerun.
+        command_slot.code(_build_command(positional_values, optionals, values), language="bash")
+
+    command_slot.code(_build_command(positional_values, optionals, values), language="bash")
 
 
 def launch() -> None:
