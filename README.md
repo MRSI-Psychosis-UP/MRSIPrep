@@ -56,6 +56,36 @@ MRSIPrep was designed according to four main principles:
 See [Read the Docs](https://mrsiprep.readthedocs.io/en/stable/) for the full
 workflow architecture and quality-control framework.
 
+## Repository Structure
+
+The `mrsiprep/` package is organized by processing stage, matching the
+pipeline's modular design:
+
+```
+mrsiprep/
+├── cli/            Command-line entry point and argument parsing
+├── config/         Default parameters, literature T1/T2 values, nucleus and template definitions
+├── connectivity/   Metabolic connectivity matrix construction and export
+├── interfaces/     Wrappers around external tools (ANTs, FSL, Chimera/FreeSurfer, BIDS import)
+├── io/             BIDS discovery, MRSinMRS parsing, derivative I/O, input validation
+├── mrsi/           MRSI-specific operations: masking, resampling, spike filtering, T1 correction, orientation
+├── parcellation/   Atlas registration, SynthSeg/Chimera parcellation, region labeling
+├── qc/             Quality-control metrics (e.g. ventricle detection)
+├── registration/   MRSI-to-T1w and T1w-to-template registration backends and transforms
+├── reports/        HTML QC report generation
+├── tissue/         Tissue segmentation and partial-volume fraction computation
+├── utils/          Shared helpers: logging, provenance tracking, image utilities
+└── workflows/      Nipype workflow graphs tying the stages above into the full pipeline
+```
+
+Other top-level directories: `docs/` (Read the Docs source), `docker/` (image
+build scripts, see `docker/README.md`), `wrapper/` (the `mrsiprep-docker`
+PyPI package, a dependency-free Python wrapper that runs the Docker image
+using normal BIDS App syntax), `tests/` (unit and integration tests),
+`experiments/` (benchmark and validation scripts used to produce the
+manuscript's results, not part of the installed package), and `examples/`
+(runnable usage examples referenced from the docs).
+
 ## Test Dataset
 
 A small, public, synthetic MRSI dataset — **SynthMRSI-Project** — is
