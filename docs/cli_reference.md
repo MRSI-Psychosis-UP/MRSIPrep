@@ -3,7 +3,7 @@
 Prefer a form over memorizing flags? `mrsiprep-build-command` launches a
 local browser-based form, generated directly from this same CLI definition,
 that assembles a runnable `mrsiprep` command for you to copy and run — see
-[Command builder](usage_basic.md#command-builder).
+the Command builder section of [Basic Usage](usage_basic.md).
 
 ```{argparse}
 :module: mrsiprep.cli.parser
