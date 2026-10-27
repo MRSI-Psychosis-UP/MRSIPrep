@@ -372,6 +372,18 @@ mrsiprep-import-gui
 The import helpers preserve the MRSI-Metabolic-Connectome derivative layout:
 `derivatives/mrsi-orig`, `derivatives/cat12`, and `derivatives/skullstrip`.
 
+**What this does and doesn't cover.** `mrsiprep-import`/`mrsiprep-import-gui`
+migrate already-NIfTI derivatives (e.g. from a prior processing run) into
+MRSIPrep's expected BIDS-Derivatives folder layout and naming -- they do not
+parse native quantification-tool output formats (LCModel, TARQUIN, Osprey,
+FSL-MRS, etc.) directly into NIfTI. Export NIfTI metabolite/quality maps
+from your quantification tool first (most of these tools already support
+this natively), then use the import helpers to place them into MRSIPrep's
+expected layout. Beyond that helper, producing a valid BIDS-Derivatives
+input structure is the user's responsibility, the same convention other
+NiPreps-community BIDS Apps (e.g. fMRIPrep) follow: they expect correctly
+formatted BIDS input rather than performing that conversion themselves.
+
 See [Limitations and scope](limitations.md) for what MRSIPrep does not
 cover, and [Troubleshooting](troubleshooting.md) for diagnosing a failed or
 unexpected run.
