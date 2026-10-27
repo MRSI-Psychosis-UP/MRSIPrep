@@ -37,7 +37,8 @@ classifiers = [
 [project.optional-dependencies]
 ants = ["antspyx"]
 gui = ["PyQt6"]
-all = ["antspyx", "PyQt6"]
+command-builder = ["streamlit"]
+all = ["antspyx", "PyQt6", "streamlit"]
 dev = ["pytest", "pytest-cov"]
 test-e2e = ["requests"]
 
@@ -45,6 +46,7 @@ test-e2e = ["requests"]
 mrsiprep = "mrsiprep.cli.run:main"
 mrsiprep-import = "mrsiprep.interfaces.bids_import:main"
 mrsiprep-import-gui = "mrsiprep.interfaces.bids_import_gui:main"
+mrsiprep-build-command = "mrsiprep.interfaces.command_builder_app:launch"
 
 [tool.pytest.ini_options]
 markers = [

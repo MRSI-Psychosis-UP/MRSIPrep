@@ -487,6 +487,20 @@ mrsiprep-import-gui
 The import helpers preserve the MRSI-Metabolic-Connectome derivative layout:
 `derivatives/mrsi-orig`, `derivatives/cat12`, and `derivatives/skullstrip`.
 
+## Command builder
+
+For users who prefer a form over memorizing flags, `mrsiprep-build-command`
+launches a local browser-based form (built with Streamlit) that assembles a
+runnable `mrsiprep` command. It is generated directly from the CLI's own
+argument parser, so its fields always match the real flag set — it never
+runs mrsiprep itself, only builds and displays the command for you to copy
+and run.
+
+```bash
+pip install "mrsiprep[command-builder]"
+mrsiprep-build-command
+```
+
 See [Limitations and scope](limitations.md) for what MRSIPrep does not
 cover, and [Troubleshooting](troubleshooting.md) for diagnosing a failed or
 unexpected run.
