@@ -1,13 +1,15 @@
-"""Streamlit form that assembles a runnable `mrsiprep` command.
+"""Streamlit form that assembles a runnable `mrsiprep-docker` command.
 
 Auto-derived from the real CLI parser (mrsiprep.cli.parser.build_parser), so
 the form's fields, choices, and defaults stay in sync with the actual CLI --
-no second, hand-maintained copy of the 80+ flags to drift out of date.
+no second, hand-maintained copy of the 80+ flags to drift out of date. The
+generated command uses the `mrsiprep-docker` host-side wrapper (see
+docs/usage_basic.md), not `mrsiprep` directly -- mrsiprep itself only runs
+inside the Docker image, not on the host.
 
 This tool only builds and displays the command string; it never runs
-mrsiprep itself (mrsiprep is a Docker-distributed BIDS App, so "running" it
-from here would mean shelling out to `docker run`, which is out of scope for
-a lightweight command-builder).
+anything itself (shelling out to `docker run` is out of scope for a
+lightweight command-builder).
 
 Run with:
     streamlit run mrsiprep/interfaces/command_builder_app.py
@@ -101,8 +103,12 @@ BACKEND_SPECIFIC_FLAGS = FSL_ONLY_FLAGS | ANTS_ONLY_FLAGS
 
 
 def _build_command(positional_values: dict, optionals: list[argparse.Action], values: dict) -> str:
+    # mrsiprep itself only runs inside the Docker image -- mrsiprep-docker is
+    # the host-side wrapper that builds and runs the equivalent `docker run`
+    # for you, and is what every doc example (and pip install mrsiprep-docker)
+    # expects the user to actually type.
     parts = [
-        "mrsiprep",
+        "mrsiprep-docker",
         shlex.quote(str(positional_values.get("bids_dir") or "<bids_dir>")),
         shlex.quote(str(positional_values.get("output_dir") or "<output_dir>")),
         "participant",
@@ -137,7 +143,7 @@ def main() -> None:
     st.set_page_config(page_title="MRSIPrep Command Builder", layout="wide")
     st.title("MRSIPrep Command Builder")
     st.caption(
-        "Builds a runnable `mrsiprep` command from the actual CLI definition. "
+        "Builds a runnable `mrsiprep-docker` command from the actual CLI definition. "
         "This page does not execute anything -- copy the generated command and run it yourself."
     )
 

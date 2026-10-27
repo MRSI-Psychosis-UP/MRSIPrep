@@ -6,7 +6,7 @@
 
 - **Added `mrsiprep-build-command`**, a local browser-based form (built
   with Streamlit, installed via `pip install mrsiprep[command-builder]`)
-  that assembles a runnable `mrsiprep` command from a point-and-click
+  that assembles a runnable `mrsiprep-docker` command from a point-and-click
   interface. It is generated directly from the CLI's own argument parser,
   so its fields and defaults never drift out of sync with the real flag
   set. Options are grouped the same way as the CLI reference docs, the

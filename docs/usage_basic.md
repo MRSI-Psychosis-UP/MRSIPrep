@@ -25,7 +25,7 @@ needs no Chimera and no `recon-all`/FreeSurfer licence.
 
 Prefer a form over memorizing flags? `mrsiprep-build-command` launches a
 local browser-based form (built with Streamlit) that assembles a runnable
-`mrsiprep` command for you to copy and run:
+`mrsiprep-docker` command for you to copy and run:
 
 ```bash
 pip install "mrsiprep[command-builder]"
