@@ -1,0 +1,97 @@
+name: Release Tag Check
+
+# Catches a forgotten release: pyproject.toml's version gets bumped on main,
+# but the matching git tag (which drives both PyPI publishing and the
+# ReadTheDocs "stable" version) never gets pushed. Runs nightly rather than
+# per-push, since main legitimately sits "ahead of its tag" for a while
+# between bumping the version and cutting the release.
+
+on:
+  schedule:
+    - cron: "0 7 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check-tag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compare pyproject.toml version against git tags
+        id: check
+        run: |
+          set -euo pipefail
+          VERSION=$(grep -m1 '^version = ' pyproject.toml | sed -E 's/version = "(.*)"/\1/')
+          TAG="v${VERSION}"
+          echo "pyproject.toml version: $VERSION (expected tag: $TAG)"
+
+          if git rev-parse "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists -- nothing to do."
+            echo "stale=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # How long has main been ahead of the latest existing release tag?
+          LATEST_TAG=$(git tag --list 'v*' --sort=-v:refname | head -n1 || true)
+          if [ -z "$LATEST_TAG" ]; then
+            echo "No release tags found yet; skipping age check."
+            echo "stale=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          BUMP_COMMIT=$(git log -1 --format=%H -S"version = \"$VERSION\"" -- pyproject.toml || true)
+          if [ -z "$BUMP_COMMIT" ]; then
+            BUMP_COMMIT=$(git log -1 --format=%H -- pyproject.toml)
+          fi
+          BUMP_DATE=$(git log -1 --format=%ct "$BUMP_COMMIT")
+          NOW=$(date +%s)
+          AGE_DAYS=$(( (NOW - BUMP_DATE) / 86400 ))
+          echo "pyproject.toml has been at $VERSION for $AGE_DAYS day(s) without tag $TAG."
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "expected_tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "age_days=$AGE_DAYS" >> "$GITHUB_OUTPUT"
+          if [ "$AGE_DAYS" -ge 3 ]; then
+            echo "stale=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "stale=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open or update tracking issue
+        if: steps.check.outputs.stale == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.check.outputs.version }}
+          EXPECTED_TAG: ${{ steps.check.outputs.expected_tag }}
+          AGE_DAYS: ${{ steps.check.outputs.age_days }}
+        run: |
+          set -euo pipefail
+          TITLE="Release $VERSION is not tagged ($EXPECTED_TAG missing)"
+          BODY="pyproject.toml has declared version \`$VERSION\` for $AGE_DAYS day(s), but no \`$EXPECTED_TAG\` git tag exists.
+
+          This means:
+          - ReadTheDocs' \`stable\` version (which tracks the latest tag) is still serving an older release's docs.
+          - If this version hasn't been published to PyPI yet, that's still pending too.
+
+          Fix: tag and push once the version is ready to release:
+
+          \`\`\`bash
+          git tag -a $EXPECTED_TAG -m \"Release $VERSION\"
+          git push origin $EXPECTED_TAG
+          \`\`\`
+
+          This issue is filed/updated automatically by \`.github/workflows/release-tag-check.yml\`; it will stop recurring once the tag is pushed."
+
+          EXISTING=$(gh issue list --search "in:title \"$TITLE\"" --state open --json number --jq '.[0].number' || true)
+          if [ -n "$EXISTING" ] && [ "$EXISTING" != "null" ]; then
+            gh issue comment "$EXISTING" --body "Still untagged: $AGE_DAYS day(s) and counting."
+          else
+            gh issue create --title "$TITLE" --body "$BODY"
+          fi
