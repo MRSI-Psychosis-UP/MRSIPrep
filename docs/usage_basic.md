@@ -71,6 +71,24 @@ See [PUBLIC_DATASET.md](https://github.com/MRSI-Psychosis-UP/MRSIPrep/blob/main/
 in the repository for the dataset's full description, ground-truth files,
 and expected output layout.
 
+## Container internals
+
+Two things run automatically inside the container on every invocation
+(`docker/entrypoint.sh`), regardless of whether you use the
+`mrsiprep-docker` wrapper or a plain `docker run` (see
+[Installation](installation.md)):
+
+- **Output ownership.** The container runs as root (required by some
+  `recon-all`/ANTs/Chimera configurations) and afterward `chown`s the output
+  directory back to `HOST_UID`/`HOST_GID` if set, or to the output
+  directory's own existing owner otherwise, so files are never left
+  root-owned on the host. Disable with `-e MRSIPREP_NO_FIXPERMS=1`, or pass
+  `-u "$(id -u):$(id -g)"` (or `mrsiprep-docker -u ...`) to run as a non-root
+  user from the start instead.
+- **Timezone.** If `-e TZ=<zone>` is set, timestamps in the console, the
+  per-recording logbook, and `mrsiprep_provenance.json` (see below) match
+  the host clock instead of defaulting to UTC.
+
 ## Verbosity, logging, and provenance
 
 ```bash

@@ -28,33 +28,10 @@ docker run --rm mrsiup/mrsiprep:cpu --hello-world
 Prints the MRSIPrep banner and a confirmation message, then exits
 immediately with status 0.
 
-## Option A: plain `docker run`
+## Option A: the `mrsiprep-docker` wrapper (recommended)
 
-```bash
-docker run --rm \
-  -v /path/to/bids:/data:ro \
-  -v /path/to/bids/derivatives:/out \
-  -v /path/to/freesurfer/license.txt:/opt/freesurfer/license.txt:ro \
-  -e FS_LICENSE=/opt/freesurfer/license.txt \
-  -e TZ="$(cat /etc/timezone)" \
-  mrsiup/mrsiprep:cpu \
-  /data /out participant \
-  --participant-label S001 \
-  --session-label V1 \
-  --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \
-  --ref-met CrPCr \
-  --nthreads 8
-```
-
-The container runs as root and chowns the output directory back to its
-existing owner after the run (see "Container internals" below), no `-u`
-flag is required. `-e TZ=...` keeps console/log timestamps in sync with the
-host clock (the container defaults to UTC otherwise).
-
-## Option B: the `mrsiprep-docker` wrapper
-
-A lightweight, dependency-free Python wrapper is installable from PyPI and builds the `docker run`
-command above for you:
+A lightweight, dependency-free Python wrapper is installable from PyPI and builds the equivalent
+`docker run` command for you:
 
 ```bash
 pip install mrsiprep-docker
@@ -77,6 +54,30 @@ for the full option list.
 You will still need a BIDS dataset with already-quantified MRSI maps; see
 [Basic Usage](usage_basic.md) for the full command-line walkthrough.
 
+## Option B: plain `docker run`
+
+```bash
+docker run --rm \
+  -v /path/to/bids:/data:ro \
+  -v /path/to/bids/derivatives:/out \
+  -v /path/to/freesurfer/license.txt:/opt/freesurfer/license.txt:ro \
+  -e FS_LICENSE=/opt/freesurfer/license.txt \
+  -e TZ="$(cat /etc/timezone)" \
+  mrsiup/mrsiprep:cpu \
+  /data /out participant \
+  --participant-label S001 \
+  --session-label V1 \
+  --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \
+  --ref-met CrPCr \
+  --nthreads 8
+```
+
+The container runs as root and chowns the output directory back to its
+existing owner after the run (see "Container internals" in
+[Basic Usage](usage_basic.md)), no `-u` flag is required. `-e TZ=...` keeps
+console/log timestamps in sync with the host clock (the container defaults
+to UTC otherwise).
+
 ## Minimum hardware requirements
 
 | Resource | Minimum | Notes |
@@ -94,19 +95,6 @@ have roughly `4 x 8 GB` = 32 GB available, not just 8 GB total, or reduce
 `recon-all` disappearing mid-run with no other error, this is almost always
 insufficient memory, not a data or configuration problem.
 
-## Container internals
-
-Two things run automatically inside the container on every invocation
-(`docker/entrypoint.sh`), regardless of which option above you use:
-
-- **Output ownership.** The container runs as root (required by some
-  `recon-all`/ANTs/Chimera configurations) and afterward `chown`s the output
-  directory back to `HOST_UID`/`HOST_GID` if set, or to the output
-  directory's own existing owner otherwise, so files are never left
-  root-owned on the host. Disable with `-e MRSIPREP_NO_FIXPERMS=1`, or pass
-  `-u "$(id -u):$(id -g)"` (or `mrsiprep-docker -u ...`) to run as a non-root
-  user from the start instead.
-- **Timezone.** If `-e TZ=<zone>` is set, timestamps in the console, the
-  per-recording logbook, and `mrsiprep_provenance.json` (see
-  [Basic Usage](usage_basic.md)) match the host clock instead of defaulting
-  to UTC.
+See "Container internals" in [Basic Usage](usage_basic.md) for what runs
+automatically inside the container on every invocation (output-ownership
+chown, timezone handling).

@@ -4,11 +4,7 @@ MRSIPrep registers MRSI maps to T1w space with ANTs and, optionally,
 normalizes them further into MNI space.
 
 ```bash
-docker run --rm \
-  -v /path/to/bids:/data:ro \
-  -v /path/to/derivatives:/out \
-  mrsiup/mrsiprep:cpu \
-  /data /out participant \
+mrsiprep-docker /path/to/bids /path/to/derivatives participant \
   --participant-label S001 \
   --session-label V1 \
   --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \
@@ -49,11 +45,7 @@ space, and it generates that itself into `--work-dir` regardless of this
 flag, so the QC figure is always available even without `--output-mrsi-t1w`:
 
 ```bash
-docker run --rm \
-  -v /path/to/bids:/data:ro \
-  -v /path/to/derivatives:/out \
-  mrsiup/mrsiprep:cpu \
-  /data /out participant \
+mrsiprep-docker /path/to/bids /path/to/derivatives participant \
   --participant-label S001 \
   --session-label V1 \
   --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \
@@ -77,11 +69,7 @@ uses a fast affine fit; `ants-syn` runs a full deformable SyN registration
 for higher anatomical accuracy at additional compute cost:
 
 ```bash
-docker run --rm \
-  -v /path/to/bids:/data:ro \
-  -v /path/to/derivatives:/out \
-  mrsiup/mrsiprep:cpu \
-  /data /out participant \
+mrsiprep-docker /path/to/bids /path/to/derivatives participant \
   --participant-label S001 \
   --session-label V1 \
   --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \

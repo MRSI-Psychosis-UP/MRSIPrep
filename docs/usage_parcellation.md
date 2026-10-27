@@ -1,26 +1,26 @@
 # Parcellation and Connectivity Usage
 
 `--parcellation-mode` selects between two full parcellation backends --
-Chimera's multi-atlas fusion (`chimera`) or a standardized MNI-space atlas
-(`atlas`) -- plus optional perturbation-based connectivity matrices computed
-from regional metabolite values.
+[Chimera's](https://github.com/connectomicslab/chimera) multi-atlas fusion
+(`chimera`) or a standardized MNI-space atlas (`atlas`) -- plus optional
+perturbation-based connectivity matrices computed from regional metabolite
+values.
 
 ## Chimera parcellation
 
+See the [Chimera GitHub repository](https://github.com/connectomicslab/chimera)
+for the full list of supported parcellation codes (`--chimera-scheme`) and
+their constituent atlases.
+
 ```bash
-docker run --rm \
-  -v /path/to/bids:/data:ro \
-  -v /path/to/derivatives:/out \
-  -v /path/to/freesurfer/license.txt:/opt/freesurfer/license.txt:ro \
-  -e FS_LICENSE=/opt/freesurfer/license.txt \
-  mrsiup/mrsiprep:cpu \
-  /data /out participant \
+mrsiprep-docker /path/to/bids /path/to/derivatives participant \
   --participant-label S001 --session-label V1 \
   --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \
   --ref-met CrPCr \
   --tissue-backend synthseg-fast \
   --parcellation-mode chimera \
-  --chimera-scheme LFMIHIFIFF --chimera-scale 3
+  --chimera-scheme LFMIHIFIFF --chimera-scale 3 \
+  --fs-license-file /path/to/freesurfer/license.txt
 ```
 
 Chimera parcellation requires `recon-all` and a valid `FS_LICENSE`. Mount a
@@ -75,11 +75,7 @@ atlases in one run:
 Use a bundled MNI atlas instead of Chimera (no FreeSurfer license required):
 
 ```bash
-docker run --rm \
-  -v /path/to/bids:/data:ro \
-  -v /path/to/derivatives:/out \
-  mrsiup/mrsiprep:cpu \
-  /data /out participant \
+mrsiprep-docker /path/to/bids /path/to/derivatives participant \
   --participant-label S001 --session-label V1 \
   --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \
   --ref-met CrPCr \
@@ -102,11 +98,7 @@ is a standard regional derivative for every recording and does not require
 `--write-connectivity`.
 
 ```bash
-docker run --rm \
-  -v /path/to/bids:/data:ro \
-  -v /path/to/derivatives:/out \
-  mrsiup/mrsiprep:cpu \
-  /data /out participant \
+mrsiprep-docker /path/to/bids /path/to/derivatives participant \
   --participant-label S001 --session-label V1 \
   --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \
   --ref-met CrPCr \

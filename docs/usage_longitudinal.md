@@ -8,11 +8,7 @@ composing (session→template) with (template→MNI), reducing registration
 noise/bias across timepoints.
 
 ```bash
-docker run --rm \
-  -v /path/to/bids:/data:ro \
-  -v /path/to/derivatives:/out \
-  mrsiup/mrsiprep:cpu \
-  /data /out participant \
+mrsiprep-docker /path/to/bids /path/to/derivatives participant \
   --participant-label S001 \
   --session-label V1 V2 V3 \
   --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \

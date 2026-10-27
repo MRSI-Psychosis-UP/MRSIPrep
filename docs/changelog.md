@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.0.6
 
 ### CLI
 
@@ -14,6 +14,18 @@
   `--registration-backend` only shows the ANTs- or FSL-specific options
   relevant to that backend. It only builds and displays the command; it
   never executes mrsiprep itself.
+- Fixed the command builder generating a bare `mrsiprep` command, which
+  cannot run outside the container; it now generates `mrsiprep-docker`.
+
+### Misc
+
+- `mrsiprep-docker` now prints the installed mrsiprep version just below
+  the startup banner.
+- Docs: merged the standalone T1 saturation correction page into Future
+  Development, replaced remaining `docker run` examples with
+  `mrsiprep-docker` across the usage pages, reordered Installation to lead
+  with the `mrsiprep-docker` wrapper, and linked the Chimera parcellation
+  docs to its GitHub repository.
 
 ## 2.0.5
 
