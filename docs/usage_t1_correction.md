@@ -61,7 +61,9 @@ whitelist of key spellings is recognized (below); values are also
 sanity-checked to be in a plausible range (e.g. TR must be in seconds,
 not milliseconds). `--t1-correction voxelwise` additionally requires a
 flip-angle (B1+) map discoverable as `desc-b1map` in the MRSI input
-layout, on the same grid as the metabolite maps.
+layout, on the same grid as the metabolite maps. There is no CLI flag to
+point at a different location -- MRSIPrep discovers it purely by this
+BIDS-derivatives directory/filename convention.
 
 ### Recognized `mrsinmrs.json` keys
 
