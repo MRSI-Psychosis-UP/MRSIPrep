@@ -8,7 +8,7 @@ report's MRSinMRS section is omitted. Fields are otherwise free-form (no
 enforced schema), *except* the small whitelist of TR/flip-angle/field-
 strength key spellings that :mod:`mrsiprep.mrsi.t1_correction` reads for
 ``--t1-correction literature`` -- see that module's ``_TR_KEYS``/
-``_FLIP_KEYS``/``_FIELD_KEYS`` and docs/usage_t1_correction.md's
+``_FLIP_KEYS``/``_FIELD_KEYS`` and docs/future_development.md's
 "Recognized mrsinmrs.json keys" table for the canonical spelling of each.
 """
 

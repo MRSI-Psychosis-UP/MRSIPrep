@@ -226,7 +226,6 @@ cross_sequence_benchmark
 :hidden:
 
 future_development
-usage_t1_correction
 ```
 
 ```{toctree}
