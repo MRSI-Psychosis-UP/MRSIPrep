@@ -7,7 +7,6 @@ import platform
 import shutil
 import sys
 from datetime import datetime, timezone
-from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 import numpy as np
@@ -15,14 +14,9 @@ from rich import box
 from rich.table import Table
 
 from mrsiprep.utils.debug import Debug
+from mrsiprep.utils.version import mrsiprep_version
 
-try:
-    from mrsiprep import __version__
-except ImportError:
-    try:
-        __version__ = version("mrsiprep")
-    except PackageNotFoundError:
-        __version__ = "unknown"
+__version__ = mrsiprep_version()
 
 
 class NumpyEncoder(json.JSONEncoder):
