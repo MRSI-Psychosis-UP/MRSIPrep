@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### CLI
+
+- **Added `mrsiprep-build-command`**, a local browser-based form (built
+  with Streamlit, installed via `pip install mrsiprep[command-builder]`)
+  that assembles a runnable `mrsiprep` command from a point-and-click
+  interface. It is generated directly from the CLI's own argument parser,
+  so its fields and defaults never drift out of sync with the real flag
+  set. Options are grouped the same way as the CLI reference docs, the
+  generated command updates live at the top of the page, and selecting a
+  `--registration-backend` only shows the ANTs- or FSL-specific options
+  relevant to that backend. It only builds and displays the command; it
+  never executes mrsiprep itself.
+
 ## 2.0.5
 
 ### Reports

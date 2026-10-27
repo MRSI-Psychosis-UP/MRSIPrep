@@ -506,6 +506,12 @@ pip install "mrsiprep[command-builder]"
 mrsiprep-build-command
 ```
 
+The generated command updates live at the top of the page as you fill in
+the form below it. Options are grouped the same way as the
+[Command-Line Arguments](cli_reference.md) reference, and selecting
+`--registration-backend` only shows the ANTs- or FSL-specific options for
+that backend, instead of all of them at once.
+
 See [Limitations and scope](limitations.md) for what MRSIPrep does not
 cover, and [Troubleshooting](troubleshooting.md) for diagnosing a failed or
 unexpected run.

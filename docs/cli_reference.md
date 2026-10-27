@@ -1,5 +1,10 @@
 # Command-Line Arguments
 
+Prefer a form over memorizing flags? `mrsiprep-build-command` launches a
+local browser-based form, generated directly from this same CLI definition,
+that assembles a runnable `mrsiprep` command for you to copy and run — see
+[Command builder](usage_basic.md#command-builder).
+
 ```{argparse}
 :module: mrsiprep.cli.parser
 :func: build_parser
