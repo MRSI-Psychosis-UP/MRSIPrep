@@ -22,7 +22,7 @@ later SyN stage also ran, so this comparison reuses the exact same
 already-computed registrations with no recompute. See "Runs compared"
 below.
 
-(The [Registration Frameworks benchmark](benchmarks.md) separately
+(The [Registration Frameworks benchmark](registration_benchmark.md) separately
 compares a genuine **ANTs Rigid+Affine** configuration: a real second
 registration run with an actual Affine stage at MRSI→T1w, not a reuse
 of this page's Rigid-only transform. That page's ANTs (Rigid+Affine)
@@ -192,7 +192,7 @@ added and how it's computed.
   near-chance on GluGln** (ROC-AUC 0.48, PR-AUC 0.00, no better than
   random). This is specific to the Thalamus, a small, deep,
   centrally-located structure, consistent with the Registration
-  Frameworks benchmark's (see the [Benchmarks](benchmarks.md) page)
+  Frameworks benchmark's (see the [Benchmarks](registration_benchmark.md) page)
   finding that FNIRT's nonlinear warp has higher signal-weighted
   leakage than ANTs or FLIRT-only: a small deep structure is exactly
   where local nonlinear-warp distortion would do the most damage to a
@@ -207,7 +207,7 @@ added and how it's computed.
   signal change matters, and since the R+Aff variant matches or
   exceeds full R+SyN's detection power here at a fraction of the
   registration cost (see the runtime comparison on the
-  [Benchmarks](benchmarks.md) page), it is worth considering as the
+  [Benchmarks](registration_benchmark.md) page), it is worth considering as the
   default over the full deformable pipeline for VBA workflows
   specifically. FSL FLIRT+FNIRT's extra registration cost does not
   translate into better (and for deep structures, translates into

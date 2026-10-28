@@ -10,6 +10,18 @@ syntax. Docker must be installed and running (check with `docker info`).
 
 ```bash
 pip install mrsiprep-docker
+mrsiprep-docker --help
+```
+
+`pip` installs the Python wrapper. If the container image is missing,
+`--help` offers to download it; accepting runs `docker pull mrsiup/mrsiprep:cpu`.
+Processing commands pull a missing image automatically. Docker itself must
+already be installed and running.
+
+To download the image directly:
+
+```bash
+docker pull mrsiup/mrsiprep:cpu
 ```
 
 ## Use
@@ -41,8 +53,14 @@ All ordinary `mrsiprep` arguments (`--participant-label`,
 `--verbose`, ...) are
 passed straight through to the container unchanged. The wrapper only
 special-cases the few options that need a bind mount or an environment
-variable: `--fs-license-file`, `--fs-subjects-dir`, `--work-dir`, and
-`--participants`.
+variable: `--fs-license-file`, `--fs-subjects-dir`, `--work-dir`,
+`--participants`, and `--mrsinmrs-file`.
+
+Acquisition metadata is required. By default, place `mrsinmrs.json` at
+`<bids_dir>/derivatives/mrsi-orig/`. For a custom file, pass
+`--mrsinmrs-file /host/path/to/acquisition_metadata.json`; the wrapper
+mounts it read-only and forwards its container path. A missing selected
+file causes the run to fail with instructions for supplying it.
 
 `-u "$(id -u):$(id -g)"` (the default; override with `-u`/`--user`) plus the
 container's own permission-fixing entrypoint means output files are owned by

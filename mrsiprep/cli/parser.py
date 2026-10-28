@@ -169,9 +169,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--registration-backend",
         choices=["ants", "fsl", "flirt-fnirt", "flirt_fnirt", "flirt/fnirt"],
         default="ants",
-        help="Registration toolchain. 'ants' is the default and generally most accurate (rigid+affine+SyN). "
+        help="Registration toolchain. 'ants' is the default: rigid+SyN for MRSI-to-T1w and "
+        "rigid+affine+SyN for T1w-to-MNI. "
         "'fsl'/'flirt-fnirt' uses FLIRT+FNIRT (deformable) for MRSI-to-T1w by default; pass --no-fsl-deformable "
-        "for FLIRT-only (faster, less accurate).",
+        "for FLIRT-only. See the registration benchmark for the evaluated configurations and metrics.",
     )
     registration.add_argument(
         "--ants-mrsi-to-t1-transform",
@@ -255,9 +256,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--normalization",
         choices=["simple", "ants-syn", "existing"],
         default="simple",
-        help="Legacy T1w-to-MNI normalization strategy (superseded by --registration-backend for new code; "
-        "kept for backward compatibility). 'simple' registers via the backend selected by "
-        "--registration-backend. 'ants-syn' forces ANTs SyN regardless of --registration-backend. "
+        help="Legacy T1w-to-MNI normalization setting. 'simple' and 'ants-syn' use the toolchain "
+        "selected by --registration-backend and its transform settings; the default ANTs path includes SyN. "
         "'existing' reuses a previously computed T1w-to-MNI transform instead of recomputing it.",
     )
     registration.add_argument(
@@ -420,8 +420,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--connectivity-space",
         choices=["MRSI", "T1w", "MNI"],
         default="MRSI",
-        help="Space the regional metabolite profiles are extracted in before building the connectivity "
-        "matrix: native MRSI grid (default), T1w space, or MNI space.",
+        help="Legacy space setting retained for compatibility. Current regional profiles and connectivity "
+        "are computed from native MRSI maps and atlas regardless of this value.",
     )
     connectivity.add_argument("--connectivity-n-perturbations", type=int, default=50, help="Number of CRLB-scaled noise perturbations per metabolite used to build the connectivity similarity matrix.")
     connectivity.add_argument("--connectivity-sigma-scale", type=float, default=2.0, help="Scale factor applied to the CRLB-derived noise sigma when perturbing metabolite maps for connectivity.")

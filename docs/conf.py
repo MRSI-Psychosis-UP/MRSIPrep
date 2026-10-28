@@ -1,6 +1,7 @@
 """Sphinx configuration for MRSIPrep documentation."""
 
 import sys
+import tomllib
 from pathlib import Path
 
 # mrsiprep.cli.parser (and its transitive imports: config.settings,
@@ -16,6 +17,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 project = "MRSIPrep"
 copyright = "2026, Federico Lucchetti"
 author = "Federico Lucchetti"
+# Use the source version even when the package is not installed in the docs
+# environment, or an older installed distribution is present.
+release = tomllib.loads(
+    (Path(__file__).resolve().parent.parent / "pyproject.toml").read_text()
+)["project"]["version"]
+version = release
 
 extensions = [
     "myst_parser",
@@ -24,6 +31,7 @@ extensions = [
     "sphinx.ext.autosummary",
     "sphinx.ext.napoleon",
     "sphinx.ext.viewcode",
+    "sphinx.ext.mathjax",
 ]
 
 autosummary_generate = True
@@ -65,7 +73,13 @@ source_suffix = {
 
 myst_enable_extensions = [
     "colon_fence",
+    "dollarmath",
+    "substitution",
 ]
+myst_substitutions = {"release": release}
+# Make section links such as inputs.md#maps-units-and-geometry resolvable
+# across Markdown documents, including under strict warning checks.
+myst_heading_anchors = 4
 
 # Keep straight quotes verbatim (e.g. literal JSON examples inside CLI help
 # text rendered by sphinx-argparse); this is technical/code-heavy
@@ -73,12 +87,13 @@ myst_enable_extensions = [
 smartquotes = False
 
 master_doc = "index"
-exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
+exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", "benchmark_smoothing.md"]
 
 html_theme = "sphinx_rtd_theme"
 html_theme_options = {
-    "collapse_navigation": False,
-    "navigation_depth": 3,
+    "collapse_navigation": True,
+    "navigation_depth": 2,
+    "titles_only": True,
 }
 
 # Read the Docs injects a rel="canonical" link on every built page pointing

@@ -13,6 +13,8 @@ wrapper/build/
 *.egg-info/
 crash-*
 *.png
+# Figure referenced by the public cross-site benchmark.
+!docs/figures/cross_sequence_regional_profile_geneva3t_supplementary.png
 *svg
 /results*
 *.nii.gz

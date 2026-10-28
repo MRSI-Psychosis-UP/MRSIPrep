@@ -1,6 +1,6 @@
 # Extending MRSIPrep
 
-Recipes for the three extensions people most often need. Each is deliberately
+Recipes for common extensions. Each is deliberately
 small: the pipeline is designed so these are additions, not edits to dispatch
 logic. See [Architecture](architecture.md) for the wider layout and
 [CONTRIBUTING.md](https://github.com/MRSI-Psychosis-UP/MRSIPrep/blob/main/CONTRIBUTING.md)
@@ -43,7 +43,7 @@ only the tabulated T1s are specific.
 
 **3. That's it.** `--nucleus 13C` now works, appears in the report and
 `provenance.json`, and drives the thresholds and aliases. Users can also declare
-it per-dataset in `mrsinmrs.json`:
+it per-dataset in `derivatives/mrsi-orig/mrsinmrs.json`:
 
 ```json
 {"CommonMetadata": {"Nucleus": "13C"}}

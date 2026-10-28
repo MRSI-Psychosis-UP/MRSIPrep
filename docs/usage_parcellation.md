@@ -1,10 +1,44 @@
-# Parcellation and Connectivity Usage
+# Parcellation, profiles, and connectivity
 
-`--parcellation-mode` selects between two full parcellation backends --
-[Chimera's](https://github.com/connectomicslab/chimera) multi-atlas fusion
-(`chimera`) or a standardized MNI-space atlas (`atlas`) -- plus optional
-perturbation-based connectivity matrices computed from regional metabolite
-values.
+Choose a parcellation independently of the tissue backend. Every mode
+produces regional metabolite summaries and metabolic profiles; a connectivity
+matrix is an optional addition with `--write-connectivity`.
+
+| Mode | Labels | Additional requirements |
+|---|---|---|
+| `synthseg` (default) | Subject-specific SynthSeg anatomical labels | No `recon-all` or FreeSurfer licence |
+| `atlas` | Bundled or custom MNI-space atlas projected into subject space | MNI registration; label table for a custom atlas |
+| `chimera` | Chimera multi-atlas fusion | `recon-all` and a FreeSurfer licence |
+
+## SynthSeg parcellation (default)
+
+A first run needs no additional parcellation flags. MRSIPrep projects the
+SynthSeg labels onto the MRSI grid, computes parcelwise coverage and CRLB
+QC, and uses that parcellation for regional summaries and profiles.
+The anatomical labels are separate from the GM/WM/CSF probability maps
+used for PVC; see [Tissue processing](processing.md).
+
+## Bundled MNI atlas
+
+Use a bundled MNI atlas instead of Chimera (no FreeSurfer license required):
+
+```bash
+mrsiprep-docker /path/to/bids /path/to/derivatives participant \
+  --participant-label S001 --session-label V1 \
+  --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \
+  --ref-met CrPCr \
+  --tissue-backend synthseg-fast \
+  --parcellation-mode atlas --atlas chimera-LFMIHIFIS_scale3
+```
+
+For a custom atlas, select `--atlas custom` and provide `--custom-atlas`
+and `--custom-atlas-lut`. The image must be a labelled atlas in the supported
+MNI space, with integer parcel IDs matching the TSV label table. The table
+accepts `parcel_id`/`parcel_name` or `index`/`name` columns. Atlas paths must
+be visible inside the container; for files in the BIDS root, use paths under
+the standard `/data` mount. High-resolution parcels can disappear on a
+coarse MRSI grid, so inspect coverage before choosing an atlas scale.
+
 
 ## Chimera parcellation
 
@@ -28,6 +62,7 @@ FreeSurfer license file as shown above. MRSIPrep also writes a
 legacy-compatible parcel profile archive under
 `<out>/mrsiprep/sub-*/ses-*/mrsi/parcel/*_desc-{GM,}metprofiles_mrsi.npz`
 (`GMmetprofiles` when PVC ran, `metprofiles` when `--no-pvc` was passed).
+
 
 ## Several parcellations in one run
 
@@ -70,23 +105,14 @@ atlases in one run:
   --parcellation-mode atlas --atlas schaefer400,mist197
 ```
 
-## Bundled MNI atlas
-
-Use a bundled MNI atlas instead of Chimera (no FreeSurfer license required):
-
-```bash
-mrsiprep-docker /path/to/bids /path/to/derivatives participant \
-  --participant-label S001 --session-label V1 \
-  --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \
-  --ref-met CrPCr \
-  --tissue-backend synthseg-fast \
-  --parcellation-mode atlas --atlas chimera-LFMIHIFIS_scale3
-```
-
-A custom atlas can be supplied with `--custom-atlas` and its lookup table
-with `--custom-atlas-lut`.
 
 ## Regional metabolic profiles and connectivity
+
+The regional TSV contains quality-masked summaries per parcel/metabolite.
+The `mrsi/parcel/` archive exports a selected summary statistic; the
+`connectivity/` archive below contains uncertainty-augmented features. See
+[Derivative formats](data_reference.md) for their different dimensions,
+masking procedures, and missing-data conventions.
 
 MRSIPrep always builds a per-parcel regional metabolic profile for
 every retained parcel, regardless of `--write-connectivity`: each
@@ -104,15 +130,18 @@ mrsiprep-docker /path/to/bids /path/to/derivatives participant \
   --ref-met CrPCr \
   --parcellation-mode atlas --atlas chimera-LFMIHIFIS_scale3 \
   --write-connectivity \
-  --connectivity-method spearman \
-  --connectivity-space MNI
+  --connectivity-method spearman
 ```
 
 `--write-connectivity` is the optional add-on: it correlates the
 already-computed regional profiles into a regional connectivity (MetSiM)
-matrix, without recomputing the perturbations.
+matrix, without recomputing the perturbations. These are metabolic-profile
+relationships, not anatomical connections or temporal coupling. The current
+profile exporter operates on the native MRSI maps and atlas;
+`--connectivity-space` is retained as a legacy setting and does not switch
+that calculation to MNI space.
 
-See [Basic Usage](usage_basic.md) for the full CLI
+See [Command-line arguments](cli_reference.md) for the full CLI
 reference, including `--parcellation-mode`, `--atlas`, `--custom-atlas`,
 `--custom-atlas-lut`, `--chimera-scheme`, `--chimera-scale`,
 `--chimera-grow`, `--regional-summary`, `--write-connectivity`,

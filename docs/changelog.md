@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Acquisition metadata
+
+- Require a valid, nonempty MRSinMRS specification before processing,
+  input validation, or report regeneration. The default location is
+  `derivatives/mrsi-orig/mrsinmrs.json`.
+- Add `--mrsinmrs-file` for a custom metadata path. The Docker wrapper
+  mounts the host file read-only, and the Command builder exposes the option.
+- Remove automatic BIDS-root metadata discovery. Move older files into
+  `mrsi-orig` or supply their path explicitly.
+
 ## 2.0.6
 
 ### CLI
@@ -513,7 +525,7 @@ The version described by the MRSIPrep bioRxiv preprint.
 
 - **Added a per-metabolite signal leakage metric to the standard
   coverage report.** Reuses the signal-weighted leakage metric from the
-  [Registration Frameworks](benchmarks.md) benchmark (fraction of
+  [Registration Frameworks](registration_benchmark.md) benchmark (fraction of
   CRLB-passing signal mass falling outside the reference brain mask) and
   now computes it automatically for every recording, not just that
   benchmark: against the MNI152 standard brain mask for the default
@@ -526,7 +538,7 @@ The version described by the MRSIPrep bioRxiv preprint.
 
 ## 1.9.1
 
-- Trimmed the [Registration Frameworks](benchmarks.md) benchmark's
+- Trimmed the [Registration Frameworks](registration_benchmark.md) benchmark's
   interpretation into a concise Conclusions section.
 
 ## 1.9.0
@@ -544,7 +556,7 @@ The version described by the MRSIPrep bioRxiv preprint.
   `confounds/*_desc-t1corr.tsv`, a new QC report, and a `t1_correction`
   provenance block. See `--t1-correction-water-status` for handling
   already water-referenced inputs, and
-  [T1 Saturation Correction](usage_t1_correction.md).
+  [T1 Saturation Correction](future_development.md#t1-saturation-correction).
 
 - Anonymized the [Cross-Site/Cross-Sequence Regional Profile
   Reproducibility](cross_sequence_benchmark.md) page: the two compared

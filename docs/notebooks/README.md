@@ -1,4 +1,14 @@
-# MRSIPrep walkthrough notebooks
+# Walkthrough notebook
+
+After completing [First run](../usage_basic.md), use this notebook to explore
+the stage functions and intermediate results. Read [Processing methods](../methods.md)
+for the algorithm overview.
+
+{download}`Download the walkthrough notebook <walkthrough_synthmrsi_sub01.ipynb>`
+
+Save it in a checkout's `docs/notebooks/` directory for the commands below.
+The documentation build provides the notebook as a download; it does not
+execute the heavy processing stages.
 
 ## `walkthrough_synthmrsi_sub01.ipynb`
 
@@ -6,13 +16,19 @@ Walks through MRSIPrep's processing pipeline stage by stage for one subject, cal
 
 **Data:** the public SynthMRSI-Project validation dataset (CC0), [doi:10.5281/zenodo.21477047](https://doi.org/10.5281/zenodo.21477047). Download it and place/symlink it as `SynthMRSI-Project/` next to the notebook (or edit `DATASET_ROOT` in the first code cell).
 
+**Acquisition metadata:** `derivatives/mrsi-orig/mrsinmrs.json` is required. To use
+another location, set `MRSINMRS_FILE` in the first code cell. For an older archive
+with the file in the dataset root, set it to `DATASET_ROOT / "mrsinmrs.json"`
+or move the file into `derivatives/mrsi-orig/` before starting. When running in
+Docker, use a path available inside the container.
+
 **Network:** the first code cell's `templateflow` call downloads the MNI152 template once (a few MB) and caches it; needs internet access the first time it runs in a given environment (the Docker image already has it pre-cached).
 
 **Viewing the generated HTML report (Stage 8):** the notebook prints the report's path inside its scratch directory, which it deletes at the end (Cleanup cell) — download the file (and copy out its sibling `reports/figures/`, if present) before that cell runs if you want to keep it, then open it locally. It will not render correctly via GitHub's online `.ipynb`/file viewer, which does not serve the report's sibling assets.
 
 ### Option A — Docker (recommended: every stage runs genuinely live)
 
-MRSI-to-T1w registration's default backend (ANTs) and partial-volume correction (PETPVC) need those binaries on `PATH`; the `mrsiup/mrsiprep:cpu` Docker image already bundles them (and `mrsiprep`, `nilearn`, and `jupyter` itself), so this is the only path where *every* stage runs live rather than falling back to a precomputed result.
+MRSI-to-T1w registration's default backend (ANTs) and partial-volume correction (PETPVC) need those binaries on `PATH`; the `mrsiup/mrsiprep:cpu` Docker image already bundles them (and `mrsiprep` and `nilearn`; the launch command below adds Jupyter), so this is the only path where *every* stage runs live rather than falling back to a precomputed result.
 
 ```bash
 docker run --rm -it \

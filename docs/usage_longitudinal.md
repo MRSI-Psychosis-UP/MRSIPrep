@@ -98,7 +98,7 @@ stored.
 usual `MRSI→T1` and `T1→MNI` columns) when `--longitudinal` is set, reporting
 whether each session's (session→template) transform already exists on disk.
 
-See [Basic Usage](usage_basic.md) for the full CLI reference, and
+See [Command-line arguments](cli_reference.md) for the full CLI reference, and
 [MNI Normalization Usage](usage_normalization.md) for the non-longitudinal
 (direct per-session) T1w→MNI registration options
 (`--normalization`, `--output-spaces`, `--output-mrsi-t1w`,

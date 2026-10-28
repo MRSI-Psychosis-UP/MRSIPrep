@@ -1,7 +1,7 @@
 # Architecture
 
 A map of the codebase for people making changes to it. For *using* MRSIPrep see
-[Basic Usage](usage_basic.md); for the common extensions see
+[First run](usage_basic.md); for the common extensions see
 [Extending MRSIPrep](extending.md).
 
 ## The shape of a run

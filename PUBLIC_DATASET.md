@@ -26,6 +26,15 @@ The raw MRSI data lives at:
 derivatives/mrsi-orig/sub-XX/ses-01/
 ```
 
+Acquisition metadata is required at `derivatives/mrsi-orig/mrsinmrs.json`,
+alongside the subject directories, or through `--mrsinmrs-file`. Older
+dataset archives can include it at the BIDS root instead; move that file
+into `derivatives/mrsi-orig/` or select it explicitly. For plain Docker with
+the `/data` mount below, append `--mrsinmrs-file /data/mrsinmrs.json` if
+using such an older archive.
+The [input guide](docs/inputs.md#acquisition-metadata-mrsinmrsjson) describes
+the JSON layout and cites the original MRSinMRS recommendations.
+
 This is MRSIPrep's own primary convention for raw MRSI input (there is no
 ratified BIDS extension for MRSI yet, so MRSIPrep documents this
 `derivatives/mrsi-<space>/` location as first-class raw data, the same
@@ -73,8 +82,6 @@ docker pull mrsiup/mrsiprep:cpu
 docker run --rm \
   -v "$(pwd)/SynthMRSI-Project:/data:ro" \
   -v "$(pwd)/SynthMRSI-Project/derivatives:/out" \
-  -v /path/to/your/freesurfer/license.txt:/opt/freesurfer/license.txt:ro \
-  -e FS_LICENSE=/opt/freesurfer/license.txt \
   mrsiup/mrsiprep:cpu \
   /data /out participant \
   --session-label 01 \
@@ -84,8 +91,8 @@ docker run --rm \
   --nthreads 8 --nproc 2 --verbose 2
 ```
 
-You'll need a FreeSurfer license file (free, from
-https://surfer.nmr.mgh.harvard.edu/registration.html) for `mri_synthseg`.
+The default SynthSeg workflow needs no FreeSurfer licence. Chimera mode
+requires a licence for `recon-all`; see the [parcellation guide](docs/usage_parcellation.md).
 
 Preflight/file-integrity checks run automatically before any recording is
 processed — a corrupt or missing input skips just that recording rather
@@ -101,10 +108,10 @@ subjects first.
 ## Expected output
 
 Per-subject outputs land under `derivatives/mrsiprep/sub-XX/ses-01/`:
-metabolite maps in T1w/MNI space (`mrsi/`), tissue segmentation
-(`anat/synthseg/`), and QC reports (`reports/coverage/`). The QC HTML
+MNI-space metabolite maps (`mrsi/mni/`; T1w maps are opt-in), tissue segmentation
+(`anat/synthseg/`), and QC reports (`reports/`). The QC HTML
 report is the fastest way to check a run succeeded — open
-`reports/coverage/sub-XX_ses-01_desc-report.html` in a browser.
+`reports/sub-XX_ses-01_desc-report.html` in a browser.
 
 ## Ground truth (optional)
 

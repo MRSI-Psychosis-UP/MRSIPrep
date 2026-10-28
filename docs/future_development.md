@@ -1,9 +1,15 @@
-# Future Development
+# Experimental features
 
-This page collects functionality that exists and works today, but is
-early-stage: thin validation, limited real-world testing, or a scope the
-rest of the pipeline doesn't yet fully support. Treat it as opt-in and
-expect rough edges, rather than the default, well-exercised path.
+These features are implemented and opt-in. Their validation is narrower
+than the default proton workflow; the table below describes the current
+scope. Planned work and feature requests are tracked in the
+[issue tracker](https://github.com/MRSI-Psychosis-UP/MRSIPrep/issues).
+
+| Feature | Current validation and limits |
+|---|---|
+| Non-proton nuclei | Nucleus-aware aliases and thresholds are implemented; 31P and 2H have no curated quality defaults and need explicit thresholds. Proton water-referencing assumptions still need review for other nuclei. |
+| Protocol-level T1 correction | Uses tabulated literature values and scalar acquisition metadata; validation is limited to the listed metabolites and protocols. |
+| Voxelwise T1 correction | Uses a measured flip-angle map with the same literature T1 values; requires a matching map and has limited acquisition-level validation. |
 
 ## Nucleus
 
@@ -14,8 +20,8 @@ the command line:
   --nucleus 31P
 ```
 
-or, preferably, once per dataset in `mrsinmrs.json` (the `Nucleus` field is part
-of the MRSinMRS reporting standard), where it also shows up in every report:
+or, preferably, once per dataset in `derivatives/mrsi-orig/mrsinmrs.json`,
+where it also shows up in every report:
 
 ```json
 {"CommonMetadata": {"Nucleus": "31P"}}
@@ -42,20 +48,7 @@ If you have citation-backed values for a nucleus, contributing them to
 `mrsiprep/config/nuclei.json` is a welcome PR — see
 [Extending MRSIPrep](extending.md).
 
-**`--quality-metrics` controls which per-voxel quality maps are required
-inputs**, separately from the thresholds above: by default all of SNR,
-linewidth, and CRLB must be present or the recording fails preflight
-validation. If a quantification tool only exports CRLB (common for
-non-LCModel pipelines), narrow the requirement instead of having every
-recording rejected:
-
-```bash
-  --quality-metrics crlb
-```
-
-Maps that are present are always applied as voxel-inclusion thresholds
-regardless of this flag (via `--snr-min`/`--linewidth-max`/`--crlb-max`);
-it only controls whether a *missing* map is an error.
+See [Preparing inputs](inputs.md) for required quality maps and their units.
 
 ## T1 saturation correction
 
@@ -72,7 +65,7 @@ S/S0 = sin(alpha) * (1 - exp(-TR/T1)) / (1 - cos(alpha) * exp(-TR/T1))
 ```
 
 using the acquisition's TR and nominal flip angle (read from a
-dataset-level `mrsinmrs.json`, see [MRSinMRS](https://doi.org/10.1002/nbm.4484))
+`derivatives/mrsi-orig/mrsinmrs.json`, see [MRSinMRS](https://doi.org/10.1002/nbm.4484))
 and a curated literature T1 value per metabolite per field strength
 (`mrsiprep/config/t1_literature.json`). This is a **protocol-level** correction --
 one factor per metabolite per recording, not per-voxel. It is validated
@@ -97,7 +90,6 @@ mrsiprep-docker /path/to/bids /path/to/derivatives participant \
   --participant-label S001 --session-label V1 \
   --metabolites CrPCr,GPCPCh,NAANAAG \
   --ref-met CrPCr \
-  --parcellation-mode chimera \
   --t1-correction literature \
   --t1-correction-water-status unknown \
   --nthreads 16
@@ -106,7 +98,7 @@ mrsiprep-docker /path/to/bids /path/to/derivatives participant \
 ### Requirements
 
 Both `--t1-correction literature` and `--t1-correction voxelwise` require
-a `mrsinmrs.json` at the BIDS root with unambiguous TR, flip angle, and
+`derivatives/mrsi-orig/mrsinmrs.json` with unambiguous TR, flip angle, and
 field-strength entries (under `CommonMetadata` or a matching `Recordings`
 entry) -- the nominal `FlipAngle` is still read in `voxelwise` mode even
 though it is not used for the correction itself, since it remains useful
@@ -124,7 +116,7 @@ BIDS-derivatives directory/filename convention.
 
 #### Recognized `mrsinmrs.json` keys
 
-Only these three keys are ever read by mrsiprep. Use the **canonical**
+T1 correction reads these three acquisition fields. Use the **canonical**
 spelling for any new `mrsinmrs.json` -- the alternates are accepted for
 compatibility with sidecars written elsewhere, but mixing spellings with
 different values for the same field is treated as an error, not resolved
@@ -132,12 +124,12 @@ by preference order.
 
 | Field | Canonical key | Accepted alternates | Units | Required for |
 |---|---|---|---|---|
-| Repetition time | `RepetitionTime` | `TR` | seconds | `--t1-correction literature` |
-| Excitation flip angle | `FlipAngle` | `ExcitationFlipAngle` | degrees | `--t1-correction literature` |
-| Field strength | `MagneticFieldStrength` | `FieldStrength` | Tesla | `--t1-correction literature` |
+| Repetition time | `RepetitionTime` | `TR` | seconds | `literature` and `voxelwise` |
+| Excitation flip angle | `FlipAngle` | `ExcitationFlipAngle` | degrees | `literature` and `voxelwise` |
+| Field strength | `MagneticFieldStrength` | `FieldStrength` | Tesla | `literature` and `voxelwise` |
 
-No other key is read programmatically by mrsiprep -- every other
-`mrsinmrs.json` field (echo time, coil, sequence name, matrix size, water
+Nucleus selection separately reads `CommonMetadata.Nucleus`. Other
+`mrsinmrs.json` fields (echo time, coil, sequence name, matrix size, water
 suppression method, etc.) is accepted and stored for the QC report's
 free-form MRSinMRS section, but has no effect on processing. Field
 strength should be written as a bare number in Tesla (`7`, not `"7T"`);
@@ -177,8 +169,8 @@ proxy or derived values.
 `--t1-correction-water-status {uncorrected, corrected, unknown}` (default
 `unknown`) records whether the input metabolite maps are already
 water-T1-referenced upstream (e.g. by the quantification pipeline's own
-internal water-scaling step). This is a required, explicit user choice
-rather than an auto-detected heuristic, since MRSinMRS has no enforced
+internal water-scaling step). Choose the status explicitly when known;
+it is not auto-detected, since MRSinMRS has no enforced
 field for it and guessing would silently risk double-correcting or
 under-correcting for the water-scaling component. The conservative default
 (`unknown`) applies the metabolite-T1-only correction and records the
