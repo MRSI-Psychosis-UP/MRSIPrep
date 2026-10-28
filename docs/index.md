@@ -7,9 +7,14 @@ downstream analyses.
 
 Documentation for MRSIPrep **{{ release }}**.
 
+[![e2e full pipeline](https://img.shields.io/github/actions/workflow/status/MRSI-Psychosis-UP/MRSIPrep/e2e-full-pipeline.yml?label=e2e%20full%20pipeline&color=success)](https://github.com/MRSI-Psychosis-UP/MRSIPrep/actions/workflows/e2e-full-pipeline.yml)
+[![codecov](https://codecov.io/gh/MRSI-Psychosis-UP/MRSIPrep/branch/main/graph/badge.svg)](https://codecov.io/gh/MRSI-Psychosis-UP/MRSIPrep)
 [![docs](https://app.readthedocs.org/projects/mrsiprep/badge/?version=stable)](https://mrsiprep.readthedocs.io/en/stable/)
+[![Codacy Badge](https://app.codacy.com/project/badge/Grade/55f24973247f41bbb27885f6b6375389)](https://app.codacy.com/gh/MRSI-Psychosis-UP/MRSIPrep/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
+[![test dataset doi](https://img.shields.io/badge/test%20dataset%20doi-10.5281%2Fzenodo.21477047-blue)](https://doi.org/10.5281/zenodo.21477047)
 [![docker](https://img.shields.io/badge/docker-mrsiup%2Fmrsiprep-blue?logo=docker&logoColor=white)](https://hub.docker.com/r/mrsiup/mrsiprep)
 [![pypi](https://img.shields.io/pypi/v/mrsiprep?logo=pypi&logoColor=white)](https://pypi.org/project/mrsiprep/)
+[![license](https://img.shields.io/badge/license-academic--non--commercial-lightgrey)](https://github.com/MRSI-Psychosis-UP/MRSIPrep/blob/main/LICENSE)
 
 ## Start here
 

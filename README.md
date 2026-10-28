@@ -2,7 +2,6 @@
 
 
 
-![version](https://img.shields.io/badge/version-v2.0.0-blue)
 [![e2e full pipeline](https://img.shields.io/github/actions/workflow/status/MRSI-Psychosis-UP/MRSIPrep/e2e-full-pipeline.yml?label=e2e%20full%20pipeline&color=success)](https://github.com/MRSI-Psychosis-UP/MRSIPrep/actions/workflows/e2e-full-pipeline.yml)
 [![codecov](https://codecov.io/gh/MRSI-Psychosis-UP/MRSIPrep/branch/main/graph/badge.svg)](https://codecov.io/gh/MRSI-Psychosis-UP/MRSIPrep)
 [![docs](https://app.readthedocs.org/projects/mrsiprep/badge/?version=stable)](https://mrsiprep.readthedocs.io/en/stable/)
