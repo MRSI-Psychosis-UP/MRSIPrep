@@ -44,7 +44,8 @@ MRSIPrep was designed according to four main principles:
   registration, metabolite coverage, voxel-level quality metrics, tissue
   composition, and atlas projection, including the acquisition's
   [MRSinMRS](https://pubmed.ncbi.nlm.nih.gov/33559967/) sequence parameters
-  (from an optional `mrsinmrs.json`) and a citation section. Published-study
+  (required at `derivatives/mrsi-orig/mrsinmrs.json` or selected with
+  `--mrsinmrs-file`) and a citation section. Published-study
   parameter sets can be reproduced with `--config-preset <name>`
   (see `--list-presets`), which also credits the source publication in the
   report.

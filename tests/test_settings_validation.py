@@ -175,7 +175,9 @@ class OutputSpaceResolutionTests(unittest.TestCase):
 class NucleusResolutionTests(unittest.TestCase):
     def _bids_with_nucleus(self, tmpdir, nucleus):
         root = Path(tmpdir)
-        (root / "mrsinmrs.json").write_text(json.dumps({"CommonMetadata": {"Nucleus": nucleus}}), encoding="utf-8")
+        metadata = root / "derivatives" / "mrsi-orig" / "mrsinmrs.json"
+        metadata.parent.mkdir(parents=True, exist_ok=True)
+        metadata.write_text(json.dumps({"CommonMetadata": {"Nucleus": nucleus}}), encoding="utf-8")
         return root
 
     def test_defaults_to_proton(self):

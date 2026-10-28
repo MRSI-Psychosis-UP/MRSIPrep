@@ -1,13 +1,23 @@
 from pathlib import Path
+import json
+import tempfile
 import unittest
 
 from mrsiprep.cli.parser import parse_args as _parse_args
 
 _REQUIRED_ARGS = ["--metabolites", "CrPCr", "--ref-met", "CrPCr"]
+_METADATA_DIR = tempfile.TemporaryDirectory()
+_METADATA_PATH = Path(_METADATA_DIR.name) / "mrsinmrs.json"
+_METADATA_PATH.write_text(json.dumps({"CommonMetadata": {"Nucleus": "1H"}}))
+_METADATA_ARGS = ["--mrsinmrs-file", str(_METADATA_PATH)]
+
+
+def tearDownModule():
+    _METADATA_DIR.cleanup()
 
 
 def parse_args(argv):
-    return _parse_args(argv + _REQUIRED_ARGS)
+    return _parse_args(argv + _REQUIRED_ARGS + _METADATA_ARGS)
 
 
 class CLITests(unittest.TestCase):
@@ -166,6 +176,7 @@ class ConfigPresetTests(unittest.TestCase):
             "participant",
             "--config-preset",
             "nature-comms-2025",
+            *_METADATA_ARGS,
         ])
         self.assertEqual(cfg.tissue_backend, "existing")
         self.assertEqual(cfg.registration_backend, "ants")
@@ -184,6 +195,7 @@ class ConfigPresetTests(unittest.TestCase):
             "participant",
             "--config-preset",
             "imaging-neurosci-2026",
+            *_METADATA_ARGS,
         ])
         self.assertEqual(cfg.parcellation_mode, "synthseg")
         self.assertEqual(cfg.tissue_backend, "existing")
@@ -201,6 +213,7 @@ class ConfigPresetTests(unittest.TestCase):
             "imaging-neurosci-2026",
             "--output-spaces",
             "mni:res-2",
+            *_METADATA_ARGS,
         ])
         self.assertEqual(cfg.space_resolutions["MNI152NLin2009cAsym"], "2mm")
 

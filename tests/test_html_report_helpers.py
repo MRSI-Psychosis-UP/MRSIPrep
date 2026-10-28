@@ -7,6 +7,7 @@ _citations_html, _parcel_figures_html), which is why the file's overall
 coverage was low despite that existing test.
 """
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -15,6 +16,7 @@ from types import SimpleNamespace
 from mrsiprep.reports.html import (
     _bids_project_name,
     _citations_html,
+    _mrsinmrs_html,
     _outputs_html,
     _parcel_figures_html,
     _sections_html,
@@ -56,6 +58,28 @@ class OutputsHtmlTests(unittest.TestCase):
         self.assertIn("\u2514\u2500\u2500", html)  # tree connectors
         # reports/ is the page the reader is already looking at.
         self.assertNotIn("report.html", html)
+
+
+class AcquisitionMetadataHtmlTests(unittest.TestCase):
+    def test_renders_recording_metadata_from_mrsi_input_root(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            metadata = root / "derivatives" / "mrsi-orig" / "mrsinmrs.json"
+            metadata.parent.mkdir(parents=True)
+            metadata.write_text(json.dumps({
+                "CommonMetadata": {"SequenceName": "DefaultSequence"},
+                "Recordings": [{"sub": "01", "ses": "01", "SequenceName": "RecordingSequence"}],
+            }))
+            (root / "mrsinmrs.json").write_text(json.dumps({"CommonMetadata": {"SequenceName": "LegacySequence"}}))
+            html = _mrsinmrs_html(SimpleNamespace(bids_dir=root), "01", "01")
+            self.assertIn("RecordingSequence", html)
+            self.assertNotIn("DefaultSequence", html)
+            self.assertNotIn("LegacySequence", html)
+
+    def test_missing_metadata_points_to_mrsi_input_root(self):
+        with tempfile.TemporaryDirectory() as td:
+            html = _mrsinmrs_html(SimpleNamespace(bids_dir=Path(td)), "01", "01")
+            self.assertIn("derivatives/mrsi-orig/mrsinmrs.json", html)
 
 
 class CitationsHtmlTests(unittest.TestCase):

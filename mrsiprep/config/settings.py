@@ -18,6 +18,7 @@ class MRSIPrepConfig:
     session_label: list[str] = field(default_factory=list)
     participants_file: Path | None = None
     bids_filter_file: Path | None = None
+    mrsinmrs_file: Path | None = None
     metabolites: list[str] | None = None
     quality_metrics: list[str] = field(default_factory=lambda: ["snr", "linewidth", "crlb"])
     # Acquired nucleus. None means "resolve it": --nucleus wins, else
@@ -119,7 +120,14 @@ class MRSIPrepConfig:
         if self.bids_filter_file is not None:
             self.bids_filter_file = Path(self.bids_filter_file).resolve()
         self.bids_filters = load_bids_filters(self.bids_filter_file)
-        self.mrsinmrs = load_mrsinmrs(self.bids_dir)
+        explicit_metadata = self.mrsinmrs_file is not None
+        self.mrsinmrs_file = (
+            Path(self.mrsinmrs_file).resolve() if explicit_metadata
+            else self.bids_dir / "derivatives" / "mrsi-orig" / "mrsinmrs.json"
+        )
+        # Library callers may prepare configuration before inputs exist.
+        # The CLI and complete workflows call require_mrsinmrs before work.
+        self.mrsinmrs = load_mrsinmrs(self.bids_dir, self.mrsinmrs_file, required=explicit_metadata)
         self.output_spaces, parsed_resolutions = _normalize_output_spaces(self.output_spaces)
         # Precedence: an explicit res- modifier > a --config-preset's
         # space_resolutions > the default. A parsed value equal to the default
@@ -132,6 +140,13 @@ class MRSIPrepConfig:
         self.work_dir = Path(self.work_dir).resolve() if self.work_dir is not None else self.output_dir / "work"
         if self.fs_subjects_dir is not None:
             self.fs_subjects_dir = Path(self.fs_subjects_dir).resolve()
+
+    def require_mrsinmrs(self) -> None:
+        """Require acquisition metadata before input validation or processing."""
+        from mrsiprep.io.mrsinmrs import load_mrsinmrs
+
+        if self.mrsinmrs is None:
+            self.mrsinmrs = load_mrsinmrs(self.bids_dir, self.mrsinmrs_file)
 
     def _validate_enum_choices(self) -> None:
         if self.parcellation_mode not in {"synthseg", "chimera", "atlas"}:

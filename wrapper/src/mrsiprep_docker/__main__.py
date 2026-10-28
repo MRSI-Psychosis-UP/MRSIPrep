@@ -75,6 +75,7 @@ def get_parser() -> argparse.ArgumentParser:
     g_wrap.add_argument("--fs-subjects-dir", metavar="PATH", type=os.path.abspath, help="existing FreeSurfer SUBJECTS_DIR to mount and reuse")
     g_wrap.add_argument("--work-dir", metavar="PATH", type=os.path.abspath, help="scratch directory, mounted at /scratch")
     g_wrap.add_argument("--participants", metavar="PATH", type=os.path.abspath, help="participants TSV/CSV, mounted read-only")
+    g_wrap.add_argument("--mrsinmrs-file", metavar="PATH", type=os.path.abspath, help="custom acquisition metadata JSON on the host, mounted read-only")
     g_wrap.add_argument("-u", "--user", help="run container as USER[:GROUP] instead of root (default: root, which self-chowns outputs to your user afterward)")
     g_wrap.add_argument("--no-tz", action="store_true", help="do not forward the host timezone to the container")
     g_wrap.add_argument("--shell", action="store_true", help="open a shell in the image instead of running mrsiprep")
@@ -96,6 +97,10 @@ def main() -> int:
         print(f"mrsiprep-docker wrapper {__version__}")
         print(f"image: {opts.image}")
         return 0
+
+    if opts.mrsinmrs_file and not opts.help and not Path(opts.mrsinmrs_file).is_file():
+        print(f"mrsiprep-docker: --mrsinmrs-file does not name a readable file: {opts.mrsinmrs_file}", file=sys.stderr)
+        return 2
 
     check = check_docker()
     if check < 1:
@@ -172,6 +177,10 @@ def main() -> int:
         # namespace (the bind-mount target), not a host-visible predictable temp file
         command.extend(["-v", f"{opts.participants}:/tmp/participants{Path(opts.participants).suffix}:ro"])
         unknown_args.extend(["--participants", f"/tmp/participants{Path(opts.participants).suffix}"])
+
+    if opts.mrsinmrs_file:
+        command.extend(["-v", f"{opts.mrsinmrs_file}:/tmp/mrsinmrs.json:ro"])
+        unknown_args.extend(["--mrsinmrs-file", "/tmp/mrsinmrs.json"])
 
     if opts.shell:
         command.append("--entrypoint=bash")

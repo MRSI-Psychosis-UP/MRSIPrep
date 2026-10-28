@@ -1,3 +1,4 @@
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -10,10 +11,17 @@ from mrsiprep.registration.transforms import ants_transform_prefix
 from mrsiprep.workflows import participant as P
 
 _REQUIRED_ARGS = ["--metabolites", "CrPCr", "--ref-met", "CrPCr"]
+_METADATA_DIR = tempfile.TemporaryDirectory()
+_METADATA_PATH = Path(_METADATA_DIR.name) / "mrsinmrs.json"
+_METADATA_PATH.write_text(json.dumps({"CommonMetadata": {"Nucleus": "1H"}}))
+
+
+def tearDownModule():
+    _METADATA_DIR.cleanup()
 
 
 def make_config(argv, **overrides):
-    cfg = _parse_args(argv + _REQUIRED_ARGS)
+    cfg = _parse_args(argv + _REQUIRED_ARGS + ["--mrsinmrs-file", str(_METADATA_PATH)])
     for key, value in overrides.items():
         setattr(cfg, key, value)
     return cfg

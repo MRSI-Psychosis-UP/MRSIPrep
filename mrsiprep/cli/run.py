@@ -87,7 +87,11 @@ def main(argv: list[str] | None = None) -> int:
         print_presets()
         return 0
 
-    config = parse_args(argv)
+    try:
+        config = parse_args(argv)
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"MRSIPrep configuration error: {exc}", file=sys.stderr)
+        return 2
     logger = setup_logging(config.verbose, log_dir=config.logs_dir)
     _apply_resolved_cpu_budget(config, logger)
 

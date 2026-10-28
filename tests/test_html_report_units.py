@@ -54,7 +54,7 @@ class GenerateSubjectReportMinimalTests(GenerateSubjectReportFixture):
         self.assertNotIn("id='connectivity'", html)
         self.assertIn("id='runtime'", html)
         self.assertIn("id='outputs'", html)
-        self.assertIn("found at the BIDS root", html)
+        self.assertIn("derivatives/mrsi-orig/mrsinmrs.json", html)
 
     def test_no_session_omits_ses_suffix(self):
         out = generate_subject_report(self.config, "01", None, outputs={})

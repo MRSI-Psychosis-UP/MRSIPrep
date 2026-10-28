@@ -205,6 +205,7 @@ def run_participant_workflow(config) -> list[RecordingStatus]:
     :returns: One :class:`RecordingStatus` per recording matched by
         ``config`` (empty list if none matched).
     """
+    config.require_mrsinmrs()
     ensure_work_dirs(config)
     init_derivative(config.derivative_dir)
     debug = Debug(verbose=config.verbose)
@@ -261,6 +262,7 @@ def validate_participant_inputs(config) -> list[RecordingStatus]:
         ``"snr"``, ``"linewidth"``, ``"brainmask"`` -- nothing is
         actually processed).
     """
+    config.require_mrsinmrs()
     debug = Debug(verbose=config.verbose)
     recordings = collect_recordings(config)
     summaries = [
@@ -328,6 +330,7 @@ def run_reports_only_workflow(config) -> list[RecordingStatus]:
     :returns: One :class:`RecordingStatus` per recording matched by
         ``config`` (empty list if none matched).
     """
+    config.require_mrsinmrs()
     ensure_work_dirs(config)
     init_derivative(config.derivative_dir)
     debug = Debug(verbose=config.verbose)

@@ -396,17 +396,22 @@ _MRSINMRS_UNITS: dict[str, str] = {
 
 def _mrsinmrs_html(config, subject: str, session: str | None) -> str:
     """MRSI acquisition/hardware/reconstruction parameters, per the MRSinMRS
-    minimum reporting standard (Lin et al. 2021), read from an optional
-    dataset-level mrsinmrs.json. Absent by default -- this is opt-in
-    metadata, not a required input."""
+    minimum reporting standard (Lin et al. 2021), read from the run's
+    validated acquisition metadata."""
     try:
-        parsed = load_mrsinmrs(config.bids_dir)
+        parsed = getattr(config, "mrsinmrs", None)
+        if parsed is None:
+            parsed = load_mrsinmrs(
+                config.bids_dir, getattr(config, "mrsinmrs_file", None), required=False
+            )
     except ValueError as exc:
         return f"<p>Could not read mrsinmrs.json: {exc}</p>"
     resolved = resolve_mrsinmrs(parsed, subject, session)
     if not resolved:
         return (
-            f"<p>No <code>mrsinmrs.json</code> found at the BIDS root. Consider adding one to report "
+            "<p>No acquisition metadata available for this recording. Add or complete "
+            "<code>derivatives/mrsi-orig/mrsinmrs.json</code> or select "
+            "<code>--mrsinmrs-file /path/to/mrsinmrs.json</code> to report "
             f"MRSI acquisition parameters per the <a href='{_MRSINMRS_URL}'>MRSinMRS</a> minimum reporting "
             "standard (Lin et al. 2021).</p>"
         )

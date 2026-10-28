@@ -152,6 +152,7 @@ def resolve_acquisition_params(mrsinmrs_resolved: dict | None) -> AcquisitionPar
     if not mrsinmrs_resolved:
         raise T1CorrectionError(
             "--t1-correction literature requires a dataset-level mrsinmrs.json "
+            "at derivatives/mrsi-orig/mrsinmrs.json or selected with --mrsinmrs-file "
             f"with TR/FlipAngle/MagneticFieldStrength (see {_MRSINMRS_URL}), "
             "but none was found for this recording."
         )

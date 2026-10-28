@@ -51,6 +51,16 @@ def build_parser() -> argparse.ArgumentParser:
         "when a session has more than one. Only the \"t1w\" key is currently supported.",
     )
 
+    selection.add_argument(
+        "--mrsinmrs-file",
+        type=Path,
+        default=None,
+        help="Custom acquisition metadata JSON file. Defaults to "
+        "<bids_dir>/derivatives/mrsi-orig/mrsinmrs.json. A valid, nonempty metadata file "
+        "is required; processing and --validate-only fail if it is missing. "
+        "With mrsiprep-docker, provide a host path; the wrapper mounts the file read-only.",
+    )
+
     quality = parser.add_argument_group("quality thresholds")
     quality.add_argument(
         "--metabolites",
@@ -65,7 +75,7 @@ def build_parser() -> argparse.ArgumentParser:
         + "/".join(available_nuclei())
         + " (aliases such as 'proton' or 'phosphorus' are accepted). Selects the curated voxel-quality "
         "defaults and metabolite alias spellings for that nucleus. Falls back to the 'Nucleus' field of "
-        "the dataset's mrsinmrs.json, then to 1H. Nuclei other than 1H ship no curated quality "
+        "the selected acquisition metadata file, then to 1H. Nuclei other than 1H ship no curated quality "
         "thresholds, so pass --snr-min/--linewidth-max/--crlb-max explicitly for them; see "
         "mrsiprep/config/nuclei.json to contribute values.",
     )
@@ -114,7 +124,8 @@ def build_parser() -> argparse.ArgumentParser:
         "a per-voxel correction factor per metabolite instead, using a measured flip-angle (B1+) map "
         "(desc-b1map in the MRSI input layout, same grid as the metabolite maps) in place of the nominal "
         "flip angle -- TR and the literature T1 value are still scalar; requires that map to be present, "
-        "there is no fallback to 'literature' mode. Both modes require a dataset-level mrsinmrs.json with "
+        "there is no fallback to 'literature' mode. Both modes require acquisition metadata "
+        "(the default mrsinmrs.json or --mrsinmrs-file) with "
         "unambiguous TR/FlipAngle/MagneticFieldStrength entries -- fails loudly, per-recording, if these "
         "or a requested metabolite's T1 value are missing, rather than silently skipping or substituting.",
     )
@@ -673,6 +684,7 @@ def parse_args(argv: list[str] | None = None) -> MRSIPrepConfig:
         session_label=args.session_label,
         participants_file=args.participants,
         bids_filter_file=args.bids_filter_file,
+        mrsinmrs_file=args.mrsinmrs_file,
         metabolites=args.metabolites,
         quality_metrics=args.quality_metrics,
         nucleus=args.nucleus,
@@ -750,6 +762,7 @@ def parse_args(argv: list[str] | None = None) -> MRSIPrepConfig:
         verbose=args.verbose,
     )
     config.preset_citation = citation
+    config.require_mrsinmrs()
     return config
 
 
