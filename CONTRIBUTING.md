@@ -45,6 +45,17 @@ don't touch external binaries, but expect skips/failures in the interface tests.
 
 ## Tests
 
+Documentation changes should pass a strict Sphinx build from a clean checkout:
+
+```bash
+python -m pip install -r docs/requirements.txt
+python -m sphinx -b html -j auto -W --keep-going docs docs/_build/html
+```
+
+Use Python 3.12 to match Read the Docs. The build imports the CLI/API but does
+not run preprocessing. See [the documentation contribution guide](docs/contributing.md)
+for navigation, examples, and publishing checks. CI runs the same strict build.
+
 ```bash
 docker run --rm -v "$PWD":/src -w /src mrsiprep-test:local \
   /usr/bin/python3 -m pytest -q --cov=mrsiprep --cov-branch
