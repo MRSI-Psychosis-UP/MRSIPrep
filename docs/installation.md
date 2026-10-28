@@ -3,7 +3,7 @@
 Install and start [Docker](https://docs.docker.com/get-started/get-docker/)
 first. MRSIPrep's processing tools run inside its container.
 
-## Install the Docker wrapper
+## Install via the Docker wrapper
 
 The default setup uses `mrsiprep-docker`, also used by commands generated
 with the Command builder:
@@ -17,14 +17,6 @@ mrsiprep-docker --help
 download it; accepting runs `docker pull mrsiup/mrsiprep:cpu`. An existing
 local image is reused. Processing commands also pull a missing image
 automatically.
-
-## Download the pipeline image
-
-To download the image directly, use:
-
-```bash
-docker pull mrsiup/mrsiprep:cpu
-```
 
 ## Verify the pull: `--hello-world`
 
