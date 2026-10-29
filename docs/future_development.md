@@ -128,7 +128,10 @@ by preference order.
 | Excitation flip angle | `FlipAngle` | `ExcitationFlipAngle` | degrees | `literature` and `voxelwise` |
 | Field strength | `MagneticFieldStrength` | `FieldStrength` | Tesla | `literature` and `voxelwise` |
 
-Nucleus selection separately reads `CommonMetadata.Nucleus`. Other
+Nucleus selection separately reads `CommonMetadata.Nucleus`, and the
+required upstream quantification tool separately reads
+`CommonMetadata.QuantificationTool` (or `--quantification-tool`); see
+[Quantification tool conventions](inputs.md#quantification-tool-conventions). Other
 `mrsinmrs.json` fields (echo time, coil, sequence name, matrix size, water
 suppression method, etc.) is accepted and stored for the QC report's
 free-form MRSinMRS section, but has no effect on processing. Field

@@ -11,6 +11,7 @@ from pathlib import Path
 from mrsiprep.config.defaults import QUALITY_DEFAULTS
 from mrsiprep.config.nuclei import available_nuclei
 from mrsiprep.config.settings import MRSIPrepConfig
+from mrsiprep.mrsi.quantification_tools import SUPPORTED_TOOLS as SUPPORTED_QUANTIFICATION_TOOLS
 
 PRESETS_DIR = Path(__file__).resolve().parent.parent / "config" / "presets"
 _MRSIPREP_CONFIG_FIELDS = {f.name for f in _dataclass_fields(MRSIPrepConfig)}
@@ -62,6 +63,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     quality = parser.add_argument_group("quality thresholds")
+    quality.add_argument(
+        "--quantification-tool",
+        choices=list(SUPPORTED_QUANTIFICATION_TOOLS),
+        default=None,
+        help="Upstream spectral-fitting tool that produced the CRLB/SNR/linewidth maps. Required: pass this "
+        "explicitly, or add \"QuantificationTool\" to CommonMetadata in mrsinmrs.json. MRSIPrep's quality "
+        "thresholds assume LCModel's convention (CRLB as %%, SNR via peak height over residual noise SD, "
+        "linewidth in Hz); 'lcmodel', 'fsl-mrs', and 'osprey' (LCModel-wrapper mode only) are verified to "
+        "already match it, so no rescaling is applied. Use 'custom' for any other tool (including TARQUIN, "
+        "jMRUI, or Osprey's native fitting engine, whose conventions were not verified as equivalent) -- "
+        "MRSIPrep performs no rescaling for 'custom', and you are solely responsible for ensuring your maps "
+        "already match the expected convention before running MRSIPrep.",
+    )
     quality.add_argument(
         "--metabolites",
         type=_parse_comma_list,
@@ -685,6 +699,7 @@ def parse_args(argv: list[str] | None = None) -> MRSIPrepConfig:
         participants_file=args.participants,
         bids_filter_file=args.bids_filter_file,
         mrsinmrs_file=args.mrsinmrs_file,
+        quantification_tool=args.quantification_tool,
         metabolites=args.metabolites,
         quality_metrics=args.quality_metrics,
         nucleus=args.nucleus,

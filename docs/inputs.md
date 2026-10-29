@@ -9,7 +9,9 @@ processed, even though it is named `derivatives`.
 ## Required directory layout
 
 This complete two-metabolite example uses the default quality-map
-requirements. Repeat the signal and CRLB pair for every requested metabolite.
+requirements: SNR, linewidth/FWHM, and CRLB are all required unless relaxed
+with `--quality-metrics` (see below). Repeat the signal and CRLB pair for
+every requested metabolite.
 
 ```text
 bids/
@@ -41,15 +43,30 @@ checks `derivatives/mrsiprep/sub-01/ses-01/mrsi/orig/` when the primary
 `mrsi-orig` directory for that recording is absent or empty. Prefer the
 primary layout for new datasets so source maps remain distinct from outputs.
 
-## Maps, units, and geometry
+## Filename entities and required maps
+
+MRSI input filenames follow the BIDS Derivatives entity-suffix convention:
+`sub-<label>_ses-<label>_space-orig_met-<name>_desc-<kind>_mrsi.nii.gz`.
+`sub-`, `ses-`, `space-orig`, and the trailing `mrsi` suffix identify the
+subject, session, and modality and never change; `space-orig` marks the map
+as being on its native acquisition grid, prior to any MRSIPrep registration.
+Only `met-` and `desc-` vary the map's meaning, as described below.
+
+Of the three default quality metrics (SNR, linewidth/FWHM, CRLB), none is
+unconditionally mandatory: each is required only while it is listed in
+`--quality-metrics`, which defaults to `snr linewidth crlb`. Drop a metric
+from that flag (e.g. `--quality-metrics crlb`) if your quantification method
+doesn't produce it, and MRSIPrep stops requiring its map. See
+[Required quality maps versus inclusion thresholds](#required-quality-maps-versus-inclusion-thresholds)
+below.
 
 | Input | Requirement | Interpretation |
 |---|---|---|
 | T1w anatomical | Required | A usable anatomical image for segmentation and registration; it has its own anatomical grid. |
 | `met-<name>_desc-signal` | Required for each requested metabolite | Quantified signal or concentration in your upstream units; MRSIPrep does not infer an absolute concentration calibration. |
-| `met-<name>_desc-crlb` | Required by default for each metabolite | Percentage uncertainty: `20` means 20%, not `0.20`. |
-| `desc-snr` | Required by default; one shared map | SNR values as defined by your quantification method; default minimum is `4` for proton MRSI. |
-| `desc-fwhm` or `desc-linewidth` | Required by default; one shared map | Numeric linewidth compared directly with `--linewidth-max` (default `0.1` for proton MRSI). Use ppm with that default, or convert the map/threshold consistently for an export in Hz. No unit conversion is performed. |
+| `met-<name>_desc-crlb` | Required by default for each metabolite; drop `crlb` from `--quality-metrics` to make optional | Percentage uncertainty: `20` means 20%, not `0.20`. |
+| `desc-snr` | Required by default; one shared map, not `met-`-qualified; drop `snr` from `--quality-metrics` to make optional | SNR values as defined by your quantification method; default minimum is `4` for proton MRSI. |
+| `desc-fwhm` or `desc-linewidth` | Required by default; one shared map, not `met-`-qualified; drop `linewidth` from `--quality-metrics` to make optional | Numeric linewidth compared directly with `--linewidth-max` (default `0.1` for proton MRSI). Use ppm with that default, or convert the map/threshold consistently for an export in Hz. No unit conversion is performed. |
 | `desc-brainmask` | Optional | Native-grid inclusion mask; nonzero values are included. |
 | `met-water_desc-signal` | Optional | Native-grid water signal; positive voxels define the fallback mask when no mask is supplied. |
 | `desc-b1map` | Required only for voxelwise T1 correction | Measured flip angle in degrees on the metabolite grid; a relative B1 scaling map must first be converted to flip angle. |
@@ -64,6 +81,114 @@ correct physical geometry upstream.
 If your exporter supplies SNR or linewidth separately for each metabolite,
 the current loader still expects the shared, non-`met-` filenames above.
 Choose and document the shared quality measure appropriate to the acquisition.
+
+## Acquisition metadata: `mrsinmrs.json`
+
+MRSinMRS acquisition metadata is **required**. By default, place the file at
+**`derivatives/mrsi-orig/mrsinmrs.json`**, at the
+root of the MRSI input tree rather than the BIDS dataset root. It records
+acquisition information following the MRSinMRS reporting recommendations:
+
+Lin, A., Andronesi, O., Bogner, W., et al. (2021).
+[Minimum Reporting Standards for in vivo Magnetic Resonance Spectroscopy
+(MRSinMRS): Experts' consensus recommendations](https://doi.org/10.1002/nbm.4484).
+*NMR in Biomedicine*, **34**(5), e4484.
+
+The filename and JSON structure below are MRSIPrep conventions; the paper
+defines reporting recommendations, not this JSON schema. For example:
+
+```json
+{
+  "CommonMetadata": {
+    "Nucleus": "1H",
+    "RepetitionTime": 0.457,
+    "FlipAngle": 45,
+    "MagneticFieldStrength": 3,
+    "SequenceName": "ECCENTRIC",
+    "QuantificationTool": "lcmodel"
+  },
+  "Recordings": [
+    {"sub": "01", "ses": "01", "RepetitionTime": 0.45}
+  ]
+}
+```
+
+These are example acquisition values; replace them with your protocol.
+`QuantificationTool` may instead be passed as `--quantification-tool`; see
+[Quantification tool conventions](#quantification-tool-conventions) below
+for the supported values and what each one means for CRLB/SNR/linewidth
+scaling.
+
+### Use a custom metadata file
+
+To keep metadata elsewhere, specify its path explicitly:
+
+```bash
+mrsiprep-docker /path/to/bids /path/to/derivatives participant \
+  --metabolites CrPCr,GluGln --ref-met CrPCr \
+  --mrsinmrs-file /path/to/acquisition_metadata.json
+```
+
+The wrapper accepts a **host path** and mounts this file read-only. The
+Command builder exposes the same `--mrsinmrs-file` option. With plain
+Docker, mount the file yourself and pass its path inside the container.
+
+An explicit path overrides the default. If the selected file is missing,
+unreadable, malformed, or contains no acquisition metadata, MRSIPrep exits
+with a configuration error before processing. The same requirement applies
+to `--validate-only` and `--reports-only`. A BIDS-root `mrsinmrs.json` is
+not discovered automatically: move it into `mrsi-orig` or select it with
+`--mrsinmrs-file`. Informational commands such as `--help`, `--hello-world`,
+and `--list-presets` remain usable without a dataset.
+
+### Metadata structure and units
+
+Only `CommonMetadata` (an object) and `Recordings` (a list of objects) are
+accepted at the top level. Supply nonempty acquisition information in at
+least one of them; an empty JSON object is not a specification.
+For each recording, common fields are overlaid by the matching subject and
+session entry; a subject-only entry applies when no exact session entry
+matches. Additional acquisition fields are included in the report.
+
+TR is in **seconds**, flip angle in **degrees**, and field strength in
+**Tesla**. These three values become mandatory when T1 correction is
+enabled. `CommonMetadata.Nucleus` supplies the run-wide nucleus unless
+`--nucleus` overrides it; per-recording nucleus overrides do not change
+processing. See [Experimental features](future_development.md) for
+non-proton acquisitions and the T1 metadata whitelist.
+
+## Quantification tool conventions
+
+CRLB, SNR, and linewidth are not LCModel-specific; they are general outputs
+of spectral-fitting quantification, available (under varying names and
+scales) from most MRS/MRSI fitting tools. MRSIPrep's thresholds
+(`--crlb-max`, `--snr-min`, `--linewidth-max`) assume the LCModel
+convention: CRLB as a percentage of the fitted amplitude, SNR as peak
+height over residual-noise SD, and linewidth in Hz.
+
+Declaring the upstream tool with `--quantification-tool` (or
+`CommonMetadata.QuantificationTool` in `mrsinmrs.json`) is **required**.
+MRSIPrep raises a configuration error at startup if neither is given,
+rather than assuming a convention that may not match your maps.
+
+| Tool | CRLB scale/unit | SNR definition | FWHM/linewidth unit | MRSIPrep rescaling |
+|---|---|---|---|---|
+| `lcmodel` | % of fitted amplitude (`%SD`) | Peak height over residual-noise SD | Hz | Reference convention; none needed. |
+| `fsl-mrs` | % of fitted amplitude, by design matched to LCModel | Peak height over residual-noise SD, by design matched to LCModel | Hz | None needed; verified in FSL-MRS source as intentionally LCModel-equivalent. |
+| `osprey` | % of fitted amplitude, when using Osprey's LCModel-wrapper mode | LCModel's own value, when using Osprey's LCModel-wrapper mode | Hz, when using Osprey's LCModel-wrapper mode | None needed for the LCModel-wrapper path. Osprey's own native fitting engine was **not verified** against a primary source; use `custom` instead if you used that engine. |
+| `custom` | Not assumed | Not assumed | Not assumed | **None.** You are solely responsible for ensuring your maps already match the LCModel convention above before running MRSIPrep. |
+
+TARQUIN and jMRUI/AMARES are deliberately not listed as supported values:
+TARQUIN's documented SNR definition uses a different noise window and
+normalization than LCModel's, and does not document a CRLB-equivalent
+metabolite-level field at all; jMRUI/AMARES's own SNR definition could not
+be verified against a primary source. Rather than ship a guessed
+conversion factor, use `--quantification-tool custom` for these (or any
+other unlisted) tool and pre-convert your maps to the LCModel convention
+yourself.
+
+To add proper rescaling support for another tool instead of using
+`custom`, see [Adding a quantification-tool scaling](extending.md#adding-a-quantification-tool-scaling).
 
 ### Required quality maps versus inclusion thresholds
 
@@ -109,76 +234,6 @@ Use `--t1 acq-mprage_T1w` to select a filename substring, or use
 With the standard `/data` container mount, a filter saved at the BIDS root
 as `t1w_filter.json` is passed as `--bids-filter-file /data/t1w_filter.json`.
 The [CLI reference](cli_reference.md) describes supported filter entities.
-
-## Acquisition metadata: `mrsinmrs.json`
-
-MRSinMRS acquisition metadata is **required**. By default, place the file at
-**`derivatives/mrsi-orig/mrsinmrs.json`**, at the
-root of the MRSI input tree rather than the BIDS dataset root. It records
-acquisition information following the MRSinMRS reporting recommendations:
-
-Lin, A., Andronesi, O., Bogner, W., et al. (2021).
-[Minimum Reporting Standards for in vivo Magnetic Resonance Spectroscopy
-(MRSinMRS): Experts' consensus recommendations](https://doi.org/10.1002/nbm.4484).
-*NMR in Biomedicine*, **34**(5), e4484.
-
-The filename and JSON structure below are MRSIPrep conventions; the paper
-defines reporting recommendations, not this JSON schema. For example:
-
-```json
-{
-  "CommonMetadata": {
-    "Nucleus": "1H",
-    "RepetitionTime": 0.457,
-    "FlipAngle": 45,
-    "MagneticFieldStrength": 3,
-    "SequenceName": "ECCENTRIC"
-  },
-  "Recordings": [
-    {"sub": "01", "ses": "01", "RepetitionTime": 0.45}
-  ]
-}
-```
-
-These are example acquisition values; replace them with your protocol.
-
-### Use a custom metadata file
-
-To keep metadata elsewhere, specify its path explicitly:
-
-```bash
-mrsiprep-docker /path/to/bids /path/to/derivatives participant \
-  --metabolites CrPCr,GluGln --ref-met CrPCr \
-  --mrsinmrs-file /path/to/acquisition_metadata.json
-```
-
-The wrapper accepts a **host path** and mounts this file read-only. The
-Command builder exposes the same `--mrsinmrs-file` option. With plain
-Docker, mount the file yourself and pass its path inside the container.
-
-An explicit path overrides the default. If the selected file is missing,
-unreadable, malformed, or contains no acquisition metadata, MRSIPrep exits
-with a configuration error before processing. The same requirement applies
-to `--validate-only` and `--reports-only`. A BIDS-root `mrsinmrs.json` is
-not discovered automatically: move it into `mrsi-orig` or select it with
-`--mrsinmrs-file`. Informational commands such as `--help`, `--hello-world`,
-and `--list-presets` remain usable without a dataset.
-
-### Metadata structure and units
-
-Only `CommonMetadata` (an object) and `Recordings` (a list of objects) are
-accepted at the top level. Supply nonempty acquisition information in at
-least one of them; an empty JSON object is not a specification.
-For each recording, common fields are overlaid by the matching subject and
-session entry; a subject-only entry applies when no exact session entry
-matches. Additional acquisition fields are included in the report.
-
-TR is in **seconds**, flip angle in **degrees**, and field strength in
-**Tesla**. These three values become mandatory when T1 correction is
-enabled. `CommonMetadata.Nucleus` supplies the run-wide nucleus unless
-`--nucleus` overrides it; per-recording nucleus overrides do not change
-processing. See [Experimental features](future_development.md) for
-non-proton acquisitions and the T1 metadata whitelist.
 
 ## Existing tissue derivatives and import helpers
 

@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Quality metrics
+
+- Require the upstream quantification tool to be declared, via
+  `--quantification-tool` or `CommonMetadata.QuantificationTool` in
+  `mrsinmrs.json`. `lcmodel`, `fsl-mrs`, and `osprey` (LCModel-wrapper mode)
+  are verified to already match MRSIPrep's CRLB/SNR/linewidth convention;
+  `custom` performs no rescaling and leaves the user solely responsible.
+  See [Quantification tool conventions](inputs.md#quantification-tool-conventions).
+
 ## 2.1.0
 
 ### Acquisition metadata

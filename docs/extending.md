@@ -56,6 +56,58 @@ What this does *not* cover: if your nucleus needs a genuinely different
 Water-referencing in particular is still proton-shaped; `--t1-correction-water-status`
 assumes a ¹H water reference, and gating that per nucleus is not yet done.
 
+## Adding a quantification-tool scaling
+
+MRSIPrep's CRLB/SNR/linewidth thresholds assume the LCModel convention:
+CRLB as a percentage of the fitted amplitude, SNR as peak height over
+residual-noise SD, and linewidth in Hz (see
+[Quantification tool conventions](inputs.md#quantification-tool-conventions)).
+`--quantification-tool` is a small registry in
+`mrsiprep/mrsi/quantification_tools.py` mapping a tool name to three
+rescaling functions (`crlb_scale`, `snr_scale`, `linewidth_scale`), applied
+right before thresholding in `mrsiprep/mrsi/quality.py`.
+
+`lcmodel`, `fsl-mrs`, and `osprey` are all identity transforms today,
+because each was verified against a primary source (the tool's own manual
+or source code) to already match LCModel's convention. TARQUIN and
+jMRUI/AMARES are deliberately **not** registered: TARQUIN's documented SNR
+definition uses a different noise window/normalization and no documented
+CRLB-equivalent field, and jMRUI/AMARES's own SNR definition could not be
+verified from a primary source. Shipping a guessed conversion factor would
+silently misjudge voxel quality, which is worse than requiring `custom`
+and asking the user to pre-convert their maps.
+
+**1. Verify the tool's actual convention first**, from its own manual or
+source code, not a forum post or secondhand summary — the same standard
+used for the tools already registered. Note explicitly which of
+CRLB/SNR/linewidth need a real conversion versus already matching.
+
+**2. Add an entry to `_TOOLS` in `mrsiprep/mrsi/quantification_tools.py`:**
+
+```python
+"mytool": QuantificationToolSpec(
+    name="mytool",
+    display_name="MyTool",
+    crlb_scale=_identity,            # or a real conversion function
+    snr_scale=_my_snr_conversion,
+    linewidth_scale=_identity,
+    notes="Cite the manual/source confirming this convention, and what was converted.",
+),
+```
+
+A scaling function takes and returns a NumPy array (the raw map's voxel
+values); keep it a pure function of that array so it stays testable in
+isolation, the same shape as `_identity`.
+
+**3. Add `"mytool"` to `--quantification-tool`'s `choices`** in
+`mrsiprep/cli/parser.py` (built from `SUPPORTED_TOOLS`, so this is
+automatic) and extend the help text / `docs/inputs.md`'s table with the
+same CRLB/SNR/FWHM columns used for the existing tools.
+
+**4. Add a test** in `tests/test_quantification_tools.py`, covering both
+the registry entry and `resolve_quantification_tool` reading it from
+`mrsinmrs.json`.
+
 ## Adding a tissue-segmentation backend
 
 Backends live in a registry in `mrsiprep/workflows/tissue.py`:

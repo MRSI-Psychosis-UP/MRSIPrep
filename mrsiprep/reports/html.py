@@ -251,10 +251,12 @@ def _qc_threshold_note(config) -> str:
         if value is not None:
             parts.append(template.format(value))
     criteria = ", ".join(parts) if parts else "no per-voxel quality thresholds"
+    tool = getattr(config, "quantification_tool", None)
+    tool_note = f" Thresholds assume the {tool} convention for CRLB/SNR/linewidth." if tool else ""
     return (
         "<p><code>qc_valid_fraction</code> is the fraction of a parcel's MRSI voxels that passed "
         f"every per-voxel quality threshold in force for this run ({criteria}), averaged over "
-        "metabolites. Rows are ordered worst first.</p>"
+        f"metabolites. Rows are ordered worst first.{tool_note}</p>"
     )
 
 

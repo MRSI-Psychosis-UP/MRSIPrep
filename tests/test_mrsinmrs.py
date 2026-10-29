@@ -145,7 +145,7 @@ class RequiredMetadataCLITests(unittest.TestCase):
             root = Path(td)
             path = root / "derivatives" / "mrsi-orig" / "mrsinmrs.json"
             path.parent.mkdir(parents=True)
-            data = {"CommonMetadata": {"Nucleus": "1H", "SequenceName": "DefaultProtocol"}}
+            data = {"CommonMetadata": {"Nucleus": "1H", "SequenceName": "DefaultProtocol", "QuantificationTool": "lcmodel"}}
             path.write_text(json.dumps(data))
             config = parse_args(self._args(root))
             self.assertEqual(config.mrsinmrs, data)
@@ -158,7 +158,7 @@ class RequiredMetadataCLITests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             path = root / "old dataset metadata.json"
-            path.write_text(json.dumps({"CommonMetadata": {"Nucleus": "31P", "SequenceName": "CustomProtocol"}}))
+            path.write_text(json.dumps({"CommonMetadata": {"Nucleus": "31P", "SequenceName": "CustomProtocol", "QuantificationTool": "custom"}}))
             config = parse_args(self._args(root) + [
                 "--mrsinmrs-file", str(path), "--snr-min", "2", "--linewidth-max", "0.3", "--crlb-max", "50",
             ])

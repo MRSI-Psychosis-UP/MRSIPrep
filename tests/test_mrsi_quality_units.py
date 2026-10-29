@@ -32,6 +32,7 @@ def _config(root: Path, **overrides):
         snr_min=5.0,
         linewidth_max=0.1,
         crlb_max=20.0,
+        quantification_tool="lcmodel",
     )
     base.update(overrides)
     return SimpleNamespace(**base)

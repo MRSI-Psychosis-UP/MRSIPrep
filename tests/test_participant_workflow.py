@@ -13,7 +13,7 @@ from mrsiprep.workflows import participant as P
 _REQUIRED_ARGS = ["--metabolites", "CrPCr", "--ref-met", "CrPCr"]
 _METADATA_DIR = tempfile.TemporaryDirectory()
 _METADATA_PATH = Path(_METADATA_DIR.name) / "mrsinmrs.json"
-_METADATA_PATH.write_text(json.dumps({"CommonMetadata": {"Nucleus": "1H"}}))
+_METADATA_PATH.write_text(json.dumps({"CommonMetadata": {"Nucleus": "1H", "QuantificationTool": "lcmodel"}}))
 
 
 def tearDownModule():

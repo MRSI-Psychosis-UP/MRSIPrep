@@ -19,6 +19,7 @@ class MRSIPrepConfig:
     participants_file: Path | None = None
     bids_filter_file: Path | None = None
     mrsinmrs_file: Path | None = None
+    quantification_tool: str | None = None
     metabolites: list[str] | None = None
     quality_metrics: list[str] = field(default_factory=lambda: ["snr", "linewidth", "crlb"])
     # Acquired nucleus. None means "resolve it": --nucleus wins, else
@@ -147,6 +148,19 @@ class MRSIPrepConfig:
 
         if self.mrsinmrs is None:
             self.mrsinmrs = load_mrsinmrs(self.bids_dir, self.mrsinmrs_file)
+        self.require_quantification_tool()
+
+    def require_quantification_tool(self) -> None:
+        """Require the upstream quantification tool to be declared.
+
+        Resolved from --quantification-tool, else CommonMetadata's
+        "QuantificationTool" in mrsinmrs.json. Call require_mrsinmrs()
+        first (or ensure self.mrsinmrs is already loaded) so the
+        mrsinmrs.json fallback is available.
+        """
+        from mrsiprep.mrsi.quantification_tools import resolve_quantification_tool
+
+        self.quantification_tool = resolve_quantification_tool(self.quantification_tool, self.mrsinmrs)
 
     def _validate_enum_choices(self) -> None:
         if self.parcellation_mode not in {"synthseg", "chimera", "atlas"}:
