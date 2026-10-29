@@ -37,7 +37,7 @@ if [[ "$WATCH" -eq 1 ]]; then
   pip install -q sphinx-autobuild
   exec python -m sphinx_autobuild docs "$BUILD_DIR" \
     --port "$PORT" \
-    -- -W --keep-going
+    --jobs auto
 else
   python -m sphinx -b html -j auto -W --keep-going docs "$BUILD_DIR"
   echo "Built. Serving at http://127.0.0.1:$PORT"
