@@ -11,6 +11,7 @@ from pathlib import Path
 from mrsiprep.config.defaults import QUALITY_DEFAULTS
 from mrsiprep.config.nuclei import available_nuclei
 from mrsiprep.config.settings import MRSIPrepConfig
+from mrsiprep.mrsi.quantification_tools import SUPPORTED_CRLB_UNITS, SUPPORTED_LINEWIDTH_UNITS
 from mrsiprep.mrsi.quantification_tools import SUPPORTED_TOOLS as SUPPORTED_QUANTIFICATION_TOOLS
 
 PRESETS_DIR = Path(__file__).resolve().parent.parent / "config" / "presets"
@@ -75,6 +76,21 @@ def build_parser() -> argparse.ArgumentParser:
         "jMRUI, or Osprey's native fitting engine, whose conventions were not verified as equivalent) -- "
         "MRSIPrep performs no rescaling for 'custom', and you are solely responsible for ensuring your maps "
         "already match the expected convention before running MRSIPrep.",
+    )
+    quality.add_argument(
+        "--linewidth-unit",
+        choices=list(SUPPORTED_LINEWIDTH_UNITS),
+        default=None,
+        help="Unit the upstream tool's linewidth/FWHM map is stored in. Required: pass this explicitly, or "
+        "add \"LinewidthUnit\" to CommonMetadata in mrsinmrs.json. --linewidth-max is defined in Hz; 'ppm' "
+        "values are converted to Hz using CommonMetadata's MagneticFieldStrength before thresholding.",
+    )
+    quality.add_argument(
+        "--crlb-unit",
+        choices=list(SUPPORTED_CRLB_UNITS),
+        default=None,
+        help="Unit the upstream tool's CRLB map is stored in. Required: pass this explicitly, or add "
+        "\"CRLBUnit\" to CommonMetadata in mrsinmrs.json. --crlb-max is defined as a percentage.",
     )
     quality.add_argument(
         "--metabolites",
@@ -700,6 +716,8 @@ def parse_args(argv: list[str] | None = None) -> MRSIPrepConfig:
         bids_filter_file=args.bids_filter_file,
         mrsinmrs_file=args.mrsinmrs_file,
         quantification_tool=args.quantification_tool,
+        linewidth_unit=args.linewidth_unit,
+        crlb_unit=args.crlb_unit,
         metabolites=args.metabolites,
         quality_metrics=args.quality_metrics,
         nucleus=args.nucleus,

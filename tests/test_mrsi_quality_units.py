@@ -33,6 +33,9 @@ def _config(root: Path, **overrides):
         linewidth_max=0.1,
         crlb_max=20.0,
         quantification_tool="lcmodel",
+        linewidth_unit="Hz",
+        nucleus="1H",
+        mrsinmrs=None,
     )
     base.update(overrides)
     return SimpleNamespace(**base)

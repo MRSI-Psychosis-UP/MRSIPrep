@@ -7,9 +7,21 @@ from pathlib import Path
 import numpy as np
 
 from mrsiprep.io.naming import mrsi_derivative
-from mrsiprep.mrsi.quantification_tools import get_tool
+from mrsiprep.mrsi.quantification_tools import get_tool, normalize_linewidth_to_hz
 from mrsiprep.utils.images import load_3d_data, save_nifti
 from mrsiprep.utils.tables import write_tsv
+
+# Same key spellings as mrsiprep.mrsi.t1_correction._FIELD_KEYS (not imported
+# directly: that module's leading-underscore name is private to it).
+_FIELD_STRENGTH_KEYS = ("MagneticFieldStrength", "FieldStrength")
+
+
+def _field_strength(mrsinmrs: dict | None) -> float | None:
+    common = (mrsinmrs or {}).get("CommonMetadata") or {}
+    for key in _FIELD_STRENGTH_KEYS:
+        if key in common:
+            return float(common[key])
+    return None
 
 
 def make_quality_masks(config, subject: str, session: str | None, metabolite_maps: dict[str, Path], crlb_maps: dict[str, Path], snr_map: Path | None, linewidth_map: Path | None, brainmask: Path) -> tuple[dict[str, Path], Path]:
@@ -17,7 +29,10 @@ def make_quality_masks(config, subject: str, session: str | None, metabolite_map
     _, brain_data = load_3d_data(brainmask, dtype=np.float32, label="MRSI brain mask")
     brain = brain_data.astype(bool)
     snr = tool.snr_scale(load_3d_data(snr_map, dtype=np.float32, label="SNR map")[1]) if snr_map and snr_map.exists() else None
-    linewidth = tool.linewidth_scale(load_3d_data(linewidth_map, dtype=np.float32, label="linewidth map")[1]) if linewidth_map and linewidth_map.exists() else None
+    linewidth = None
+    if linewidth_map and linewidth_map.exists():
+        linewidth = tool.linewidth_scale(load_3d_data(linewidth_map, dtype=np.float32, label="linewidth map")[1])
+        linewidth = normalize_linewidth_to_hz(linewidth, config.linewidth_unit, config.nucleus, _field_strength(config.mrsinmrs))
     qcmasks: dict[str, Path] = {}
     rows = []
 

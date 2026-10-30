@@ -243,7 +243,7 @@ def _qc_threshold_note(config) -> str:
     for metric, attribute, template in (
         ("crlb", "crlb_max", "CRLB &le; {}%"),
         ("snr", "snr_min", "SNR &ge; {}"),
-        ("linewidth", "linewidth_max", "linewidth &le; {}"),
+        ("linewidth", "linewidth_max", "linewidth &le; {} Hz"),
     ):
         if applied and metric not in applied:
             continue
@@ -253,6 +253,9 @@ def _qc_threshold_note(config) -> str:
     criteria = ", ".join(parts) if parts else "no per-voxel quality thresholds"
     tool = getattr(config, "quantification_tool", None)
     tool_note = f" Thresholds assume the {tool} convention for CRLB/SNR/linewidth." if tool else ""
+    linewidth_unit = getattr(config, "linewidth_unit", None)
+    if linewidth_unit == "ppm":
+        tool_note += " The input linewidth map was declared in ppm and converted to Hz before thresholding."
     return (
         "<p><code>qc_valid_fraction</code> is the fraction of a parcel's MRSI voxels that passed "
         f"every per-voxel quality threshold in force for this run ({criteria}), averaged over "
