@@ -1,8 +1,8 @@
 {
-  "generated_at": "2026-09-09T13:35:49.492852+00:00",
-  "mrsiprep_version": "1.15.3",
+  "generated_at": "2026-10-30T08:37:13.458657+00:00",
+  "mrsiprep_version": "2.0.5",
   "python": "3.11.15 (main, Mar  3 2026, 09:26:23) [GCC 11.4.0]",
-  "platform": "Linux-7.0.0-30-generic-x86_64-with-glibc2.35",
+  "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.35",
   "config": {
     "bids_dir": "/data",
     "output_dir": "/out",
@@ -33,6 +33,7 @@
     "crlb_max": 20.0,
     "tissue_backend": "synthseg-fast",
     "registration_backend": "ants",
+    "correct_mrsi_orientation": false,
     "ants_mrsi_to_t1_transform": "sr",
     "ants_t1_to_template_transform": "s",
     "fsl_mrsi_to_t1_dof": 6,
@@ -50,10 +51,10 @@
     "space_resolutions": {
       "MNI152NLin2009cAsym": "origres"
     },
-    "registration_t1_target": "brain-csf",
+    "registration_t1_target": "brain",
     "csf_pv_threshold": 0.95,
-    "parcellation_mode": "chimera",
-    "synthseg_mode": "fast",
+    "parcellation_mode": "synthseg",
+    "synthseg_mode": "robust",
     "chimera_scheme": "LFMIHIFIFF",
     "chimera_scale": "3",
     "chimera_grow": "2",
@@ -69,7 +70,7 @@
     "connectivity_exclude_parcels": null,
     "connectivity_max_parcel_id": null,
     "regional_summary": "mean",
-    "nthreads": 12,
+    "nthreads": 16,
     "nproc": 1,
     "ref_met": "CrPCr",
     "t1_pattern": "acq-mprage_T1w",
@@ -109,9 +110,7 @@
     "N4BiasFieldCorrection": "/opt/ants/bin/N4BiasFieldCorrection",
     "mri_synthseg": "/opt/freesurfer/bin/mri_synthseg",
     "fast": "/opt/fsl/bin/fast",
-    "petpvc": "/opt/petpvc/bin/petpvc",
-    "chimera": "/usr/local/bin/chimera",
-    "recon-all": "/opt/freesurfer/bin/recon-all"
+    "petpvc": "/opt/petpvc/bin/petpvc"
   },
   "pipeline_trace": [
     {
@@ -176,9 +175,9 @@
     },
     {
       "step": "Parcellation (chimera/atlas)",
-      "ran": true,
-      "reason": "",
-      "status": "RAN"
+      "ran": false,
+      "reason": "parcellation_mode=synthseg, requires chimera or atlas",
+      "status": "SKIPPED"
     },
     {
       "step": "Regional metabolite extraction",
@@ -215,22 +214,22 @@
   "session": "01",
   "outputs": {
     "t1w": "/out/mrsiprep/sub-01/ses-01/anat/synthseg/sub-01_ses-01_space-T1w_desc-synthsegBrain_T1w.nii.gz",
-    "registration_t1w": "/out/mrsiprep/sub-01/ses-01/anat/synthseg/sub-01_ses-01_space-T1w_desc-brainCSF_T1w.nii.gz",
+    "registration_t1w": "/out/mrsiprep/sub-01/ses-01/anat/synthseg/sub-01_ses-01_space-T1w_desc-synthsegBrain_T1w.nii.gz",
     "mrsi_reference": "/out/mrsiprep/sub-01/ses-01/mrsi/orig/sub-01_ses-01_space-mrsi_desc-reference_mrsi.nii.gz",
     "qc_summary": "/out/mrsiprep/sub-01/ses-01/confounds/sub-01_ses-01_desc-mrsiqc.tsv",
     "parcel_qc": "/out/mrsiprep/sub-01/ses-01/anat/synthseg/sub-01_ses-01_atlas-synthseg_desc-parcelqc.tsv",
     "leakage_qc": "/out/mrsiprep/sub-01/ses-01/confounds/sub-01_ses-01_desc-leakageqc.tsv",
     "tissue_4d": "/out/work/sub-01/ses-01/pvc/sub-01_desc-4Dtissue_mrsi.nii.gz",
-    "atlas_mrsi": "/out/chimera-atlases/sub-01/ses-01/anat/sub-01_ses-01_space-mrsi_atlas-chimeraLFMIHIFIFF_scale-scale3_dseg.nii.gz",
-    "preliminary_atlas_mrsi": "/out/mrsiprep/sub-01/ses-01/anat/synthseg/sub-01_ses-01_space-mrsi_atlas-synthseg_desc-fastGMWM_dseg.nii.gz",
-    "regional_table": "/out/mrsiprep/sub-01/ses-01/anat/synthseg/sub-01_ses-01_space-mrsi_atlas-chimeraLFMIHIFIFF_scale-scale3_desc-regional_metabolites.tsv",
-    "metprofiles": "/out/mrsiprep/sub-01/ses-01/mrsi/parcel/sub-01_ses-01_atlas-chimeraLFMIHIFIFF_scalescale3_desc-GMmetprofiles_mrsi.npz",
+    "atlas_mrsi": "/out/mrsiprep/sub-01/ses-01/anat/synthseg/sub-01_ses-01_space-mrsi_atlas-synthseg_desc-robustGMWM_dseg.nii.gz",
+    "preliminary_atlas_mrsi": "/out/mrsiprep/sub-01/ses-01/anat/synthseg/sub-01_ses-01_space-mrsi_atlas-synthseg_desc-robustGMWM_dseg.nii.gz",
+    "regional_table": "/out/mrsiprep/sub-01/ses-01/anat/synthseg/sub-01_ses-01_space-mrsi_atlas-synthseg_desc-regional_metabolites.tsv",
+    "metprofiles": "/out/mrsiprep/sub-01/ses-01/mrsi/parcel/sub-01_ses-01_atlas-synthseg_desc-GMmetprofiles_mrsi.npz",
     "connectivity": {
-      "profiles": "/out/mrsiprep/sub-01/ses-01/connectivity/sub-01_ses-01_atlas-chimeraLFMIHIFIFF_scale3_npert-50_filt-biharmonic_pvcorr_GM_desc-metabolicprofiles_mrsi.npz",
-      "matrix_npz": "/out/mrsiprep/sub-01/ses-01/connectivity/sub-01_ses-01_atlas-chimeraLFMIHIFIFF_scale3_npert-50_filt-biharmonic_pvcorr_GM_desc-connectivity_mrsi.npz",
-      "matrix_tsv": "/out/mrsiprep/sub-01/ses-01/connectivity/sub-01_ses-01_atlas-chimeraLFMIHIFIFF_scale3_npert-50_filt-biharmonic_pvcorr_GM_desc-connectivity_mrsi.tsv",
-      "nodes": "/out/mrsiprep/sub-01/ses-01/connectivity/sub-01_ses-01_atlas-chimeraLFMIHIFIFF_scale3_npert-50_filt-biharmonic_pvcorr_GM_desc-nodes_mrsi.tsv",
-      "edges": "/out/mrsiprep/sub-01/ses-01/connectivity/sub-01_ses-01_atlas-chimeraLFMIHIFIFF_scale3_npert-50_filt-biharmonic_pvcorr_GM_desc-edges_mrsi.tsv"
+      "profiles": "/out/mrsiprep/sub-01/ses-01/connectivity/sub-01_ses-01_atlas-synthseg_npert-50_filt-biharmonic_pvcorr_GM_desc-metabolicprofiles_mrsi.npz",
+      "matrix_npz": "/out/mrsiprep/sub-01/ses-01/connectivity/sub-01_ses-01_atlas-synthseg_npert-50_filt-biharmonic_pvcorr_GM_desc-connectivity_mrsi.npz",
+      "matrix_tsv": "/out/mrsiprep/sub-01/ses-01/connectivity/sub-01_ses-01_atlas-synthseg_npert-50_filt-biharmonic_pvcorr_GM_desc-connectivity_mrsi.tsv",
+      "nodes": "/out/mrsiprep/sub-01/ses-01/connectivity/sub-01_ses-01_atlas-synthseg_npert-50_filt-biharmonic_pvcorr_GM_desc-nodes_mrsi.tsv",
+      "edges": "/out/mrsiprep/sub-01/ses-01/connectivity/sub-01_ses-01_atlas-synthseg_npert-50_filt-biharmonic_pvcorr_GM_desc-edges_mrsi.tsv"
     },
     "transformed_maps": {
       "MNI152NLin2009cAsym": {
@@ -250,19 +249,19 @@
     },
     "parcellations": [
       {
-        "id": "chimeraLFMIHIFIFF-scale3",
-        "atlas_name": "chimeraLFMIHIFIFF",
-        "scale": "scale3",
+        "id": "synthseg",
+        "atlas_name": "synthseg",
+        "scale": null,
         "grow": null,
-        "atlas_mrsi": "/out/chimera-atlases/sub-01/ses-01/anat/sub-01_ses-01_space-mrsi_atlas-chimeraLFMIHIFIFF_scale-scale3_dseg.nii.gz",
-        "regional_table": "/out/mrsiprep/sub-01/ses-01/anat/synthseg/sub-01_ses-01_space-mrsi_atlas-chimeraLFMIHIFIFF_scale-scale3_desc-regional_metabolites.tsv",
-        "metprofiles": "/out/mrsiprep/sub-01/ses-01/mrsi/parcel/sub-01_ses-01_atlas-chimeraLFMIHIFIFF_scalescale3_desc-GMmetprofiles_mrsi.npz",
+        "atlas_mrsi": "/out/mrsiprep/sub-01/ses-01/anat/synthseg/sub-01_ses-01_space-mrsi_atlas-synthseg_desc-robustGMWM_dseg.nii.gz",
+        "regional_table": "/out/mrsiprep/sub-01/ses-01/anat/synthseg/sub-01_ses-01_space-mrsi_atlas-synthseg_desc-regional_metabolites.tsv",
+        "metprofiles": "/out/mrsiprep/sub-01/ses-01/mrsi/parcel/sub-01_ses-01_atlas-synthseg_desc-GMmetprofiles_mrsi.npz",
         "connectivity": {
-          "profiles": "/out/mrsiprep/sub-01/ses-01/connectivity/sub-01_ses-01_atlas-chimeraLFMIHIFIFF_scale3_npert-50_filt-biharmonic_pvcorr_GM_desc-metabolicprofiles_mrsi.npz",
-          "matrix_npz": "/out/mrsiprep/sub-01/ses-01/connectivity/sub-01_ses-01_atlas-chimeraLFMIHIFIFF_scale3_npert-50_filt-biharmonic_pvcorr_GM_desc-connectivity_mrsi.npz",
-          "matrix_tsv": "/out/mrsiprep/sub-01/ses-01/connectivity/sub-01_ses-01_atlas-chimeraLFMIHIFIFF_scale3_npert-50_filt-biharmonic_pvcorr_GM_desc-connectivity_mrsi.tsv",
-          "nodes": "/out/mrsiprep/sub-01/ses-01/connectivity/sub-01_ses-01_atlas-chimeraLFMIHIFIFF_scale3_npert-50_filt-biharmonic_pvcorr_GM_desc-nodes_mrsi.tsv",
-          "edges": "/out/mrsiprep/sub-01/ses-01/connectivity/sub-01_ses-01_atlas-chimeraLFMIHIFIFF_scale3_npert-50_filt-biharmonic_pvcorr_GM_desc-edges_mrsi.tsv"
+          "profiles": "/out/mrsiprep/sub-01/ses-01/connectivity/sub-01_ses-01_atlas-synthseg_npert-50_filt-biharmonic_pvcorr_GM_desc-metabolicprofiles_mrsi.npz",
+          "matrix_npz": "/out/mrsiprep/sub-01/ses-01/connectivity/sub-01_ses-01_atlas-synthseg_npert-50_filt-biharmonic_pvcorr_GM_desc-connectivity_mrsi.npz",
+          "matrix_tsv": "/out/mrsiprep/sub-01/ses-01/connectivity/sub-01_ses-01_atlas-synthseg_npert-50_filt-biharmonic_pvcorr_GM_desc-connectivity_mrsi.tsv",
+          "nodes": "/out/mrsiprep/sub-01/ses-01/connectivity/sub-01_ses-01_atlas-synthseg_npert-50_filt-biharmonic_pvcorr_GM_desc-nodes_mrsi.tsv",
+          "edges": "/out/mrsiprep/sub-01/ses-01/connectivity/sub-01_ses-01_atlas-synthseg_npert-50_filt-biharmonic_pvcorr_GM_desc-edges_mrsi.tsv"
         }
       }
     ],

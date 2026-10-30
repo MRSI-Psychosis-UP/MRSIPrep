@@ -6,19 +6,11 @@ BIDS directory: `/data`
 
 Output directory: `/out/mrsiprep`
 
-Parcellation mode: `chimera`
+Parcellation mode: `synthseg`
 
 Tissue backend: `synthseg-fast`
 
-## MRSI Raw QC
-
-| metabolite | n_total_voxels | mean_snr | median_snr | mean_linewidth | median_linewidth | mean_crlb | median_crlb |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| NAANAAG | 20738 | 14.135942 | 15.0 | 0.038052 | 0.036 | 4.933007 | 4.0 |
-| GPCPCh | 20738 | 14.228251 | 15.0 | 0.037878 | 0.036 | 6.853189 | 6.0 |
-| CrPCr | 20738 | 14.257129 | 15.0 | 0.037799 | 0.036 | 6.431937 | 5.0 |
-| GluGln | 20738 | 14.345459 | 15.0 | 0.037970 | 0.036 | 11.069957 | 11.0 |
-| Ins | 20738 | 14.465190 | 15.0 | 0.037318 | 0.033 | 8.926435 | 8.0 |
+## MRSI Raw
 
 ### Raw metabolite maps (pre-pipeline)
 
@@ -42,17 +34,31 @@ Tissue backend: `synthseg-fast`
 
 ![figure](figures/sub-01_ses-01_step-mrsi-raw_met-NAANAAG_raw-slices.png)
 
-### Ventricle visibility (pre-coregistration)
+## MRSI Raw QC
+
+| metabolite | n_total_voxels | mean_snr | median_snr | mean_linewidth | median_linewidth | mean_crlb | median_crlb |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| NAANAAG | 20738 | 14.135942 | 15.0 | 0.038052 | 0.036 | 4.933007 | 4.0 |
+| GPCPCh | 20738 | 14.228251 | 15.0 | 0.037878 | 0.036 | 6.853189 | 6.0 |
+| CrPCr | 20738 | 14.257129 | 15.0 | 0.037799 | 0.036 | 6.431937 | 5.0 |
+| GluGln | 20738 | 14.345459 | 15.0 | 0.037970 | 0.036 | 11.069957 | 11.0 |
+| Ins | 20738 | 14.465190 | 15.0 | 0.037318 | 0.033 | 8.926435 | 8.0 |
+
+### Ventricle visibility
 
 detected ventricleMNI priornative MRSI space, pre-coregistration · all metabolites at z=10
 
 ![figure](figures/sub-01_ses-01_step-mrsi-raw_ventricle-qc.png)
 
+**Dice with the subject's lateral ventricles** · median 0.15 (SynthSeg, moved to MRSI space by the MRSI→T1w transform; green from 0.15)
+
+![figure](figures/sub-01_ses-01_step-mrsi-raw_ventricle-dice.png)
+
 ## MRSI PVC
 
 ### Partial-volume correction
 
-Partial-volume-corrected metabolite maps, on the native MRSI grid, at the same slices as the MRSI Raw QC tab so the two can be compared directly.
+Partial-volume-corrected metabolite maps, on the native MRSI grid, at the same slices as the MRSI Raw tab so the two can be compared directly.
 
 ### Metabolite: CrPCr
 
@@ -78,8 +84,6 @@ Partial-volume-corrected metabolite maps, on the native MRSI grid, at the same s
 
 ### Filtering summary
 
-Slices centered on the centroid of all voxels repaired by spike/missing-voxel filtering, across all metabolites.
-
 | Metabolite | Spike voxels detected |
 | --- | --- |
 | NAANAAG | 0 |
@@ -92,13 +96,9 @@ Slices centered on the centroid of all voxels repaired by spike/missing-voxel fi
 
 Spike voxels detected: 0
 
-### Before
+Hover over the figure to flip between before and after spike filtering.
 
-![figure](figures/sub-01_ses-01_step-mrsi-preproc_met-NAANAAG_before.png)
-
-### After
-
-![figure](figures/sub-01_ses-01_step-mrsi-preproc_met-NAANAAG_after.png)
+![figure](figures/sub-01_ses-01_step-mrsi-preproc_met-NAANAAG_spikefilt.svg)
 
 #### Whole image
 
@@ -112,13 +112,9 @@ Spike voxels detected: 0
 
 Spike voxels detected: 0
 
-### Before
+Hover over the figure to flip between before and after spike filtering.
 
-![figure](figures/sub-01_ses-01_step-mrsi-preproc_met-GPCPCh_before.png)
-
-### After
-
-![figure](figures/sub-01_ses-01_step-mrsi-preproc_met-GPCPCh_after.png)
+![figure](figures/sub-01_ses-01_step-mrsi-preproc_met-GPCPCh_spikefilt.svg)
 
 #### Whole image
 
@@ -132,13 +128,9 @@ Spike voxels detected: 0
 
 Spike voxels detected: 7
 
-### Before
+Hover over the figure to flip between before and after spike filtering.
 
-![figure](figures/sub-01_ses-01_step-mrsi-preproc_met-CrPCr_before.png)
-
-### After
-
-![figure](figures/sub-01_ses-01_step-mrsi-preproc_met-CrPCr_after.png)
+![figure](figures/sub-01_ses-01_step-mrsi-preproc_met-CrPCr_spikefilt.svg)
 
 #### Whole image
 
@@ -152,13 +144,9 @@ Spike voxels detected: 7
 
 Spike voxels detected: 25
 
-### Before
+Hover over the figure to flip between before and after spike filtering.
 
-![figure](figures/sub-01_ses-01_step-mrsi-preproc_met-GluGln_before.png)
-
-### After
-
-![figure](figures/sub-01_ses-01_step-mrsi-preproc_met-GluGln_after.png)
+![figure](figures/sub-01_ses-01_step-mrsi-preproc_met-GluGln_spikefilt.svg)
 
 #### Whole image
 
@@ -172,13 +160,9 @@ Spike voxels detected: 25
 
 Spike voxels detected: 20
 
-### Before
+Hover over the figure to flip between before and after spike filtering.
 
-![figure](figures/sub-01_ses-01_step-mrsi-preproc_met-Ins_before.png)
-
-### After
-
-![figure](figures/sub-01_ses-01_step-mrsi-preproc_met-Ins_after.png)
+![figure](figures/sub-01_ses-01_step-mrsi-preproc_met-Ins_spikefilt.svg)
 
 #### Whole image
 
@@ -212,9 +196,9 @@ Spike voxels detected: 20
 
 ### T1w-space alignment
 
-Reference metabolite map (`CrPCr`) overlaid on raw T1w.
+Reference metabolite map (`CrPCr`) overlaid on raw T1w, with the white-matter boundary in green. Hover over the figure to flip between the two.
 
-![figure](figures/sub-01_ses-01_step-registration_space-T1w.png)
+![figure](figures/sub-01_ses-01_step-registration_space-T1w.svg)
 
 ### Signal-weighted leakage
 
@@ -224,188 +208,184 @@ Not computed: T1w-space leakage requires the full T1w-space resampled metabolite
 
 ### Template-space alignment
 
-Reference metabolite map (`CrPCr`) overlaid on the full-head `MNI152NLin2009cAsym` template at 5 mm.
+Reference metabolite map (`CrPCr`) overlaid on the full-head `MNI152NLin2009cAsym` template at 5 mm, with the white-matter boundary in green. Hover over the figure to flip between the two.
 
-![figure](figures/sub-01_ses-01_step-registration_space-MNI.png)
+![figure](figures/sub-01_ses-01_step-registration_space-MNI.svg)
 
 ### Signal-weighted leakage
 
 | metabolite | n_quality_voxels | total_signal_mass | leakage_signal_mass | leakage_fraction | leakage_percent |
 | --- | --- | --- | --- | --- | --- |
-| CrPCr | 73752 | 15010842.000 | 89485.297 | 0.006 | 0.596 |
-| GPCPCh | 73875 | 4183460.750 | 29170.521 | 0.007 | 0.697 |
-| GluGln | 73625 | 20428784.000 | 147303.656 | 0.007 | 0.721 |
-| Ins | 73403 | 12725528.000 | 87774.406 | 0.007 | 0.690 |
-| NAANAAG | 74278 | 23589286.000 | 149212.031 | 0.006 | 0.633 |
+| CrPCr | 73723 | 15157284.000 | 77581.797 | 0.005 | 0.512 |
+| GPCPCh | 73883 | 4231608.500 | 25804.670 | 0.006 | 0.610 |
+| GluGln | 73608 | 20610924.000 | 127430.555 | 0.006 | 0.618 |
+| Ins | 73366 | 12834889.000 | 76472.367 | 0.006 | 0.596 |
+| NAANAAG | 74263 | 23854156.000 | 131025.789 | 0.005 | 0.549 |
 
 ## Coverage
 
 ### MRSI anatomical coverage
 
-![parcelwise coverage](figures/sub-01_ses-01_desc-parcelcoverage.png)
+![figure](figures/sub-01_ses-01_desc-parcelcoverage.png)
 
 ### Parcelwise CRLB quality (green reliable / red unreliable)
 
-![sub-01_ses-01_desc-parcelcrlbquality](figures/sub-01_ses-01_desc-parcelcrlbquality.png)
+![figure](figures/sub-01_ses-01_desc-parcelcrlbquality.png)
 
 `qc_valid_fraction` is the fraction of a parcel's MRSI voxels that passed every per-voxel quality threshold in force for this run (CRLB ≤ 20.0%, SNR ≥ 4.0, linewidth ≤ 0.1), averaged over metabolites. Rows are ordered worst first.
 
 | parcel_id | parcel_name | hemisphere | mean_crlb | qc_valid_fraction |
 | --- | --- | --- | --- | --- |
-| 2006 | ctx-rh-entorhinal | R | 26.900 | 0.000 |
-| 2032 | ctx-rh-frontalpole | R | 417.267 | 0.143 |
-| 1006 | ctx-lh-entorhinal | L | 163.415 | 0.169 |
-| 46 | Right-Cerebellum-White-Matter | R | 16.588 | 0.274 |
-| 2033 | ctx-rh-temporalpole | R | 155.200 | 0.329 |
-| 1033 | ctx-lh-temporalpole | L | 119.692 | 0.338 |
-| 18 | Left-Amygdala | L | 22.000 | 0.345 |
-| 47 | Right-Cerebellum-Cortex | R | 31.257 | 0.367 |
-| 7 | Left-Cerebellum-White-Matter | L | 13.315 | 0.390 |
-| 8 | Left-Cerebellum-Cortex | L | 14.707 | 0.422 |
-| 2019 | ctx-rh-parsorbitalis | R | 28.176 | 0.459 |
-| 1009 | ctx-lh-inferiortemporal | L | 35.404 | 0.466 |
-| 1032 | ctx-lh-frontalpole | L | 115.267 | 0.467 |
-| 16 | Brain-Stem | NaN | 17.059 | 0.512 |
-| 2011 | ctx-rh-lateraloccipital | R | 7.023 | 0.564 |
-| 1027 | ctx-lh-rostralmiddlefrontal | L | 8.116 | 0.570 |
-| 26 | Left-Accumbens-area | L | 89.433 | 0.633 |
-| 1011 | ctx-lh-lateraloccipital | L | 7.805 | 0.655 |
-| 2027 | ctx-rh-rostralmiddlefrontal | R | 15.281 | 0.686 |
-| 2009 | ctx-rh-inferiortemporal | R | 28.685 | 0.737 |
-| 1003 | ctx-lh-caudalmiddlefrontal | L | 6.733 | 0.750 |
-| 1015 | ctx-lh-middletemporal | L | 24.200 | 0.759 |
-| 1007 | ctx-lh-fusiform | L | 24.515 | 0.775 |
-| 1012 | ctx-lh-lateralorbitofrontal | L | 15.264 | 0.783 |
-| 2012 | ctx-rh-lateralorbitofrontal | R | 22.735 | 0.796 |
-| 17 | Left-Hippocampus | L | 27.143 | 0.814 |
-| 2026 | ctx-rh-rostralanteriorcingulate | R | 13.333 | 0.833 |
-| 1028 | ctx-lh-superiorfrontal | L | 7.959 | 0.842 |
-| 1016 | ctx-lh-parahippocampal | L | 12.114 | 0.843 |
-| 60 | Right-VentralDC | R | 11.329 | 0.858 |
-| 1022 | ctx-lh-postcentral | L | 6.559 | 0.863 |
-| 53 | Right-Hippocampus | R | 27.496 | 0.864 |
-| 1026 | ctx-lh-rostralanteriorcingulate | L | 29.400 | 0.873 |
-| 54 | Right-Amygdala | R | 11.675 | 0.875 |
-| 2007 | ctx-rh-fusiform | R | 17.431 | 0.897 |
-| 1014 | ctx-lh-medialorbitofrontal | L | 24.898 | 0.902 |
-| 1031 | ctx-lh-supramarginal | L | 6.697 | 0.904 |
-| 50 | Right-Caudate | R | 10.030 | 0.910 |
-| 11 | Left-Caudate | L | 10.021 | 0.916 |
-| 2003 | ctx-rh-caudalmiddlefrontal | R | 7.645 | 0.917 |
-| 2002 | ctx-rh-caudalanteriorcingulate | R | 11.283 | 0.917 |
-| 2014 | ctx-rh-medialorbitofrontal | R | 15.082 | 0.918 |
-| 2020 | ctx-rh-parstriangularis | R | 9.707 | 0.919 |
-| 13 | Left-Pallidum | L | 11.500 | 0.920 |
-| 1019 | ctx-lh-parsorbitalis | L | 7.117 | 0.923 |
-| 1013 | ctx-lh-lingual | L | 7.418 | 0.925 |
-| 2028 | ctx-rh-superiorfrontal | R | 7.425 | 0.926 |
-| 2022 | ctx-rh-postcentral | R | 6.719 | 0.929 |
-| 2024 | ctx-rh-precentral | R | 6.782 | 0.931 |
-| 2031 | ctx-rh-supramarginal | R | 6.269 | 0.931 |
-| 12 | Left-Putamen | L | 8.051 | 0.937 |
-| 28 | Left-VentralDC | L | 13.208 | 0.938 |
-| 2029 | ctx-rh-superiorparietal | R | 6.944 | 0.939 |
-| 2015 | ctx-rh-middletemporal | R | 8.852 | 0.950 |
-| 1024 | ctx-lh-precentral | L | 7.028 | 0.950 |
-| 58 | Right-Accumbens-area | R | 14.400 | 0.950 |
-| 1029 | ctx-lh-superiorparietal | L | 6.952 | 0.951 |
-| 1008 | ctx-lh-inferiorparietal | L | 7.000 | 0.952 |
-| 2 | Left-Cerebral-White-Matter | L | 9.650 | 0.953 |
-| 1002 | ctx-lh-caudalanteriorcingulate | L | 9.525 | 0.958 |
-| 1030 | ctx-lh-superiortemporal | L | 7.745 | 0.960 |
-| 2013 | ctx-rh-lingual | R | 7.119 | 0.964 |
-| 1017 | ctx-lh-paracentral | L | 7.353 | 0.967 |
-| 1035 | ctx-lh-insula | L | 7.156 | 0.968 |
-| 2017 | ctx-rh-paracentral | R | 7.119 | 0.969 |
-| 2016 | ctx-rh-parahippocampal | R | 8.886 | 0.971 |
-| 41 | Right-Cerebral-White-Matter | R | 8.019 | 0.972 |
-| 2035 | ctx-rh-insula | R | 7.508 | 0.973 |
-| 51 | Right-Putamen | R | 7.677 | 0.974 |
-| 1018 | ctx-lh-parsopercularis | L | 7.141 | 0.976 |
+| 1006 | ctx-lh-entorhinal | L | 112.650 | 0.150 |
+| 46 | Right-Cerebellum-White-Matter | R | 22.233 | 0.270 |
+| 18 | Left-Amygdala | L | 21.673 | 0.273 |
+| 1032 | ctx-lh-frontalpole | L | 161.900 | 0.289 |
+| 2006 | ctx-rh-entorhinal | R | 41.380 | 0.300 |
+| 2032 | ctx-rh-frontalpole | R | 317.525 | 0.311 |
+| 7 | Left-Cerebellum-White-Matter | L | 13.242 | 0.329 |
+| 1033 | ctx-lh-temporalpole | L | 101.237 | 0.388 |
+| 47 | Right-Cerebellum-Cortex | R | 29.372 | 0.405 |
+| 1009 | ctx-lh-inferiortemporal | L | 37.039 | 0.422 |
+| 8 | Left-Cerebellum-Cortex | L | 16.590 | 0.437 |
+| 2033 | ctx-rh-temporalpole | R | 122.071 | 0.486 |
+| 16 | Brain-Stem | NaN | 16.152 | 0.551 |
+| 2019 | ctx-rh-parsorbitalis | R | 41.533 | 0.560 |
+| 26 | Left-Accumbens-area | L | 94.300 | 0.567 |
+| 1011 | ctx-lh-lateraloccipital | L | 8.468 | 0.578 |
+| 1027 | ctx-lh-rostralmiddlefrontal | L | 8.896 | 0.639 |
+| 2027 | ctx-rh-rostralmiddlefrontal | R | 24.775 | 0.690 |
+| 2009 | ctx-rh-inferiortemporal | R | 42.380 | 0.705 |
+| 1015 | ctx-lh-middletemporal | L | 21.457 | 0.705 |
+| 2011 | ctx-rh-lateraloccipital | R | 7.613 | 0.731 |
+| 58 | Right-Accumbens-area | R | 17.200 | 0.733 |
+| 1007 | ctx-lh-fusiform | L | 33.067 | 0.756 |
+| 2012 | ctx-rh-lateralorbitofrontal | R | 27.377 | 0.765 |
+| 2002 | ctx-rh-caudalanteriorcingulate | R | 14.181 | 0.790 |
+| 1012 | ctx-lh-lateralorbitofrontal | L | 23.344 | 0.808 |
+| 1019 | ctx-lh-parsorbitalis | L | 11.787 | 0.812 |
+| 1031 | ctx-lh-supramarginal | L | 6.535 | 0.816 |
+| 17 | Left-Hippocampus | L | 12.923 | 0.838 |
+| 1022 | ctx-lh-postcentral | L | 6.697 | 0.857 |
+| 1028 | ctx-lh-superiorfrontal | L | 7.874 | 0.858 |
+| 60 | Right-VentralDC | R | 10.807 | 0.869 |
+| 1016 | ctx-lh-parahippocampal | L | 12.118 | 0.871 |
+| 1003 | ctx-lh-caudalmiddlefrontal | L | 6.991 | 0.880 |
+| 1002 | ctx-lh-caudalanteriorcingulate | L | 11.558 | 0.883 |
+| 2014 | ctx-rh-medialorbitofrontal | R | 15.297 | 0.892 |
+| 1029 | ctx-lh-superiorparietal | L | 6.991 | 0.896 |
+| 11 | Left-Caudate | L | 9.455 | 0.897 |
+| 54 | Right-Amygdala | R | 10.483 | 0.900 |
+| 1014 | ctx-lh-medialorbitofrontal | L | 19.058 | 0.902 |
+| 13 | Left-Pallidum | L | 10.956 | 0.911 |
+| 2007 | ctx-rh-fusiform | R | 15.569 | 0.913 |
+| 1008 | ctx-lh-inferiorparietal | L | 7.046 | 0.920 |
+| 2029 | ctx-rh-superiorparietal | R | 6.856 | 0.920 |
+| 53 | Right-Hippocampus | R | 10.333 | 0.924 |
+| 1030 | ctx-lh-superiortemporal | L | 7.635 | 0.926 |
+| 12 | Left-Putamen | L | 8.739 | 0.928 |
+| 2026 | ctx-rh-rostralanteriorcingulate | R | 11.872 | 0.928 |
+| 2016 | ctx-rh-parahippocampal | R | 10.188 | 0.929 |
+| 2028 | ctx-rh-superiorfrontal | R | 7.397 | 0.930 |
+| 2003 | ctx-rh-caudalmiddlefrontal | R | 7.837 | 0.931 |
+| 2015 | ctx-rh-middletemporal | R | 14.442 | 0.933 |
+| 2031 | ctx-rh-supramarginal | R | 6.279 | 0.934 |
+| 50 | Right-Caudate | R | 9.443 | 0.935 |
+| 28 | Left-VentralDC | L | 12.368 | 0.936 |
+| 1024 | ctx-lh-precentral | L | 7.056 | 0.943 |
+| 2035 | ctx-rh-insula | R | 7.328 | 0.947 |
+| 2 | Left-Cerebral-White-Matter | L | 9.903 | 0.953 |
+| 2024 | ctx-rh-precentral | R | 6.865 | 0.955 |
+| 1026 | ctx-lh-rostralanteriorcingulate | L | 10.450 | 0.957 |
+| 1035 | ctx-lh-insula | L | 7.397 | 0.965 |
+| 2017 | ctx-rh-paracentral | R | 7.300 | 0.967 |
+| 2022 | ctx-rh-postcentral | R | 6.707 | 0.967 |
+| 2030 | ctx-rh-superiortemporal | R | 6.940 | 0.972 |
+| 2020 | ctx-rh-parstriangularis | R | 9.964 | 0.973 |
+| 1017 | ctx-lh-paracentral | L | 7.351 | 0.973 |
+| 41 | Right-Cerebral-White-Matter | R | 7.787 | 0.977 |
 | 52 | Right-Pallidum | R | 9.667 | 0.978 |
-| 1025 | ctx-lh-precuneus | L | 6.205 | 0.984 |
-| 1020 | ctx-lh-parstriangularis | L | 7.825 | 0.992 |
-| 10 | Left-Thalamus | L | 7.504 | 0.992 |
-| 49 | Right-Thalamus | R | 6.950 | 0.996 |
-| 2030 | ctx-rh-superiortemporal | R | 6.786 | 0.997 |
-| 2008 | ctx-rh-inferiorparietal | R | 6.339 | 0.998 |
-| 1001 | ctx-lh-bankssts | L | 5.788 | 1.000 |
-| 1005 | ctx-lh-cuneus | L | 6.938 | 1.000 |
-| 1010 | ctx-lh-isthmuscingulate | L | 5.848 | 1.000 |
-| 2005 | ctx-rh-cuneus | R | 6.965 | 1.000 |
-| 2001 | ctx-rh-bankssts | R | 6.306 | 1.000 |
-| 1034 | ctx-lh-transversetemporal | L | 6.000 | 1.000 |
-| 1023 | ctx-lh-posteriorcingulate | L | 5.933 | 1.000 |
-| 1021 | ctx-lh-pericalcarine | L | 7.600 | 1.000 |
-| 2021 | ctx-rh-pericalcarine | R | 6.073 | 1.000 |
-| 2018 | ctx-rh-parsopercularis | R | 7.993 | 1.000 |
-| 2010 | ctx-rh-isthmuscingulate | R | 5.985 | 1.000 |
-| 2023 | ctx-rh-posteriorcingulate | R | 5.936 | 1.000 |
-| 2025 | ctx-rh-precuneus | R | 5.789 | 1.000 |
-| 2034 | ctx-rh-transversetemporal | R | 5.691 | 1.000 |
+| 1013 | ctx-lh-lingual | L | 6.558 | 0.984 |
+| 51 | Right-Putamen | R | 7.344 | 0.989 |
+| 1018 | ctx-lh-parsopercularis | L | 7.663 | 0.990 |
+| 10 | Left-Thalamus | L | 7.531 | 0.993 |
+| 1020 | ctx-lh-parstriangularis | L | 8.022 | 0.994 |
+| 2013 | ctx-rh-lingual | R | 6.992 | 0.996 |
+| 49 | Right-Thalamus | R | 6.957 | 0.997 |
+| 1025 | ctx-lh-precuneus | L | 5.997 | 0.997 |
+| 1001 | ctx-lh-bankssts | L | 6.062 | 1.000 |
+| 1023 | ctx-lh-posteriorcingulate | L | 6.032 | 1.000 |
+| 1005 | ctx-lh-cuneus | L | 6.712 | 1.000 |
+| 1010 | ctx-lh-isthmuscingulate | L | 5.926 | 1.000 |
+| 2008 | ctx-rh-inferiorparietal | R | 6.301 | 1.000 |
+| 2005 | ctx-rh-cuneus | R | 6.538 | 1.000 |
+| 2001 | ctx-rh-bankssts | R | 6.214 | 1.000 |
+| 1034 | ctx-lh-transversetemporal | L | 5.911 | 1.000 |
+| 1021 | ctx-lh-pericalcarine | L | 7.150 | 1.000 |
+| 2021 | ctx-rh-pericalcarine | R | 6.200 | 1.000 |
+| 2018 | ctx-rh-parsopercularis | R | 7.855 | 1.000 |
+| 2010 | ctx-rh-isthmuscingulate | R | 5.882 | 1.000 |
+| 2023 | ctx-rh-posteriorcingulate | R | 6.000 | 1.000 |
+| 2025 | ctx-rh-precuneus | R | 5.816 | 1.000 |
+| 2034 | ctx-rh-transversetemporal | R | 5.717 | 1.000 |
 
 ## Parcellation
 
-### Parcellation outlines (T1w space)
+Not available for this configuration.
 
-506 regions.
-
-![figure](figures/sub-01_ses-01_step-parcellation_outlines.png)
-
-### Regional metabolites: chimeraLFMIHIFIFF-scale3
+### Regional metabolites: synthseg
 
 | subject | session | atlas | scale | parcel_id | parcel_name | hemisphere | metabolite | mean | median | std | weighted_mean | n_voxels | coverage | mean_snr | mean_linewidth | mean_crlb | mean_gm_fraction | mean_wm_fraction | mean_csf_fraction |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| sub-01 | ses-01 | chimeraLFMIHIFIFF | scale3 | 1 | ctx-rh-lateralorbitofrontal_1 | R | NAANAAG | 630.298828 | 456.964752 | 546.460449 | 680.328247 | 17 | 0.894737 | 9.647058 | 0.049353 | 5.823529 | 0.766510 | 0.074869 | 0.158621 |
-| sub-01 | ses-01 | chimeraLFMIHIFIFF | scale3 | 1 | ctx-rh-lateralorbitofrontal_1 | R | GPCPCh | 195.250153 | 170.521088 | 81.458519 | 198.512375 | 16 | 0.842105 | 9.937500 | 0.050000 | 7.750000 | 0.794849 | 0.079548 | 0.125603 |
-| sub-01 | ses-01 | chimeraLFMIHIFIFF | scale3 | 1 | ctx-rh-lateralorbitofrontal_1 | R | CrPCr | 518.341553 | 445.490265 | 272.058136 | 537.645020 | 17 | 0.894737 | 9.647058 | 0.049353 | 7.882353 | 0.766510 | 0.074869 | 0.158621 |
-| sub-01 | ses-01 | chimeraLFMIHIFIFF | scale3 | 1 | ctx-rh-lateralorbitofrontal_1 | R | GluGln | 699.686279 | 621.933167 | 331.352112 | 733.446777 | 16 | 0.842105 | 9.875000 | 0.049125 | 11.875000 | 0.771795 | 0.079548 | 0.148657 |
-| sub-01 | ses-01 | chimeraLFMIHIFIFF | scale3 | 1 | ctx-rh-lateralorbitofrontal_1 | R | Ins | 473.752930 | 422.292358 | 230.733734 | 483.350494 | 14 | 0.736842 | 10.428572 | 0.048714 | 13.642858 | 0.788276 | 0.090894 | 0.120830 |
-| sub-01 | ses-01 | chimeraLFMIHIFIFF | scale3 | 2 | ctx-rh-lateralorbitofrontal_2 | R | NAANAAG | 1244.026001 | 1067.720703 | 542.604065 | 1335.750244 | 16 | 0.888889 | 10.562500 | 0.051312 | 6.312500 | 0.700640 | 0.108193 | 0.191166 |
-| sub-01 | ses-01 | chimeraLFMIHIFIFF | scale3 | 2 | ctx-rh-lateralorbitofrontal_2 | R | GPCPCh | 300.121735 | 282.140564 | 91.731735 | 315.977356 | 16 | 0.888889 | 10.562500 | 0.051312 | 8.125000 | 0.700640 | 0.108193 | 0.191166 |
-| sub-01 | ses-01 | chimeraLFMIHIFIFF | scale3 | 2 | ctx-rh-lateralorbitofrontal_2 | R | CrPCr | 967.416504 | 927.080566 | 336.448059 | 1028.187012 | 16 | 0.888889 | 10.562500 | 0.051312 | 8.812500 | 0.700640 | 0.108193 | 0.191166 |
-| sub-01 | ses-01 | chimeraLFMIHIFIFF | scale3 | 2 | ctx-rh-lateralorbitofrontal_2 | R | GluGln | 1381.926025 | 1334.387939 | 487.172699 | 1472.389282 | 16 | 0.888889 | 10.562500 | 0.051312 | 11.062500 | 0.700640 | 0.108193 | 0.191166 |
-| sub-01 | ses-01 | chimeraLFMIHIFIFF | scale3 | 2 | ctx-rh-lateralorbitofrontal_2 | R | Ins | 815.326965 | 792.523193 | 253.972672 | 861.919556 | 16 | 0.888889 | 10.562500 | 0.051312 | 13.187500 | 0.700640 | 0.108193 | 0.191166 |
-| sub-01 | ses-01 | chimeraLFMIHIFIFF | scale3 | 3 | ctx-rh-lateralorbitofrontal_3 | R | NAANAAG | 621.122253 | 257.051270 | 569.969116 | 534.009705 | 3 | 0.333333 | 7.333333 | 0.045667 | 8.333333 | 0.430462 | 0.000000 | 0.517863 |
-| sub-01 | ses-01 | chimeraLFMIHIFIFF | scale3 | 3 | ctx-rh-lateralorbitofrontal_3 | R | GPCPCh | 192.981369 | 102.995895 | 135.896729 | 173.323288 | 3 | 0.333333 | 7.333333 | 0.045667 | 10.333333 | 0.430462 | 0.000000 | 0.517863 |
-| sub-01 | ses-01 | chimeraLFMIHIFIFF | scale3 | 3 | ctx-rh-lateralorbitofrontal_3 | R | CrPCr | 697.192932 | 697.192932 | 477.786407 | 537.930786 | 2 | 0.222222 | 9.000000 | 0.047500 | 5.500000 | 0.601327 | 0.000000 | 0.321161 |
-| sub-01 | ses-01 | chimeraLFMIHIFIFF | scale3 | 3 | ctx-rh-lateralorbitofrontal_3 | R | GluGln | 806.283264 | 486.878296 | 480.235504 | 737.313232 | 3 | 0.333333 | 7.333333 | 0.045667 | 11.666667 | 0.430462 | 0.000000 | 0.517863 |
-| sub-01 | ses-01 | chimeraLFMIHIFIFF | scale3 | 3 | ctx-rh-lateralorbitofrontal_3 | R | Ins | 542.843933 | 542.843933 | 374.277527 | 418.084747 | 2 | 0.222222 | 9.000000 | 0.047500 | 12.500000 | 0.601327 | 0.000000 | 0.321161 |
-| sub-01 | ses-01 | chimeraLFMIHIFIFF | scale3 | 4 | ctx-rh-lateralorbitofrontal_4 | R | NAANAAG | 734.847595 | 637.379211 | 411.958191 | 742.525391 | 6 | 0.857143 | 11.166667 | 0.040500 | 4.500000 | 0.745394 | 0.003725 | 0.240836 |
-| sub-01 | ses-01 | chimeraLFMIHIFIFF | scale3 | 4 | ctx-rh-lateralorbitofrontal_4 | R | GPCPCh | 206.235001 | 199.953369 | 88.023026 | 209.678482 | 6 | 0.857143 | 11.166667 | 0.040500 | 6.666667 | 0.745394 | 0.003725 | 0.240836 |
-| sub-01 | ses-01 | chimeraLFMIHIFIFF | scale3 | 4 | ctx-rh-lateralorbitofrontal_4 | R | CrPCr | 636.945801 | 601.967957 | 308.103729 | 649.978760 | 6 | 0.857143 | 11.166667 | 0.040500 | 6.333333 | 0.745394 | 0.003725 | 0.240836 |
-| sub-01 | ses-01 | chimeraLFMIHIFIFF | scale3 | 4 | ctx-rh-lateralorbitofrontal_4 | R | GluGln | 1184.965576 | 1151.621460 | 424.882111 | 1165.482178 | 5 | 0.714286 | 12.000000 | 0.039000 | 10.000000 | 0.812097 | 0.004470 | 0.183433 |
-| sub-01 | ses-01 | chimeraLFMIHIFIFF | scale3 | 4 | ctx-rh-lateralorbitofrontal_4 | R | Ins | 525.538757 | 498.606323 | 254.856857 | 535.244141 | 6 | 0.857143 | 11.166667 | 0.040500 | 9.500000 | 0.745394 | 0.003725 | 0.240836 |
-| sub-01 | ses-01 | chimeraLFMIHIFIFF | scale3 | 5 | ctx-rh-parsorbitalis_1 | R | NAANAAG | 1144.217407 | 1240.765381 | 464.629700 | 1267.409790 | 9 | 0.642857 | 9.444445 | 0.066444 | 8.555555 | 0.789768 | 0.000000 | 0.210232 |
-| sub-01 | ses-01 | chimeraLFMIHIFIFF | scale3 | 5 | ctx-rh-parsorbitalis_1 | R | GPCPCh | 283.328186 | 305.798828 | 70.225548 | 296.280029 | 8 | 0.571429 | 10.000000 | 0.069500 | 9.000000 | 0.810317 | 0.000000 | 0.189683 |
-| sub-01 | ses-01 | chimeraLFMIHIFIFF | scale3 | 5 | ctx-rh-parsorbitalis_1 | R | CrPCr | 935.324890 | 1065.844482 | 299.441833 | 994.677002 | 7 | 0.500000 | 10.428572 | 0.068429 | 9.000000 | 0.785261 | 0.000000 | 0.214739 |
-| sub-01 | ses-01 | chimeraLFMIHIFIFF | scale3 | 5 | ctx-rh-parsorbitalis_1 | R | GluGln | 1382.558716 | 1575.562378 | 489.724335 | 1509.057495 | 9 | 0.642857 | 9.444445 | 0.066444 | 11.555555 | 0.789768 | 0.000000 | 0.210232 |
-| sub-01 | ses-01 | chimeraLFMIHIFIFF | scale3 | 5 | ctx-rh-parsorbitalis_1 | R | Ins | 893.044312 | 869.093872 | 93.666908 | 905.324219 | 5 | 0.357143 | 11.400000 | 0.063800 | 12.800000 | 0.828909 | 0.000000 | 0.171091 |
-| sub-01 | ses-01 | chimeraLFMIHIFIFF | scale3 | 6 | ctx-rh-frontalpole_1 | R | NAANAAG | 216.626358 | 216.626358 | 0.000000 | 216.626373 | 1 | 0.250000 | 5.000000 | 0.065000 | 20.000000 | 0.519394 | 0.000000 | 0.480606 |
-| sub-01 | ses-01 | chimeraLFMIHIFIFF | scale3 | 6 | ctx-rh-frontalpole_1 | R | GPCPCh | NaN | NaN | NaN | NaN | 0 | 0.000000 | NaN | NaN | NaN | NaN | NaN | NaN |
-| sub-01 | ses-01 | chimeraLFMIHIFIFF | scale3 | 6 | ctx-rh-frontalpole_1 | R | CrPCr | NaN | NaN | NaN | NaN | 0 | 0.000000 | NaN | NaN | NaN | NaN | NaN | NaN |
-| sub-01 | ses-01 | chimeraLFMIHIFIFF | scale3 | 6 | ctx-rh-frontalpole_1 | R | GluGln | 346.515808 | 346.515808 | 0.000000 | 346.515808 | 1 | 0.250000 | 5.000000 | 0.065000 | 19.000000 | 0.519394 | 0.000000 | 0.480606 |
-| sub-01 | ses-01 | chimeraLFMIHIFIFF | scale3 | 6 | ctx-rh-frontalpole_1 | R | Ins | NaN | NaN | NaN | NaN | 0 | 0.000000 | NaN | NaN | NaN | NaN | NaN | NaN |
-| sub-01 | ses-01 | chimeraLFMIHIFIFF | scale3 | 7 | ctx-rh-medialorbitofrontal_1 | R | NAANAAG | 1281.047485 | 1128.151001 | 632.074951 | 1338.772827 | 12 | 1.000000 | 13.000000 | 0.056333 | 5.250000 | 0.694322 | 0.035617 | 0.270061 |
-| sub-01 | ses-01 | chimeraLFMIHIFIFF | scale3 | 7 | ctx-rh-medialorbitofrontal_1 | R | GPCPCh | 324.675171 | 338.032745 | 126.929207 | 334.095154 | 12 | 1.000000 | 13.000000 | 0.056333 | 7.083333 | 0.694322 | 0.035617 | 0.270061 |
-| sub-01 | ses-01 | chimeraLFMIHIFIFF | scale3 | 7 | ctx-rh-medialorbitofrontal_1 | R | CrPCr | 1019.077332 | 980.421326 | 429.041840 | 1056.072266 | 12 | 1.000000 | 13.000000 | 0.056333 | 7.500000 | 0.694322 | 0.035617 | 0.270061 |
-| sub-01 | ses-01 | chimeraLFMIHIFIFF | scale3 | 7 | ctx-rh-medialorbitofrontal_1 | R | GluGln | 1585.049683 | 1573.024902 | 646.520874 | 1645.367065 | 10 | 0.833333 | 13.300000 | 0.054600 | 10.100000 | 0.636926 | 0.039120 | 0.323954 |
-| sub-01 | ses-01 | chimeraLFMIHIFIFF | scale3 | 7 | ctx-rh-medialorbitofrontal_1 | R | Ins | 865.067139 | 828.930237 | 342.778290 | 895.638794 | 12 | 1.000000 | 13.000000 | 0.056333 | 9.750000 | 0.694322 | 0.035617 | 0.270061 |
-| sub-01 | ses-01 | chimeraLFMIHIFIFF | scale3 | 8 | ctx-rh-medialorbitofrontal_2 | R | NAANAAG | 388.223907 | 288.539520 | 309.696838 | 403.031586 | 10 | 1.000000 | 11.700000 | 0.048400 | 5.600000 | 0.551843 | 0.046457 | 0.389340 |
-| sub-01 | ses-01 | chimeraLFMIHIFIFF | scale3 | 8 | ctx-rh-medialorbitofrontal_2 | R | GPCPCh | 155.074188 | 141.352188 | 79.323509 | 159.400040 | 10 | 1.000000 | 11.700000 | 0.048400 | 7.800000 | 0.551843 | 0.046457 | 0.389340 |
-| sub-01 | ses-01 | chimeraLFMIHIFIFF | scale3 | 8 | ctx-rh-medialorbitofrontal_2 | R | CrPCr | 377.013489 | 320.113159 | 243.999268 | 391.336945 | 10 | 1.000000 | 11.700000 | 0.048400 | 7.600000 | 0.551843 | 0.046457 | 0.389340 |
-| sub-01 | ses-01 | chimeraLFMIHIFIFF | scale3 | 8 | ctx-rh-medialorbitofrontal_2 | R | GluGln | 517.571716 | 430.455475 | 263.876587 | 534.123535 | 9 | 0.900000 | 11.666667 | 0.045889 | 12.444445 | 0.550682 | 0.051619 | 0.383965 |
-| sub-01 | ses-01 | chimeraLFMIHIFIFF | scale3 | 8 | ctx-rh-medialorbitofrontal_2 | R | Ins | 333.213348 | 292.206116 | 197.287720 | 344.769409 | 10 | 1.000000 | 11.700000 | 0.048400 | 10.700000 | 0.551843 | 0.046457 | 0.389340 |
-| sub-01 | ses-01 | chimeraLFMIHIFIFF | scale3 | 9 | ctx-rh-medialorbitofrontal_3 | R | NAANAAG | 450.511658 | 381.321075 | 274.666840 | 394.577454 | 13 | 0.928571 | 10.230769 | 0.042769 | 5.153846 | 0.624743 | 0.166892 | 0.207117 |
-| sub-01 | ses-01 | chimeraLFMIHIFIFF | scale3 | 9 | ctx-rh-medialorbitofrontal_3 | R | GPCPCh | 159.792419 | 149.397308 | 60.070553 | 148.715439 | 13 | 0.928571 | 10.230769 | 0.042769 | 7.692307 | 0.624743 | 0.166892 | 0.207117 |
-| sub-01 | ses-01 | chimeraLFMIHIFIFF | scale3 | 9 | ctx-rh-medialorbitofrontal_3 | R | CrPCr | 430.992737 | 389.962280 | 213.507919 | 390.926575 | 13 | 0.928571 | 10.230769 | 0.042769 | 7.846154 | 0.624743 | 0.166892 | 0.207117 |
-| sub-01 | ses-01 | chimeraLFMIHIFIFF | scale3 | 9 | ctx-rh-medialorbitofrontal_3 | R | GluGln | 534.949768 | 513.074280 | 212.996231 | 508.115082 | 12 | 0.857143 | 10.666667 | 0.044333 | 11.666667 | 0.619643 | 0.154628 | 0.224376 |
-| sub-01 | ses-01 | chimeraLFMIHIFIFF | scale3 | 9 | ctx-rh-medialorbitofrontal_3 | R | Ins | 362.288910 | 344.122375 | 152.936981 | 327.380676 | 12 | 0.857143 | 10.500000 | 0.041917 | 12.000000 | 0.676804 | 0.180799 | 0.141043 |
-| sub-01 | ses-01 | chimeraLFMIHIFIFF | scale3 | 10 | ctx-rh-parstriangularis_1 | R | NAANAAG | 2050.917969 | 2026.731079 | 425.156616 | 2072.838623 | 6 | 1.000000 | 12.333333 | 0.045000 | 6.333333 | 0.615453 | 0.098005 | 0.286543 |
-| sub-01 | ses-01 | chimeraLFMIHIFIFF | scale3 | 10 | ctx-rh-parstriangularis_1 | R | GPCPCh | 386.035248 | 384.524506 | 73.625259 | 389.555573 | 6 | 1.000000 | 12.333333 | 0.045000 | 8.166667 | 0.615453 | 0.098005 | 0.286543 |
-| sub-01 | ses-01 | chimeraLFMIHIFIFF | scale3 | 10 | ctx-rh-parstriangularis_1 | R | CrPCr | 1233.269165 | 1260.648682 | 279.599976 | 1246.294922 | 6 | 1.000000 | 12.333333 | 0.045000 | 8.000000 | 0.615453 | 0.098005 | 0.286543 |
-| sub-01 | ses-01 | chimeraLFMIHIFIFF | scale3 | 10 | ctx-rh-parstriangularis_1 | R | GluGln | 1754.313110 | 1812.510498 | 440.012878 | 1774.429688 | 6 | 1.000000 | 12.333333 | 0.045000 | 12.333333 | 0.615453 | 0.098005 | 0.286543 |
-| sub-01 | ses-01 | chimeraLFMIHIFIFF | scale3 | 10 | ctx-rh-parstriangularis_1 | R | Ins | 1035.241089 | 1057.267578 | 239.531540 | 1046.763062 | 6 | 1.000000 | 12.333333 | 0.045000 | 10.166667 | 0.615453 | 0.098005 | 0.286543 |
+| sub-01 | ses-01 | synthseg | NaN | 2 | Left-Cerebral-White-Matter | L | NAANAAG | 2396.673584 | 2528.545898 | 633.721252 | 2462.376953 | 1536 | 0.962406 | 15.724609 | 0.034189 | 4.321615 | 0.173950 | 0.820830 | 0.005220 |
+| sub-01 | ses-01 | synthseg | NaN | 2 | Left-Cerebral-White-Matter | L | GPCPCh | 403.141846 | 417.577026 | 90.989296 | 405.740936 | 1533 | 0.960526 | 15.742988 | 0.034182 | 6.144162 | 0.173716 | 0.821307 | 0.004977 |
+| sub-01 | ses-01 | synthseg | NaN | 2 | Left-Cerebral-White-Matter | L | CrPCr | 1354.009033 | 1378.217407 | 268.945099 | 1370.252930 | 1529 | 0.958020 | 15.774363 | 0.034076 | 5.794637 | 0.173221 | 0.821635 | 0.005144 |
+| sub-01 | ses-01 | synthseg | NaN | 2 | Left-Cerebral-White-Matter | L | GluGln | 1819.495483 | 1836.212646 | 418.186066 | 1841.236938 | 1496 | 0.937343 | 15.792112 | 0.034274 | 11.234626 | 0.176012 | 0.819338 | 0.004650 |
+| sub-01 | ses-01 | synthseg | NaN | 2 | Left-Cerebral-White-Matter | L | Ins | 1155.218506 | 1178.524780 | 232.018356 | 1167.601807 | 1507 | 0.944236 | 15.911081 | 0.033776 | 8.214334 | 0.172057 | 0.822826 | 0.005116 |
+| sub-01 | ses-01 | synthseg | NaN | 7 | Left-Cerebellum-White-Matter | L | NAANAAG | 1601.608154 | 1682.506104 | 352.608459 | 1600.009277 | 30 | 0.344828 | 6.966667 | 0.043067 | 9.533334 | 0.164775 | 0.833916 | 0.001310 |
+| sub-01 | ses-01 | synthseg | NaN | 7 | Left-Cerebellum-White-Matter | L | GPCPCh | 327.797089 | 336.766632 | 40.411880 | 327.713379 | 29 | 0.333333 | 7.034483 | 0.043103 | 9.758620 | 0.170440 | 0.828205 | 0.001355 |
+| sub-01 | ses-01 | synthseg | NaN | 7 | Left-Cerebellum-White-Matter | L | CrPCr | 1312.124390 | 1342.622314 | 230.455032 | 1310.596924 | 30 | 0.344828 | 6.966667 | 0.043067 | 9.633333 | 0.164775 | 0.833916 | 0.001310 |
+| sub-01 | ses-01 | synthseg | NaN | 7 | Left-Cerebellum-White-Matter | L | GluGln | 1794.603149 | 1851.894897 | 346.419037 | 1789.484741 | 25 | 0.287356 | 7.120000 | 0.044000 | 14.120000 | 0.174182 | 0.824247 | 0.001571 |
+| sub-01 | ses-01 | synthseg | NaN | 7 | Left-Cerebellum-White-Matter | L | Ins | 1147.921021 | 1193.803467 | 190.169586 | 1146.533203 | 29 | 0.333333 | 7.034483 | 0.043103 | 11.965517 | 0.170440 | 0.828205 | 0.001355 |
+| sub-01 | ses-01 | synthseg | NaN | 8 | Left-Cerebellum-Cortex | L | NAANAAG | 1766.620361 | 1872.360352 | 459.101074 | 1805.566650 | 100 | 0.446429 | 8.010000 | 0.039640 | 8.540000 | 0.677368 | 0.223674 | 0.098958 |
+| sub-01 | ses-01 | synthseg | NaN | 8 | Left-Cerebellum-Cortex | L | GPCPCh | 335.426758 | 359.033813 | 68.881439 | 340.346588 | 100 | 0.446429 | 7.970000 | 0.038930 | 9.350000 | 0.672232 | 0.221951 | 0.105454 |
+| sub-01 | ses-01 | synthseg | NaN | 8 | Left-Cerebellum-Cortex | L | CrPCr | 1403.692261 | 1506.588135 | 324.494202 | 1433.088501 | 99 | 0.441964 | 8.000000 | 0.038606 | 8.868687 | 0.674701 | 0.218412 | 0.106519 |
+| sub-01 | ses-01 | synthseg | NaN | 8 | Left-Cerebellum-Cortex | L | GluGln | 1939.174072 | 2087.803955 | 463.386749 | 1982.745483 | 93 | 0.415179 | 8.118279 | 0.039290 | 12.989247 | 0.677631 | 0.213603 | 0.108766 |
+| sub-01 | ses-01 | synthseg | NaN | 8 | Left-Cerebellum-Cortex | L | Ins | 1243.190186 | 1309.930786 | 242.067902 | 1260.809570 | 97 | 0.433036 | 8.092784 | 0.039093 | 10.979382 | 0.683534 | 0.223302 | 0.093164 |
+| sub-01 | ses-01 | synthseg | NaN | 10 | Left-Thalamus | L | NAANAAG | 2057.937256 | 2047.638550 | 210.116440 | 2059.058838 | 55 | 1.000000 | 12.909091 | 0.027545 | 4.090909 | 0.257208 | 0.719265 | 0.023527 |
+| sub-01 | ses-01 | synthseg | NaN | 10 | Left-Thalamus | L | GPCPCh | 385.179779 | 388.949036 | 43.590355 | 384.806458 | 55 | 1.000000 | 12.909091 | 0.027545 | 5.490909 | 0.257208 | 0.719265 | 0.023527 |
+| sub-01 | ses-01 | synthseg | NaN | 10 | Left-Thalamus | L | CrPCr | 1239.272705 | 1259.984741 | 96.799187 | 1237.261353 | 55 | 1.000000 | 12.909091 | 0.027545 | 5.745454 | 0.257208 | 0.719265 | 0.023527 |
+| sub-01 | ses-01 | synthseg | NaN | 10 | Left-Thalamus | L | GluGln | 1544.851685 | 1563.124878 | 112.994614 | 1542.379883 | 53 | 0.963636 | 12.905661 | 0.026943 | 12.207547 | 0.245641 | 0.729944 | 0.024414 |
+| sub-01 | ses-01 | synthseg | NaN | 10 | Left-Thalamus | L | Ins | 1005.802124 | 1018.390564 | 66.916145 | 1004.504028 | 55 | 1.000000 | 12.909091 | 0.027545 | 9.490909 | 0.257208 | 0.719265 | 0.023527 |
+| sub-01 | ses-01 | synthseg | NaN | 11 | Left-Caudate | L | NAANAAG | 2010.669067 | 2090.767090 | 328.459320 | 2060.323242 | 30 | 0.909091 | 13.533334 | 0.035433 | 4.333333 | 0.604151 | 0.339725 | 0.056125 |
+| sub-01 | ses-01 | synthseg | NaN | 11 | Left-Caudate | L | GPCPCh | 394.171906 | 404.902252 | 42.871990 | 399.732483 | 30 | 0.909091 | 13.533334 | 0.035433 | 5.466667 | 0.604151 | 0.339725 | 0.056125 |
+| sub-01 | ses-01 | synthseg | NaN | 11 | Left-Caudate | L | CrPCr | 1076.567383 | 1079.396851 | 113.229401 | 1086.255493 | 29 | 0.878788 | 13.793103 | 0.034414 | 5.482759 | 0.598826 | 0.343114 | 0.058060 |
+| sub-01 | ses-01 | synthseg | NaN | 11 | Left-Caudate | L | GluGln | 1236.602173 | 1232.643799 | 150.012558 | 1251.919922 | 30 | 0.909091 | 13.533334 | 0.035433 | 13.100000 | 0.604151 | 0.339725 | 0.056125 |
+| sub-01 | ses-01 | synthseg | NaN | 11 | Left-Caudate | L | Ins | 864.418335 | 864.684570 | 93.727417 | 873.180603 | 29 | 0.878788 | 13.793103 | 0.034414 | 9.103448 | 0.598826 | 0.343114 | 0.058060 |
+| sub-01 | ses-01 | synthseg | NaN | 12 | Left-Putamen | L | NAANAAG | 2136.725342 | 2309.810791 | 382.385590 | 2231.440430 | 34 | 0.944444 | 12.823529 | 0.032618 | 5.147059 | 0.196423 | 0.803577 | 0.000000 |
+| sub-01 | ses-01 | synthseg | NaN | 12 | Left-Putamen | L | GPCPCh | 435.665131 | 448.210663 | 39.053650 | 444.412476 | 34 | 0.944444 | 12.823529 | 0.032618 | 6.205883 | 0.196423 | 0.803577 | 0.000000 |
+| sub-01 | ses-01 | synthseg | NaN | 12 | Left-Putamen | L | CrPCr | 1267.678711 | 1296.022949 | 128.737793 | 1293.637451 | 34 | 0.944444 | 12.823529 | 0.032618 | 6.176471 | 0.196423 | 0.803577 | 0.000000 |
+| sub-01 | ses-01 | synthseg | NaN | 12 | Left-Putamen | L | GluGln | 1530.674316 | 1528.963135 | 184.223709 | 1556.237183 | 32 | 0.888889 | 13.093750 | 0.032594 | 11.375000 | 0.205073 | 0.794927 | 0.000000 |
+| sub-01 | ses-01 | synthseg | NaN | 12 | Left-Putamen | L | Ins | 1010.337097 | 1018.918762 | 98.640350 | 1026.011719 | 33 | 0.916667 | 13.060606 | 0.032333 | 9.575758 | 0.200100 | 0.799900 | 0.000000 |
+| sub-01 | ses-01 | synthseg | NaN | 13 | Left-Pallidum | L | NAANAAG | 2034.484375 | 2078.768066 | 307.048096 | 2110.898438 | 9 | 1.000000 | 10.666667 | 0.040000 | 8.111111 | 0.000000 | 1.000000 | 0.000000 |
+| sub-01 | ses-01 | synthseg | NaN | 13 | Left-Pallidum | L | GPCPCh | 447.618805 | 453.608521 | 17.511766 | 450.032379 | 8 | 0.888889 | 11.375000 | 0.037625 | 8.000000 | 0.000000 | 1.000000 | 0.000000 |
+| sub-01 | ses-01 | synthseg | NaN | 13 | Left-Pallidum | L | CrPCr | 1254.361938 | 1273.921997 | 42.989773 | 1260.146484 | 8 | 0.888889 | 11.375000 | 0.037625 | 8.000000 | 0.000000 | 1.000000 | 0.000000 |
+| sub-01 | ses-01 | synthseg | NaN | 13 | Left-Pallidum | L | GluGln | 1431.598999 | 1473.228882 | 101.604294 | 1454.999146 | 9 | 1.000000 | 10.666667 | 0.040000 | 13.666667 | 0.000000 | 1.000000 | 0.000000 |
+| sub-01 | ses-01 | synthseg | NaN | 13 | Left-Pallidum | L | Ins | 982.183655 | 988.123108 | 26.691330 | 984.325012 | 7 | 0.777778 | 12.142858 | 0.035429 | 11.000000 | 0.000000 | 1.000000 | 0.000000 |
+| sub-01 | ses-01 | synthseg | NaN | 16 | Brain-Stem | NaN | NAANAAG | 1321.301880 | 1364.280273 | 586.337402 | 1436.737305 | 58 | 0.563107 | 9.724138 | 0.055345 | 8.137931 | 0.099442 | 0.786558 | 0.114000 |
+| sub-01 | ses-01 | synthseg | NaN | 16 | Brain-Stem | NaN | GPCPCh | 288.841522 | 312.781708 | 95.520370 | 305.960724 | 57 | 0.553398 | 9.807017 | 0.055281 | 9.245614 | 0.101186 | 0.782813 | 0.116000 |
+| sub-01 | ses-01 | synthseg | NaN | 16 | Brain-Stem | NaN | CrPCr | 1038.990967 | 1105.085571 | 395.701111 | 1111.731323 | 58 | 0.563107 | 9.724138 | 0.055345 | 9.862069 | 0.099442 | 0.786558 | 0.114000 |
+| sub-01 | ses-01 | synthseg | NaN | 16 | Brain-Stem | NaN | GluGln | 1367.851318 | 1422.908569 | 505.210144 | 1461.026367 | 56 | 0.543689 | 9.714286 | 0.055625 | 12.160714 | 0.089652 | 0.796628 | 0.113720 |
+| sub-01 | ses-01 | synthseg | NaN | 16 | Brain-Stem | NaN | Ins | 916.017456 | 967.563965 | 289.037476 | 958.300476 | 55 | 0.533981 | 10.000000 | 0.054545 | 12.072727 | 0.104866 | 0.774916 | 0.120219 |
+| sub-01 | ses-01 | synthseg | NaN | 17 | Left-Hippocampus | L | NAANAAG | 1376.004272 | 1448.197388 | 521.299988 | 1531.953247 | 24 | 0.923077 | 9.708333 | 0.049333 | 7.458333 | 0.813998 | 0.138527 | 0.047475 |
+| sub-01 | ses-01 | synthseg | NaN | 17 | Left-Hippocampus | L | GPCPCh | 304.784271 | 305.012909 | 68.495049 | 322.132599 | 23 | 0.884615 | 9.913043 | 0.049652 | 8.565217 | 0.808570 | 0.141891 | 0.049539 |
+| sub-01 | ses-01 | synthseg | NaN | 17 | Left-Hippocampus | L | CrPCr | 1072.939575 | 1193.332153 | 298.414612 | 1149.397095 | 22 | 0.846154 | 10.181818 | 0.049091 | 8.545455 | 0.799869 | 0.148341 | 0.051791 |
+| sub-01 | ses-01 | synthseg | NaN | 17 | Left-Hippocampus | L | GluGln | 1323.309448 | 1350.020630 | 411.947845 | 1437.278931 | 21 | 0.807692 | 9.571428 | 0.050429 | 12.428572 | 0.787426 | 0.158317 | 0.054257 |
+| sub-01 | ses-01 | synthseg | NaN | 17 | Left-Hippocampus | L | Ins | 934.981628 | 1010.880432 | 214.109146 | 982.094971 | 19 | 0.730769 | 10.631579 | 0.047211 | 10.842105 | 0.770011 | 0.170021 | 0.059968 |
+| sub-01 | ses-01 | synthseg | NaN | 18 | Left-Amygdala | L | NAANAAG | 898.944275 | 1046.354980 | 475.616516 | 973.096069 | 3 | 0.272727 | 7.333333 | 0.067333 | 6.666667 | 0.798831 | 0.188603 | 0.012566 |
+| sub-01 | ses-01 | synthseg | NaN | 18 | Left-Amygdala | L | GPCPCh | 260.297241 | 287.827789 | 85.536095 | 273.582123 | 3 | 0.272727 | 7.333333 | 0.067333 | 9.666667 | 0.798831 | 0.188603 | 0.012566 |
+| sub-01 | ses-01 | synthseg | NaN | 18 | Left-Amygdala | L | CrPCr | 719.540283 | 832.746033 | 298.823395 | 765.050232 | 3 | 0.272727 | 7.333333 | 0.067333 | 9.000000 | 0.798831 | 0.188603 | 0.012566 |
+| sub-01 | ses-01 | synthseg | NaN | 18 | Left-Amygdala | L | GluGln | 862.518555 | 984.120178 | 354.406158 | 917.175964 | 3 | 0.272727 | 7.333333 | 0.067333 | 10.333333 | 0.798831 | 0.188603 | 0.012566 |
+| sub-01 | ses-01 | synthseg | NaN | 18 | Left-Amygdala | L | Ins | 620.236145 | 696.140686 | 224.480240 | 654.914246 | 3 | 0.272727 | 7.333333 | 0.067333 | 15.000000 | 0.798831 | 0.188603 | 0.012566 |
 
 ## Connectivity
 
@@ -470,10 +450,10 @@ Reference metabolite map (`CrPCr`) overlaid on the full-head `MNI152NLin2009cAsy
 | Nucleus | 1H |
 | Tissue backend | synthseg-fast |
 | Registration backend | ants |
-| Registration T1w target | brain-csf |
+| Registration T1w target | brain |
 | Normalization | simple |
 | Output spaces | MNI152NLin2009cAsym |
-| Parcellation mode | chimera |
+| Parcellation mode | synthseg |
 | Atlas | chimera-LFMIHIFIS_scale3 |
 | SNR min | 4.0 |
 | Linewidth max | 0.1 |
@@ -483,7 +463,7 @@ Reference metabolite map (`CrPCr`) overlaid on the full-head `MNI152NLin2009cAsy
 | PVC disabled | False |
 | T1 saturation correction | none |
 | Connectivity | True |
-| nproc x nthreads | 1 x 12 |
+| nproc x nthreads | 1 x 16 |
 
 ### Pipeline stages
 
@@ -493,49 +473,49 @@ Validate inputs → Tissue segmentation → Anatomical prep → MRSI preprocessi
 
 ### Per-step duration
 
-nproc: `1`  |  nthreads: `12`
+nproc: `1`  |  nthreads: `16`
 
 Excludes this report-generation step's own duration (not yet known while it's still running) and any time spent before this recording's pipeline started (e.g. queued behind other recordings under `--nproc`).
 
-PROC computed this run  ·  REUSED existing outputs reused (re-run with `--overwrite` to recompute)  ·  N/A not requested by this configuration  ·  FAILED raised an error
-
 | Step | Outcome | Duration | % of total |
 | --- | --- | --- | --- |
-| Tissue segmentation | PROC | 56.6s | 1.2% |
-| Anatomical preparation | PROC | 0.3s | 0.0% |
-| MRSI preprocessing | PROC | 6.4s | 0.1% |
-| MRSI-to-T1w registration | PROC | 1m 01.5s | 1.3% |
-| T1w-to-template registration | PROC | 1m 43.2s | 2.2% |
-| Tissue probability maps in MRSI space | PROC | 0.6s | 0.0% |
-| Partial volume correction | PROC | 0.2s | 0.0% |
-| Resampling MRSI maps to T1w/MNI space | PROC | 7.2s | 0.2% |
-| Signal leakage QC | PROC | 0.0s | 0.0% |
-| SynthSeg parcellation and QC | REUSED | 2.3s | 0.0% |
-| Parcellation | PROC | 1h 13m 17.2s | 94.6% |
-| Regional metabolite extraction | PROC | 3.3s | 0.1% |
-| Regional metabolic profiles and connectivity | PROC | 8.8s | 0.2% |
-| T1 saturation correction   --t1-correction none | N/A | - | - |
-| Total (through report generation) |  | 1h 17m 27.4s | 100.0% |
+| Tissue segmentation | REUSED | 0.0s | 0.0% |
+| Anatomical preparation | PROC | 0.0s | 0.0% |
+| MRSI preprocessing | REUSED | 3.9s | 27.5% |
+| MRSI-to-T1w registration | REUSED | 0.0s | 0.0% |
+| T1w-to-template registration | REUSED | 1.5s | 10.7% |
+| Tissue probability maps in MRSI space | REUSED | 0.0s | 0.0% |
+| Partial volume correction | REUSED | 0.0s | 0.0% |
+| Resampling MRSI maps to T1w/MNI space | REUSED | 5.4s | 38.5% |
+| Signal leakage QC | PROC | 0.0s | 0.1% |
+| SynthSeg parcellation and QC | REUSED | 2.0s | 14.4% |
+| Regional metabolite extraction | PROC | 0.6s | 4.4% |
+| Regional metabolic profiles and connectivity | PROC | 0.6s | 4.4% |
+| T1 saturation correction | N/A | - | - |
+| Parcellation (chimera/atlas) | N/A | - | - |
+| **Total (through report generation)** |  | **14.1s** | 100.0% |
 
 ## Outputs
 
+```
 ses-01/
 ├── anat/
 │   └── synthseg/
-│       ├── sub-01_ses-01_atlas-synthseg_desc-fastGMWM.tsv
 │       ├── sub-01_ses-01_atlas-synthseg_desc-parcelqc.tsv
-│       ├── sub-01_ses-01_space-mrsi_atlas-chimeraLFMIHIFIFF_scale-scale3_desc-regional_metabolites.tsv
-│       ├── sub-01_ses-01_space-mrsi_atlas-synthseg_desc-fastGMWM_dseg.nii.gz
-│       ├── sub-01_ses-01_space-T1w_atlas-synthseg_desc-fastGMWM_dseg.nii.gz
+│       ├── sub-01_ses-01_atlas-synthseg_desc-robustGMWM.tsv
+│       ├── sub-01_ses-01_space-mrsi_atlas-synthseg_desc-regional_metabolites.tsv
+│       ├── sub-01_ses-01_space-mrsi_atlas-synthseg_desc-robustGMWM_dseg.nii.gz
+│       ├── sub-01_ses-01_space-T1w_atlas-synthseg_desc-robustGMWM_dseg.nii.gz
 │       ├── sub-01_ses-01_space-T1w_desc-brainCSF_T1w.nii.gz
 │       ├── sub-01_ses-01_space-T1w_desc-brainCSFmask_mask.nii.gz
 │       ├── sub-01_ses-01_space-T1w_desc-synthsegBrain_mask.nii.gz
 │       ├── sub-01_ses-01_space-T1w_desc-synthsegBrain_T1w.nii.gz
 │       ├── sub-01_ses-01_space-T1w_desc-synthsegFastInput_T1w.nii.gz
-│       └── sub-01_ses-01_space-T1w_desc-synthsegParcFast_dseg.nii.gz
+│       └── sub-01_ses-01_space-T1w_desc-synthsegParcRobust_dseg.nii.gz
 ├── confounds/
 │   ├── sub-01_ses-01_desc-leakageqc.tsv
 │   ├── sub-01_ses-01_desc-mrsiqc.tsv
+│   ├── sub-01_ses-01_desc-ventricleqc.tsv
 │   ├── sub-01_ses-01_space-MNI152NLin2009cAsym_res-5_desc-fwhm_mrsi.nii.gz
 │   ├── sub-01_ses-01_space-MNI152NLin2009cAsym_res-5_desc-snr_mrsi.nii.gz
 │   ├── sub-01_ses-01_space-MNI152NLin2009cAsym_res-5_met-CrPCr_desc-crlb_mrsi.nii.gz
@@ -546,6 +526,7 @@ ses-01/
 │   ├── sub-01_ses-01_space-mrsi_desc-brain_mask.nii.gz
 │   ├── sub-01_ses-01_space-mrsi_label-CSF_probseg.nii.gz
 │   ├── sub-01_ses-01_space-mrsi_label-GM_probseg.nii.gz
+│   ├── sub-01_ses-01_space-mrsi_label-latvent_mask.nii.gz
 │   ├── sub-01_ses-01_space-mrsi_label-WM_probseg.nii.gz
 │   ├── sub-01_ses-01_space-mrsi_met-CrPCr_desc-qcmask_mask.nii.gz
 │   ├── sub-01_ses-01_space-mrsi_met-CrPCr_desc-spikemask_mask.nii.gz
@@ -568,11 +549,11 @@ ses-01/
 │   ├── sub-01_ses-01_space-T1w_label-GM_probseg.nii.gz
 │   └── sub-01_ses-01_space-T1w_label-WM_probseg.nii.gz
 ├── connectivity/
-│   ├── sub-01_ses-01_atlas-chimeraLFMIHIFIFF_scale3_npert-50_filt-biharmonic_pvcorr_GM_desc-connectivity_mrsi.npz
-│   ├── sub-01_ses-01_atlas-chimeraLFMIHIFIFF_scale3_npert-50_filt-biharmonic_pvcorr_GM_desc-connectivity_mrsi.tsv
-│   ├── sub-01_ses-01_atlas-chimeraLFMIHIFIFF_scale3_npert-50_filt-biharmonic_pvcorr_GM_desc-edges_mrsi.tsv
-│   ├── sub-01_ses-01_atlas-chimeraLFMIHIFIFF_scale3_npert-50_filt-biharmonic_pvcorr_GM_desc-metabolicprofiles_mrsi.npz
-│   └── sub-01_ses-01_atlas-chimeraLFMIHIFIFF_scale3_npert-50_filt-biharmonic_pvcorr_GM_desc-nodes_mrsi.tsv
+│   ├── sub-01_ses-01_atlas-synthseg_npert-50_filt-biharmonic_pvcorr_GM_desc-connectivity_mrsi.npz
+│   ├── sub-01_ses-01_atlas-synthseg_npert-50_filt-biharmonic_pvcorr_GM_desc-connectivity_mrsi.tsv
+│   ├── sub-01_ses-01_atlas-synthseg_npert-50_filt-biharmonic_pvcorr_GM_desc-edges_mrsi.tsv
+│   ├── sub-01_ses-01_atlas-synthseg_npert-50_filt-biharmonic_pvcorr_GM_desc-metabolicprofiles_mrsi.npz
+│   └── sub-01_ses-01_atlas-synthseg_npert-50_filt-biharmonic_pvcorr_GM_desc-nodes_mrsi.tsv
 ├── logs/
 │   └── sub-01_ses-01_desc-mrsiprep_log.txt
 ├── mrsi/
@@ -601,7 +582,7 @@ ses-01/
 │   │   ├── sub-01_ses-01_space-mrsi_met-Ins_desc-signalpvc_mrsi.nii.gz
 │   │   └── sub-01_ses-01_space-mrsi_met-NAANAAG_desc-signalpvc_mrsi.nii.gz
 │   └── parcel/
-│       └── sub-01_ses-01_atlas-chimeraLFMIHIFIFF_scalescale3_desc-GMmetprofiles_mrsi.npz
+│       └── sub-01_ses-01_atlas-synthseg_desc-GMmetprofiles_mrsi.npz
 └── transforms/
     ├── anat/
     │   ├── sub-01_ses-01_desc-t1w_to_mni.affine.mat
@@ -613,9 +594,10 @@ ses-01/
         ├── sub-01_ses-01_desc-mrsi_to_t1w.affine_inv.mat
         ├── sub-01_ses-01_desc-mrsi_to_t1w.syn.nii.gz
         └── sub-01_ses-01_desc-mrsi_to_t1w.syn_inv.nii.gz
+```
 
 ## Citations
 
-MRSIPrep: see `CITATION.cff` in the MRSIPrep repository for how to cite this software.
+If you use MRSIPrep, please cite: Lucchetti, F., Céléreau, E., Jenni, R., Ledoux, J.-B., Eliez, S., Delavari, F., Hagmann, P., Alemán-Gómez, Y., Klauser, A., & Klauser, P. (2026). MRSIPrep: A Standardized Post-Quantification Framework for Preprocessing Whole-Brain Magnetic Resonance Spectroscopic Imaging. bioRxiv. doi:10.64898/2026.09.11.750896. A downloadable BibTeX entry is in `CITATION.cff` in the MRSIPrep repository.
 
 MRSI acquisition reporting follows the MRSinMRS minimum reporting standard (Lin et al. 2021).

@@ -9,7 +9,7 @@ see [Processing methods](methods.md).
 | Backend | Tissue probabilities | Practical requirements |
 |---|---|---|
 | `synthseg-fast` (default) | SynthSeg brain extraction followed by FSL FAST | Raw T1w; both tools are bundled in the container |
-| `existing` | Reuse CAT12 GM/WM/CSF maps | Skull-stripped T1w and all three probability maps in the [input layout](inputs.md#existing-tissue-derivatives-and-import-helpers) |
+| `existing` | Reuse CAT12 GM/WM/CSF maps | Raw T1w, skull-stripped T1w, and all three CAT12 probability maps; requirements below |
 | `none` | Skip tissue probabilities and PVC | Anatomical parcellation still runs; use a compatible registration target |
 
 `--synthseg-mode robust` is the default inference mode. `standard` and
@@ -63,6 +63,10 @@ For proton MRSI, defaults are `--snr-min 4`, `--linewidth-max 0.1`, and
 check the [input units](inputs.md#maps-units-and-geometry). A present quality
 map is always applied to the native per-metabolite quality mask, even if
 that metric is omitted from the list of required maps.
+
+Selecting a quantification tool does not convert maps or thresholds.
+For linewidth maps in the registry's Hz convention, set `--linewidth-max`
+to your protocol's cutoff in Hz; the numeric default `0.1` is not converted.
 
 Review the report's quality and coverage summaries before using those masks
 for a cohort. [Processing methods](methods.md) explains how regional tables
