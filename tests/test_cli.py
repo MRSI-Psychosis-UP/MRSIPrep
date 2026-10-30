@@ -8,7 +8,7 @@ from mrsiprep.cli.parser import parse_args as _parse_args
 _REQUIRED_ARGS = ["--metabolites", "CrPCr", "--ref-met", "CrPCr"]
 _METADATA_DIR = tempfile.TemporaryDirectory()
 _METADATA_PATH = Path(_METADATA_DIR.name) / "mrsinmrs.json"
-_METADATA_PATH.write_text(json.dumps({"CommonMetadata": {"Nucleus": "1H", "QuantificationTool": "lcmodel"}}))
+_METADATA_PATH.write_text(json.dumps({"CommonMetadata": {"Nucleus": "1H", "QuantificationTool": "lcmodel", "LinewidthUnit": "Hz", "CRLBUnit": "percent"}}))
 _METADATA_ARGS = ["--mrsinmrs-file", str(_METADATA_PATH)]
 
 

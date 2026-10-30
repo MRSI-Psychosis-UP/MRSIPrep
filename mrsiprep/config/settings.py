@@ -20,6 +20,8 @@ class MRSIPrepConfig:
     bids_filter_file: Path | None = None
     mrsinmrs_file: Path | None = None
     quantification_tool: str | None = None
+    linewidth_unit: str | None = None
+    crlb_unit: str | None = None
     metabolites: list[str] | None = None
     quality_metrics: list[str] = field(default_factory=lambda: ["snr", "linewidth", "crlb"])
     # Acquired nucleus. None means "resolve it": --nucleus wins, else
@@ -151,16 +153,19 @@ class MRSIPrepConfig:
         self.require_quantification_tool()
 
     def require_quantification_tool(self) -> None:
-        """Require the upstream quantification tool to be declared.
+        """Require the upstream quantification tool and its units to be declared.
 
-        Resolved from --quantification-tool, else CommonMetadata's
-        "QuantificationTool" in mrsinmrs.json. Call require_mrsinmrs()
-        first (or ensure self.mrsinmrs is already loaded) so the
-        mrsinmrs.json fallback is available.
+        Resolved from --quantification-tool/--linewidth-unit/--crlb-unit,
+        else CommonMetadata's "QuantificationTool"/"LinewidthUnit"/
+        "CRLBUnit" in mrsinmrs.json. Call require_mrsinmrs() first (or
+        ensure self.mrsinmrs is already loaded) so the mrsinmrs.json
+        fallback is available.
         """
-        from mrsiprep.mrsi.quantification_tools import resolve_quantification_tool
+        from mrsiprep.mrsi.quantification_tools import resolve_crlb_unit, resolve_linewidth_unit, resolve_quantification_tool
 
         self.quantification_tool = resolve_quantification_tool(self.quantification_tool, self.mrsinmrs)
+        self.linewidth_unit = resolve_linewidth_unit(self.linewidth_unit, self.mrsinmrs)
+        self.crlb_unit = resolve_crlb_unit(self.crlb_unit, self.mrsinmrs)
 
     def _validate_enum_choices(self) -> None:
         if self.parcellation_mode not in {"synthseg", "chimera", "atlas"}:
