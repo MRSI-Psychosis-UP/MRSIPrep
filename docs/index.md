@@ -92,6 +92,8 @@ usage_normalization
 usage_parcellation
 usage_longitudinal
 running
+mrsinmrs
+other_input_derivatives
 future_development
 notebooks/README
 ```

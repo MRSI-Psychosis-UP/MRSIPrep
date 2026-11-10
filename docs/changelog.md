@@ -9,7 +9,7 @@
   `mrsinmrs.json`. `lcmodel`, `fsl-mrs`, and `osprey` (LCModel-wrapper mode)
   are verified to already match MRSIPrep's CRLB/SNR/linewidth convention;
   `custom` performs no rescaling and leaves the user solely responsible.
-  See [Quantification tool conventions](inputs.md#quantification-tool-conventions).
+  See [Quantification tool conventions](mrsinmrs.md#quantification-tool-conventions).
 
 ## 2.1.0
 

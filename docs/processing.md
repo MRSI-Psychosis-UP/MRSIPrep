@@ -17,29 +17,9 @@ see [Processing methods](methods.md).
 name `synthseg-fast` describes the SynthSeg-plus-FAST combination; it does
 not imply `--synthseg-mode fast`.
 
-For example, to reuse existing CAT12 derivatives:
-
-```bash
-mrsiprep-docker /path/to/bids /path/to/derivatives participant \
-  --participant-label S001 --session-label V1 \
-  --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \
-  --ref-met CrPCr \
-  --tissue-backend existing
-```
-
-The `existing` backend reuses precomputed CAT12 tissue maps and requires:
-
-- a skull-stripped T1w derivative in `derivatives/skullstrip`,
-- the raw BIDS T1w acquisition,
-- CAT12-style `p1` (gray matter), `p2` (white matter), and `p3` (CSF)
-  probability maps in `derivatives/cat12`, named
-  `sub-<label>[_ses-<label>]_desc-p{1,2,3}_T1w.nii[.gz]`.
-
-There is no CLI flag to point at a different location -- MRSIPrep discovers
-these purely by the BIDS-derivatives directory/filename convention above.
-If any of `p1`, `p2`, or `p3` is missing, the recording fails. In batch
-processing, MRSIPrep logs the error and continues with the next
-subject/session.
+`--tissue-backend existing` reuses precomputed CAT12 tissue maps; see
+[Existing tissue derivatives](other_input_derivatives.md#existing-tissue-derivatives)
+for its requirements and an example command.
 
 Disable tissue segmentation and PVC entirely with `--tissue-backend none`
 (equivalent to also passing `--no-pvc`):

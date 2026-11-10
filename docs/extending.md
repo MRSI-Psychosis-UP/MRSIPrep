@@ -61,7 +61,7 @@ assumes a ¹H water reference, and gating that per nucleus is not yet done.
 MRSIPrep's CRLB/SNR/linewidth thresholds assume the LCModel convention:
 CRLB as a percentage of the fitted amplitude, SNR as peak height over
 residual-noise SD, and linewidth in Hz (see
-[Quantification tool conventions](inputs.md#quantification-tool-conventions)).
+[Quantification tool conventions](mrsinmrs.md#quantification-tool-conventions)).
 `--quantification-tool` is a small registry in
 `mrsiprep/mrsi/quantification_tools.py` mapping a tool name to three
 rescaling functions (`crlb_scale`, `snr_scale`, `linewidth_scale`), applied
