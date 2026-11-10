@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.2.0
 
 ### Quality metrics
 
@@ -10,6 +10,45 @@
   are verified to already match MRSIPrep's CRLB/SNR/linewidth convention;
   `custom` performs no rescaling and leaves the user solely responsible.
   See [Quantification tool conventions](mrsinmrs.md#quantification-tool-conventions).
+
+### Chimera parcellation
+
+- `--parcellation-mode chimera` now checks for a FreeSurfer license
+  immediately at startup instead of mid-run, after a subject's
+  preprocessing has already completed. Adds a native `--fs-license` flag
+  alongside the existing `FS_LICENSE`/`--fs-license-file` discovery.
+- Clarified that tissue segmentation (always SynthSeg) is independent of
+  `--parcellation-mode` and never needs a license, and that
+  `--registration-backend` really only has two backends
+  (`flirt-fnirt`/`flirt_fnirt`/`flirt/fnirt` are kept as deprecated
+  spellings of `fsl`, not separate choices) -- `--normalization`'s
+  `ants-syn` is similarly just a legacy alias of `simple`.
+- The command-builder GUI now guides `--chimera-scheme` selection with one
+  dropdown per supra-region (real atlas names, e.g. "Lausanne (L)
+  (default)", and a cortex-dependent `--chimera-scale`/seg range), shows a
+  real `--atlas` dropdown of every bundled atlas found under
+  `mrsiprep/data/atlas/`, and hides each parcellation mode's irrelevant
+  options.
+- The HTML report cites Chimera itself plus the full published reference
+  (not just "Author et al, Year") for every atlas a run's
+  `--chimera-scheme` actually combined.
+
+### Report
+
+- The "PrepParams" tab is renamed "Provenance" and now also holds all
+  citations (MRSIPrep, MRSinMRS, Chimera parcellation, then any
+  config-preset citation) as its own subsections, replacing the old
+  standalone Citations block at the page bottom, plus a download button
+  for the run's provenance JSON.
+
+### Documentation
+
+- Split acquisition-metadata and other-input-derivatives content out of
+  [Preparing inputs](inputs.md), [Tissue processing](processing.md), and
+  [Experimental features](future_development.md) into two new User guide
+  pages, [MRSinMRS](mrsinmrs.md) and
+  [Other input derivatives](other_input_derivatives.md) -- the latter also
+  newly documents `mrsiprep-import`/`mrsiprep-import-gui`.
 
 ## 2.1.0
 
