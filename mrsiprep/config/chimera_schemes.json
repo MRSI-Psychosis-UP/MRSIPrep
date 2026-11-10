@@ -1,0 +1,362 @@
+{
+  "Cortical": {
+    "A": {
+      "name": "AALv2",
+      "citation": "(Rolls et al, 2015)",
+      "default": false,
+      "segs": [],
+      "scales": [],
+      "full_citation": "Rolls, E.T., Joliot, M., & Tzourio-Mazoyer, N. (2015). Implementation of a new parcellation of the orbitofrontal cortex in the automated anatomical labeling atlas. NeuroImage, 122, 1-5. https://doi.org/10.1016/j.neuroimage.2015.07.075"
+    },
+    "B": {
+      "name": "Brainnetome",
+      "citation": "(Fan et al, 2016)",
+      "default": false,
+      "segs": [],
+      "scales": [],
+      "full_citation": "Fan, L., Li, H., Zhuo, J., et al. (2016). The Human Brainnetome Atlas: A New Brain Atlas Based on Connectional Architecture. Cerebral Cortex, 26(8), 3508-3526. https://doi.org/10.1093/cercor/bhw157"
+    },
+    "C": {
+      "name": "Campbell",
+      "citation": "(Campbell, 1905)",
+      "default": false,
+      "segs": [],
+      "scales": [],
+      "full_citation": "Campbell, A.W. (1905). Histological Studies on the Localisation of Cerebral Function. Cambridge: University Press. https://doi.org/10.5962/bhl.title.1903"
+    },
+    "D": {
+      "name": "Desikan-Killiany",
+      "citation": "(Desikan et al, 2006)",
+      "default": false,
+      "segs": [
+        "aparc"
+      ],
+      "scales": [],
+      "full_citation": "Desikan, R.S., Segonne, F., Fischl, B., et al. (2006). An automated labeling system for subdividing the human cerebral cortex on MRI scans into gyral based regions of interest. NeuroImage, 31(3), 968-980. https://doi.org/10.1016/j.neuroimage.2006.01.021"
+    },
+    "F": {
+      "name": "Flechsig",
+      "citation": "(Flechsig, 1920)",
+      "default": false,
+      "segs": [],
+      "scales": [],
+      "full_citation": "Flechsig, P. (1920). Anatomie des menschlichen Gehirns und Ruckenmarks auf myelogenetischer Grundlage (Vol. 1). Leipzig: Georg Thieme."
+    },
+    "H": {
+      "name": "HCP-MMP1",
+      "citation": "(Glasser et al, 2016)",
+      "default": false,
+      "segs": [],
+      "scales": [],
+      "full_citation": "Glasser, M.F., Coalson, T.S., Robinson, E.C., et al. (2016). A multi-modal parcellation of human cerebral cortex. Nature, 536(7615), 171-178. https://doi.org/10.1038/nature18933"
+    },
+    "K": {
+      "name": "Kleist",
+      "citation": "(Kleist, 1934)",
+      "default": false,
+      "segs": [],
+      "scales": [],
+      "full_citation": "Kleist, K. (1934). Gehirnpathologie. Leipzig: Johann Ambrosius Barth."
+    },
+    "L": {
+      "name": "Lausanne",
+      "citation": "(Symmetric version of Cammoun et al, 2012)",
+      "default": true,
+      "segs": [],
+      "scales": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "full_citation": "Cammoun, L., Gigandet, X., Meskaldji, D., et al. (2012). Mapping the human connectome at multiple scales with diffusion spectrum MRI. Journal of Neuroscience Methods, 203(2), 386-397. https://doi.org/10.1016/j.jneumeth.2011.09.031 (symmetric version used here)"
+    },
+    "M": {
+      "name": "Smith",
+      "citation": "(Smith, 1907)",
+      "default": false,
+      "segs": [],
+      "scales": [],
+      "full_citation": "Smith, G.E. (1907). A new topographical survey of the human cerebral cortex, being an account of the distribution of the anatomically distinct cortical areas and their relationship to the cerebral sulci. Journal of Anatomy and Physiology, 41(Pt 4), 237-254."
+    },
+    "R": {
+      "name": "Broadmann",
+      "citation": "(Broadmann, 1909)",
+      "default": false,
+      "segs": [],
+      "scales": [],
+      "full_citation": "Brodmann, K. (1909). Vergleichende Lokalisationslehre der Grosshirnrinde in ihren Prinzipien dargestellt auf Grund des Zellenbaues. Leipzig: Johann Ambrosius Barth. English translation: Brodmann, K. (2006). Brodmann's Localisation in the Cerebral Cortex (L.J. Garey, Trans., 3rd ed.). Springer."
+    },
+    "S": {
+      "name": "Schaefer",
+      "citation": "(Schaefer et al, 2018)",
+      "default": false,
+      "segs": [
+        "7n",
+        "17n",
+        "kong17n"
+      ],
+      "scales": [
+        "100",
+        "200",
+        "300",
+        "400",
+        "500",
+        "600",
+        "700",
+        "800",
+        "900",
+        "1000"
+      ],
+      "full_citation": "Schaefer, A., Kong, R., Gordon, E.M., et al. (2018). Local-global parcellation of the human cerebral cortex from intrinsic functional connectivity MRI. Cerebral Cortex, 28(9), 3095-3114. https://doi.org/10.1093/cercor/bhx179"
+    },
+    "T": {
+      "name": "Desikan-Killiany-Tourville",
+      "citation": "(Klein and Tourville, 2012)",
+      "default": false,
+      "segs": [],
+      "scales": [
+        "40"
+      ],
+      "full_citation": "Klein, A., & Tourville, J. (2012). 101 labeled brain images and a consistent human cortical labeling protocol. Frontiers in Neuroscience, 6, 171. https://doi.org/10.3389/fnins.2012.00171"
+    },
+    "V": {
+      "name": "vonEconomo",
+      "citation": "(von Economo and Koskinas, 1925)",
+      "default": false,
+      "segs": [],
+      "scales": [],
+      "full_citation": "von Economo, C., & Koskinas, G.N. (1925). Die Cytoarchitektonik der Hirnrinde des erwachsenen Menschen. Vienna: Julius Springer. English edition: von Economo, C., & Koskinas, G.N. (2008). Atlas of Cytoarchitectonics of the Adult Human Cerebral Cortex (L.C. Triarhou, Trans., Ed.). Basel/New York: Karger."
+    },
+    "X": {
+      "name": "Destrieux",
+      "citation": "(Destrieux et al, 2010)",
+      "default": false,
+      "segs": [],
+      "scales": [],
+      "full_citation": "Destrieux, C., Fischl, B., Dale, A., & Halgren, E. (2010). Automatic parcellation of human cortical gyri and sulci using standard anatomical nomenclature. NeuroImage, 53(1), 1-15. https://doi.org/10.1016/j.neuroimage.2010.06.010"
+    },
+    "Y": {
+      "name": "Yeo",
+      "citation": "(Yeo et al, 2011)",
+      "default": false,
+      "segs": [
+        "7n",
+        "17n"
+      ],
+      "scales": [],
+      "full_citation": "Yeo, B.T.T., Krienen, F.M., Sepulcre, J., et al. (2011). The organization of the human cerebral cortex estimated by intrinsic functional connectivity. Journal of Neurophysiology, 106(3), 1125-1165. https://doi.org/10.1152/jn.00338.2011"
+    }
+  },
+  "Subcortical": {
+    "F": {
+      "name": "Aseg",
+      "citation": "(Fischl et al, 2002)",
+      "default": true,
+      "segs": [],
+      "scales": [],
+      "full_citation": "Fischl, B., Salat, D.H., Busa, E., et al. (2002). Whole brain segmentation: automated labeling of neuroanatomical structures in the human brain. Neuron, 33(3), 341-355. https://doi.org/10.1016/S0896-6273(02)00569-X"
+    },
+    "R": {
+      "name": "FIRST",
+      "citation": "(Patenaude et al, 2011)",
+      "default": false,
+      "segs": [],
+      "scales": [],
+      "full_citation": "Patenaude, B., Smith, S.M., Kennedy, D.N., & Jenkinson, M. (2011). A Bayesian model of shape and appearance for subcortical brain segmentation. NeuroImage, 56(3), 907-922. https://doi.org/10.1016/j.neuroimage.2011.02.046"
+    }
+  },
+  "Thalamus": {
+    "F": {
+      "name": "Aseg",
+      "citation": "(Fischl et al, 2002)",
+      "default": true,
+      "segs": [],
+      "scales": [],
+      "full_citation": "Fischl, B., Salat, D.H., Busa, E., et al. (2002). Whole brain segmentation: automated labeling of neuroanatomical structures in the human brain. Neuron, 33(3), 341-355. https://doi.org/10.1016/S0896-6273(02)00569-X"
+    },
+    "I": {
+      "name": "FSThalParc",
+      "citation": "(Iglesias et al, 2018)",
+      "default": false,
+      "segs": [],
+      "scales": [],
+      "full_citation": "Iglesias, J.E., Insausti, R., Lerma-Usabiaga, G., et al. (2018). A probabilistic atlas of the human thalamic nuclei combining ex vivo MRI and histology. NeuroImage, 183, 314-326. https://doi.org/10.1016/j.neuroimage.2018.08.012"
+    },
+    "M": {
+      "name": "MIALThalParc",
+      "citation": "(Najdenovska and Aleman-Gomez et al, 2018)",
+      "default": false,
+      "segs": [],
+      "scales": [],
+      "full_citation": "Najdenovska, E., Aleman-Gomez, Y., Battistella, G., et al. (2018). In-vivo probabilistic atlas of human thalamic nuclei based on diffusion-weighted magnetic resonance imaging. Scientific Data, 5, 180270. https://doi.org/10.1038/sdata.2018.270"
+    },
+    "R": {
+      "name": "FIRST",
+      "citation": "(Patenaude et al, 2011)",
+      "default": false,
+      "segs": [],
+      "scales": [],
+      "full_citation": "Patenaude, B., Smith, S.M., Kennedy, D.N., & Jenkinson, M. (2011). A Bayesian model of shape and appearance for subcortical brain segmentation. NeuroImage, 56(3), 907-922. https://doi.org/10.1016/j.neuroimage.2011.02.046"
+    }
+  },
+  "Amygdala": {
+    "F": {
+      "name": "Aseg",
+      "citation": "(Fischl et al, 2002)",
+      "default": true,
+      "segs": [],
+      "scales": [],
+      "full_citation": "Fischl, B., Salat, D.H., Busa, E., et al. (2002). Whole brain segmentation: automated labeling of neuroanatomical structures in the human brain. Neuron, 33(3), 341-355. https://doi.org/10.1016/S0896-6273(02)00569-X"
+    },
+    "I": {
+      "name": "FSAmygHippoParc",
+      "citation": "(Saygin et al, 2017)",
+      "default": false,
+      "segs": [],
+      "scales": [],
+      "full_citation": "Saygin, Z.M., Kliemann, D., Iglesias, J.E., et al. (2017). High-resolution magnetic resonance imaging reveals nuclei of the human amygdala: manual segmentation to automatic atlas. NeuroImage, 155, 370-382. https://doi.org/10.1016/j.neuroimage.2017.04.046"
+    },
+    "R": {
+      "name": "FIRST",
+      "citation": "(Patenaude et al, 2011)",
+      "default": false,
+      "segs": [],
+      "scales": [],
+      "full_citation": "Patenaude, B., Smith, S.M., Kennedy, D.N., & Jenkinson, M. (2011). A Bayesian model of shape and appearance for subcortical brain segmentation. NeuroImage, 56(3), 907-922. https://doi.org/10.1016/j.neuroimage.2011.02.046"
+    }
+  },
+  "Hippocampus": {
+    "F": {
+      "name": "Aseg",
+      "citation": "(Fischl et al, 2002)",
+      "default": true,
+      "segs": [],
+      "scales": [],
+      "full_citation": "Fischl, B., Salat, D.H., Busa, E., et al. (2002). Whole brain segmentation: automated labeling of neuroanatomical structures in the human brain. Neuron, 33(3), 341-355. https://doi.org/10.1016/S0896-6273(02)00569-X"
+    },
+    "I": {
+      "name": "FSAmygHippoParc",
+      "citation": "(Iglesias et al, 2015)",
+      "default": false,
+      "segs": [],
+      "scales": [],
+      "full_citation": "Iglesias, J.E., Augustinack, J.C., Nguyen, K., et al. (2015). A computational atlas of the hippocampal formation using ex vivo, ultra-high resolution MRI: Application to adaptive segmentation of in vivo MRI. NeuroImage, 115, 117-137. https://doi.org/10.1016/j.neuroimage.2015.04.042"
+    },
+    "H": {
+      "name": "HBT",
+      "citation": "(Iglesias et al, 2015)",
+      "default": false,
+      "segs": [],
+      "scales": [],
+      "full_citation": "Iglesias, J.E., Augustinack, J.C., Nguyen, K., et al. (2015). A computational atlas of the hippocampal formation using ex vivo, ultra-high resolution MRI: Application to adaptive segmentation of in vivo MRI. NeuroImage, 115, 117-137. https://doi.org/10.1016/j.neuroimage.2015.04.042"
+    },
+    "R": {
+      "name": "FIRST",
+      "citation": "(Patenaude et al, 2011)",
+      "default": false,
+      "segs": [],
+      "scales": [],
+      "full_citation": "Patenaude, B., Smith, S.M., Kennedy, D.N., & Jenkinson, M. (2011). A Bayesian model of shape and appearance for subcortical brain segmentation. NeuroImage, 56(3), 907-922. https://doi.org/10.1016/j.neuroimage.2011.02.046"
+    }
+  },
+  "Hypothalamus": {
+    "F": {
+      "name": "Aseg",
+      "citation": "(Based on in-house protocol)",
+      "default": true,
+      "segs": [],
+      "scales": [],
+      "full_citation": "No published atlas/paper for this position -- the hypothalamus boundary here is drawn via an unpublished in-house Aseg-based protocol, per chimera-brainparcellation's own supraregions_dictionary.json."
+    },
+    "I": {
+      "name": "FSHypoThalParc",
+      "citation": "(Billot et al, 2020)",
+      "default": false,
+      "segs": [],
+      "scales": [],
+      "full_citation": "Billot, B., Bocchetta, M., Todd, E., Dalca, A.V., Rohrer, J.D., & Iglesias, J.E. (2020). Automated segmentation of the hypothalamus and associated subunits in brain MRI. NeuroImage, 223, 117287. https://doi.org/10.1016/j.neuroimage.2020.117287"
+    }
+  },
+  "Cerebellum": {
+    "A": {
+      "name": "AALv2",
+      "citation": "(Rolls et al, 2015)",
+      "default": false,
+      "segs": [],
+      "scales": [],
+      "full_citation": "Rolls, E.T., Joliot, M., & Tzourio-Mazoyer, N. (2015). Implementation of a new parcellation of the orbitofrontal cortex in the automated anatomical labeling atlas. NeuroImage, 122, 1-5. https://doi.org/10.1016/j.neuroimage.2015.07.075"
+    },
+    "F": {
+      "name": "Aseg",
+      "citation": "(Fischl et al, 2002)",
+      "default": true,
+      "segs": [],
+      "scales": [],
+      "full_citation": "Fischl, B., Salat, D.H., Busa, E., et al. (2002). Whole brain segmentation: automated labeling of neuroanatomical structures in the human brain. Neuron, 33(3), 341-355. https://doi.org/10.1016/S0896-6273(02)00569-X"
+    },
+    "S": {
+      "name": "SUIT",
+      "citation": "(Diedrichsen, J. et al, 2009)",
+      "default": false,
+      "segs": [],
+      "scales": [],
+      "full_citation": "Diedrichsen, J., Balsters, J.H., Flavell, J., Cussans, E., & Ramnani, N. (2009). A probabilistic MR atlas of the human cerebellum. NeuroImage, 46(1), 39-46. https://doi.org/10.1016/j.neuroimage.2009.01.045"
+    }
+  },
+  "Brainstem": {
+    "F": {
+      "name": "Aseg",
+      "citation": "(Fischl et al, 2002)",
+      "default": true,
+      "segs": [],
+      "scales": [],
+      "full_citation": "Fischl, B., Salat, D.H., Busa, E., et al. (2002). Whole brain segmentation: automated labeling of neuroanatomical structures in the human brain. Neuron, 33(3), 341-355. https://doi.org/10.1016/S0896-6273(02)00569-X"
+    },
+    "I": {
+      "name": "FSBrainStemParc",
+      "citation": "(Iglesias et al, 2015)",
+      "default": false,
+      "segs": [],
+      "scales": [],
+      "full_citation": "Iglesias, J.E., Van Leemput, K., Bhatt, P., et al. (2015). Bayesian segmentation of brainstem structures in MRI. NeuroImage, 113, 184-195. https://doi.org/10.1016/j.neuroimage.2015.02.065"
+    },
+    "R": {
+      "name": "FIRST",
+      "citation": "(Patenaude et al, 2011)",
+      "default": false,
+      "segs": [],
+      "scales": [],
+      "full_citation": "Patenaude, B., Smith, S.M., Kennedy, D.N., & Jenkinson, M. (2011). A Bayesian model of shape and appearance for subcortical brain segmentation. NeuroImage, 56(3), 907-922. https://doi.org/10.1016/j.neuroimage.2011.02.046"
+    }
+  },
+  "GyralWM": {
+    "F": {
+      "name": "Cortical",
+      "citation": "(Depends on the cortical parcellation)",
+      "default": true,
+      "segs": [],
+      "scales": [],
+      "full_citation": "(Depends on the cortical parcellation)"
+    }
+  },
+  "WhiteMatter": {
+    "F": {
+      "name": "Aseg",
+      "citation": "(Fischl et al, 2002)",
+      "default": true,
+      "segs": [],
+      "scales": [],
+      "full_citation": "Fischl, B., Salat, D.H., Busa, E., et al. (2002). Whole brain segmentation: automated labeling of neuroanatomical structures in the human brain. Neuron, 33(3), 341-355. https://doi.org/10.1016/S0896-6273(02)00569-X"
+    },
+    "J": {
+      "name": "JHU",
+      "citation": "(Hua et al, 2008)",
+      "default": false,
+      "segs": [],
+      "scales": [],
+      "full_citation": "Hua, K., Zhang, J., Wakana, S., et al. (2008). Tract probability maps in stereotaxic spaces: analyses of white matter anatomy and tract-specific quantification. NeuroImage, 39(1), 336-347. https://doi.org/10.1016/j.neuroimage.2007.07.053"
+    }
+  }
+}

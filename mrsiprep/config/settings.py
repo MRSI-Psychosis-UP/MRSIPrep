@@ -55,6 +55,7 @@ class MRSIPrepConfig:
     registration_t1_target: str | None = None
     csf_pv_threshold: float = 0.95
     parcellation_mode: str = "synthseg"
+    fs_license: str | None = None
     synthseg_mode: str = "robust"
     # Comma-separated lists are accepted on all four, matching Chimera's own
     # --parcodes/--scale/--growwm syntax: every combination is built in a

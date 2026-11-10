@@ -63,6 +63,335 @@ def build_parser() -> argparse.ArgumentParser:
         "With mrsiprep-docker, provide a host path; the wrapper mounts the file read-only.",
     )
 
+    registration = parser.add_argument_group("Specific options for registrations")
+    registration.add_argument(
+        "--correct-mrsi-orientation",
+        dest="correct_mrsi_orientation",
+        action="store_true",
+        default=False,
+        help="Off by default. Post-quantification MRSI maps can occasionally come out with a wrong "
+        "sform/qform -- close enough to plausible that later steps 'succeed' on a misaligned recording. "
+        "When set, a quick rigid-only registration of the reference metabolite map to the T1w anatomical "
+        "runs first, before any MRSI preprocessing, and that same rigid correction is applied to every "
+        "other metabolite/CRLB/SNR/FWHM map and the brainmask, in place, at native MRSI resolution. Uses "
+        "--registration-backend (ANTs Rigid, or FLIRT dof=6 for fsl).",
+    )
+    registration.add_argument(
+        "--registration-backend",
+        choices=["ants", "fsl", "flirt-fnirt", "flirt_fnirt", "flirt/fnirt"],
+        default="ants",
+        help="Registration toolchain -- the only two choices; 'flirt-fnirt'/'flirt_fnirt'/'flirt/fnirt' are "
+        "accepted as deprecated spellings of 'fsl' for backward compatibility, not separate backends. "
+        "'ants' is the default: rigid+SyN for MRSI-to-T1w and rigid+affine+SyN for T1w-to-MNI. "
+        "'fsl' uses FLIRT, with an FNIRT deformable stage added by default for MRSI-to-T1w (FNIRT is FSL's "
+        "own deformable-registration tool, not a separate backend here -- see --fsl-deformable/"
+        "--no-fsl-deformable to control it). See the registration benchmark for the evaluated "
+        "configurations and metrics.",
+    )
+    registration.add_argument(
+        "--ants-mrsi-to-t1-transform",
+        default="sr",
+        help="ANTs transform preset/code for MRSI-to-T1w registration. Default matches the previous implementation: 'sr'.",
+    )
+    registration.add_argument(
+        "--ants-t1-to-template-transform",
+        default="s",
+        help="ANTs transform preset/code for T1w-to-MNI registration. Default matches the previous implementation: 's'.",
+    )
+    registration.add_argument(
+        "--fsl-mrsi-to-t1-dof",
+        type=int,
+        choices=[6, 7, 9, 12],
+        default=6,
+        help="FLIRT degrees of freedom for MRSI-to-T1w registration: 6=rigid, 7=rigid+global scale, "
+        "9=rigid+per-axis scale, 12=full affine. Default 6 (rigid), appropriate for the low-resolution "
+        "MRSI reference map.",
+    )
+    registration.add_argument(
+        "--fsl-mrsi-to-t1-init",
+        choices=["flirt", "usesqform"],
+        default="flirt",
+        help="FSL MRSI-to-T1w initialization. 'usesqform' applies the NIfTI qform/sform geometry with FLIRT and no "
+        "further optimization. 'flirt' (default) seeds FLIRT from that same qform/sform frame, then runs a local "
+        "(no-search) optimization from it -- FLIRT's own unrestricted global search was found to reliably diverge "
+        "on MRSI-reference-vs-T1w registration and is not offered.",
+    )
+    registration.add_argument(
+        "--fsl-t1-to-template-dof",
+        type=int,
+        choices=[6, 7, 9, 12],
+        default=12,
+        help="FLIRT degrees of freedom for T1w-to-MNI registration: 6=rigid, 7=rigid+global scale, "
+        "9=rigid+per-axis scale, 12=full affine. Default 12 (full affine), appropriate for inter-subject "
+        "spatial normalization.",
+    )
+    registration.add_argument(
+        "--fsl-cost",
+        default="corratio",
+        help="FLIRT cost function for FSL registrations. Default changed from FLIRT's own 'mutualinfo' default to "
+        "'corratio': mutualinfo was found to diverge on the small, low-contrast MRSI reference maps used for "
+        "MRSI-to-T1w registration.",
+    )
+    registration.add_argument(
+        "--fsl-deformable",
+        dest="fsl_deformable",
+        action="store_true",
+        default=True,
+        help="Add an FNIRT deformable stage after FLIRT for the fsl MRSI-to-T1w registration, to more closely "
+        "mimic ANTs' default SyN warp. On by default when --registration-backend fsl is selected (confirmed to "
+        "give consistently better MRSI-brainmask/T1w-brain overlap than FLIRT-only across a 3T and a 7T subject, "
+        "see experiments/registration_backend_benchmark.py); pass --no-fsl-deformable for FLIRT-only (faster, "
+        "seconds instead of several minutes per subject). Has no effect on --registration-backend ants.",
+    )
+    registration.add_argument(
+        "--no-fsl-deformable",
+        dest="fsl_deformable",
+        action="store_false",
+        help="Use FLIRT-only for the fsl MRSI-to-T1w registration (no FNIRT deformable stage). See --fsl-deformable.",
+    )
+    registration.add_argument(
+        "--fsl-fnirt-warpres",
+        type=int,
+        nargs=3,
+        metavar=("X", "Y", "Z"),
+        default=None,
+        help="FNIRT --warpres (B-spline control-point grid spacing, mm) for the fsl-deformable MRSI-to-T1w stage. "
+        "Default: auto-computed as ~2x the MRSI reference image's own native voxel size per axis, floored at 6mm "
+        "(a higher-resolution MRSI acquisition can support a finer deformation grid without just fitting noise; "
+        "validated at warpres=10mm for 5mm MRSI data -- see mrsiprep.interfaces.fsl.default_fnirt_warpres). Pass "
+        "three values (e.g. --fsl-fnirt-warpres 6 6 6) to override.",
+    )
+    registration.add_argument(
+        "--fsl-fnirt-lambda",
+        default="300,200,150,150",
+        help="FNIRT --lambda regularization-weight schedule for the fsl-deformable MRSI-to-T1w stage.",
+    )
+    registration.add_argument(
+        "--normalization",
+        choices=["simple", "ants-syn", "existing"],
+        default="simple",
+        help="Whether to (re)compute the T1w-to-MNI transform. 'simple' (default) and 'ants-syn' are "
+        "currently equivalent -- both recompute it using whatever --registration-backend/its transform "
+        "settings already select; 'ants-syn' is kept only for backward compatibility with older configs/"
+        "presets, and does not force ANTs/SyN regardless of --registration-backend. 'existing' instead "
+        "reuses a previously computed T1w-to-MNI transform and fails if none is found.",
+    )
+    registration.add_argument(
+        "--output-spaces",
+        nargs="+",
+        default=["MNI152NLin2009cAsym"],
+        help="One or more target spaces to resample final MRSI derivatives into, each optionally qualified "
+        "with a resolution, e.g. 'MNI152NLin2009cAsym:res-2 T1w'. Accepts case-insensitive aliases: "
+        "'mni'/'mni152'/'mni152nlin2009casym' (MNI152NLin2009cAsym, default), 't1'/'t1w' (T1w space, "
+        "equivalent to also passing --output-mrsi-t1w), 'mrsi'/'orig' (native MRSI grid). The 'res-' "
+        "modifier takes an integer millimetre value ('res-2'), 'res-origres' (MRSI native -- the default, "
+        "since it avoids implying spatial precision the acquisition never had) or 'res-t1wres' (T1w "
+        "native). Qualifying each space individually replaces the old global --mni-resolution flag, which "
+        "could not express different resolutions for different spaces. See docs/usage_normalization.md.",
+    )
+    registration.add_argument(
+        "--output-mrsi-t1w",
+        action="store_true",
+        help="Also resample all metabolite (and CRLB/SNR/FWHM/spikemask) maps into T1w space as permanent "
+        "derivatives (mrsi-t1w/). Off by default; the registration-overview report generates its own single "
+        "reference-metabolite T1w map in the work directory regardless of this flag.",
+    )
+    registration.add_argument(
+        "--registration-t1-target",
+        choices=["brain-csf", "brain", "raw"],
+        default=None,
+        help="Which T1w image registration targets. 'brain' registers directly to the skull-stripped T1w "
+        "(default when --parcellation-mode synthseg). 'brain-csf' re-adds the CSF compartment to the "
+        "skull-stripped image before registering, so CSF-adjacent MRSI signal isn't clipped at the "
+        "brain-only boundary (default when --parcellation-mode chimera or atlas; requires a CAT12 p3 CSF "
+        "map). 'raw' registers to the original, non-skull-stripped T1w with no fixed mask.",
+    )
+    registration.add_argument(
+        "--csf-pv-threshold",
+        type=float,
+        default=0.95,
+        help="CSF partial-volume probability threshold used when building the 'brain-csf' registration "
+        "target: voxels with CAT12 p3 CSF probability at or above this value are added back to the "
+        "skull-stripped brain image.",
+    )
+    registration.add_argument(
+        "--ref-met",
+        required=True,
+        help="Reference metabolite map used to build the MRSI registration target, e.g. 'CrPCr'.",
+    )
+    registration.add_argument(
+        "--t1",
+        dest="t1_pattern",
+        default="desc-brain_T1w",
+        help="BIDS entity/suffix pattern used to locate the skull-stripped T1w derivative for each "
+        "recording (e.g. 'desc-brain_T1w', or 'acq-mprage_T1w' to select among multiple raw T1w "
+        "acquisitions -- see --bids-filter-file for finer-grained disambiguation).",
+    )
+    registration.add_argument(
+        "--longitudinal",
+        action="store_true",
+        help="Build one unbiased ANTs template across a subject's sessions and register it to MNI once, "
+        "composing (session-to-template)+(template-to-MNI) instead of registering each session directly to MNI. "
+        "No-op for subjects with a single session. Requires --registration-backend ants.",
+    )
+
+    parcellation = parser.add_argument_group("parcellation")
+    parcellation.add_argument(
+        "--parcellation-mode",
+        choices=["synthseg", "chimera", "atlas"],
+        default="synthseg",
+        help="Region-labeling backend used for connectivity/per-parcel output -- separate from tissue "
+        "segmentation, which always runs via SynthSeg (--tissue-backend) regardless of this flag and "
+        "never needs a FreeSurfer license. 'synthseg' (default) reuses SynthSeg's own cortical/subcortical "
+        "labels -- already computed for QC -- as the parcellation too, needs no FreeSurfer recon-all or "
+        "license, and is the lighter-weight default (see --registration-t1-target). 'chimera' runs the "
+        "Chimera multi-atlas fusion tool live, combining several region-specific atlases per "
+        "--chimera-scheme; this is the ONLY mode that runs FreeSurfer recon-all and therefore needs "
+        "--fs-license/FS_LICENSE. 'atlas' warps a pre-bundled or custom standardized MNI-space atlas (see "
+        "--atlas) into subject space instead -- no FreeSurfer either. Regional metabolite extraction, "
+        "per-parcel metabolite-profile export, and CRLB-scaled Monte Carlo profile estimation all run "
+        "unconditionally regardless of this flag's value. See --write-connectivity for the optional "
+        "connectivity matrix.",
+    )
+    parcellation.add_argument(
+        "--fs-license",
+        dest="fs_license",
+        default=None,
+        help="Path to a FreeSurfer license.txt. Required only when --parcellation-mode is 'chimera' "
+        "(Chimera runs FreeSurfer recon-all internally) -- the default 'synthseg' and the 'atlas' mode "
+        "never need a license, and neither does mrsiprep's always-on SynthSeg tissue segmentation. "
+        "Ignored when not needed. If omitted, the usual FreeSurfer discovery order is used instead "
+        "($FS_LICENSE, $FREESURFER_HOME/license.txt, /opt/freesurfer/license.txt).",
+    )
+    parcellation.add_argument(
+        "--synthseg-mode",
+        choices=["fast", "standard", "robust"],
+        default="robust",
+        help="mri_synthseg inference mode, trading speed for accuracy/robustness: 'fast' (quickest, "
+        "lower-memory), 'standard', or 'robust' (default; most accurate but the most memory-hungry -- can "
+        "exceed 16GB RAM on some inputs, consider 'fast' on memory-constrained runners).",
+    )
+    parcellation.add_argument(
+        "--chimera-scheme",
+        default="LFMIHIFIFF",
+        help="Only used when --parcellation-mode chimera: 10-character Chimera parcellation code, one "
+        "letter per supra-region in order: cortex, basal ganglia, thalamus, amygdala, hippocampus, "
+        "hypothalamus, cerebellum, brainstem, gyral WM, WM. Chimera runs live per-subject (via FreeSurfer "
+        "recon-all) to build a parcellation matching this exact code -- contrast with --atlas, whose bundled "
+        "'chimera-<code>_scale<N>' names (e.g. 'chimera-LFMIHIFIS_scale3') are different, already-generated "
+        "atlases from past Chimera runs, just warped into each new subject rather than rerun: use --atlas "
+        "for that 'reuse without needing FreeSurfer' path, and --chimera-scheme only when you want Chimera "
+        "itself to run. Default 'LFMIHIFIFF' = Lausanne cortex, FreeSurfer/Aseg subcortex/cerebellum/WM, "
+        "MIALThalParc thalamus, FSAmygHippoParc amygdala, HBT hippocampus, FSHypoThalParc hypothalamus, "
+        "FSBrainStemParc brainstem. See the Chimera documentation for the full per-position letter set, or "
+        "use the guided picker in the mrsiprep-build-command GUI. Accepts a comma-separated list (e.g. "
+        "'LFMIHIFIFF,LFMIHIFIS') to build several parcellations in one run; see --chimera-scale for how the "
+        "lists combine.",
+    )
+    parcellation.add_argument(
+        "--chimera-scale",
+        default="3",
+        help="Lausanne2018 cortical parcellation granularity (1-5; higher = more, finer parcels), used only "
+        "when --chimera-scheme's cortex position is 'L'. Accepts a bare integer or 'scaleN'. Also accepts a "
+        "comma-separated list (e.g. '1,3'), which is combined with --chimera-scheme and --chimera-grow as a "
+        "cross product -- '--chimera-scheme A,B --chimera-scale 1,3' builds four parcellations. Every "
+        "parcellation gets its own regional table, metabolite profiles, and connectivity outputs, all off a "
+        "single shared preprocessing pass. Schemes whose cortex position isn't 'L' aren't multi-resolution, "
+        "so they yield one parcellation regardless of how many scales are listed.",
+    )
+    parcellation.add_argument(
+        "--chimera-grow",
+        default="2",
+        help="Distance (mm) to grow cortical/subcortical gray-matter parcel labels into adjacent white "
+        "matter when building the gyral-WM parcellation. Set to 0 to disable growing. Accepts a "
+        "comma-separated list, combined as a cross product with --chimera-scheme/--chimera-scale.",
+    )
+    parcellation.add_argument(
+        "--atlas",
+        default="chimera-LFMIHIFIS_scale3",
+        help="Only used when --parcellation-mode atlas (a different, lighter path from --parcellation-mode "
+        "chimera: no FreeSurfer recon-all, just warping an already-generated, standardized MNI-space atlas "
+        "into subject space). One of: a bundled atlas name (see "
+        "mrsiprep.parcellation.atlas_registry.available_bundled_atlases()) -- several of these happen to be "
+        "named 'chimera-<code>_scale<N>' (e.g. 'chimera-LFMIHIFIS_scale3') because they were themselves "
+        "originally produced by a past live Chimera run, but picking one here does NOT rerun Chimera or "
+        "need FreeSurfer/--fs-license: it just warps that fixed, pre-existing label image -- unrelated to "
+        "--chimera-scheme, which instead runs Chimera live under --parcellation-mode chimera; "
+        "'custom' (requires --custom-atlas and --custom-atlas-lut); 'schaefer<N>' for the Schaefer 2018 "
+        "N-parcel cortical atlas (e.g. 'schaefer400'); 'mist197'/'mist-197' for the BASC multiscale "
+        "atlas at scale 197; or 'cubic<N>mm' (e.g. 'cubic10mm') for a non-anatomical grid parcellation -- "
+        "the bundled MNI-space gray-matter mask tiled into N-millimeter cubes, generated on demand at any "
+        "N rather than shipped as fixed sizes. Accepts a comma-separated list to project several atlases "
+        "in one run.",
+    )
+    parcellation.add_argument(
+        "--custom-atlas",
+        type=Path,
+        default=None,
+        help="Path to a custom MNI-space atlas NIfTI (integer parcel-ID label image). Requires "
+        "--atlas custom and --custom-atlas-lut.",
+    )
+    parcellation.add_argument(
+        "--custom-atlas-lut",
+        type=Path,
+        default=None,
+        help="Path to the lookup table (TSV) for --custom-atlas. Must have a 'parcel_id' column (or legacy "
+        "'index') matching the label image's integer values; optional 'parcel_name' ('name') and "
+        "'hemisphere' columns (hemisphere is inferred from the name if omitted).",
+    )
+    parcellation.add_argument(
+        "--fs-subjects-dir",
+        type=Path,
+        default=None,
+        help="FreeSurfer SUBJECTS_DIR to reuse pre-existing recon-all output from, instead of running "
+        "recon-all inside MRSIPrep. Only relevant with --parcellation-mode chimera.",
+    )
+
+    connectivity = parser.add_argument_group("connectivity")
+    connectivity.add_argument(
+        "--write-connectivity",
+        action="store_true",
+        help="Build and write a regional metabolic connectivity (similarity) matrix on top of the "
+        "regional metabolic profiles that mrsiprep already computes unconditionally for every recording, "
+        "using CRLB-scaled noise perturbations to estimate edge similarity between parcels' metabolite profiles.",
+    )
+    connectivity.add_argument(
+        "--connectivity-method",
+        choices=["pearson", "spearman", "cosine", "euclidean_distance"],
+        default="spearman",
+        help="Similarity/distance measure between parcels' perturbed metabolite profiles used to build "
+        "connectivity edges: 'pearson' or 'spearman' correlation, 'cosine' similarity, or "
+        "'euclidean_distance'.",
+    )
+    connectivity.add_argument(
+        "--connectivity-space",
+        choices=["MRSI", "T1w", "MNI"],
+        default="MRSI",
+        help="Legacy space setting retained for compatibility. Current regional profiles and connectivity "
+        "are computed from native MRSI maps and atlas regardless of this value.",
+    )
+    connectivity.add_argument("--connectivity-n-perturbations", type=int, default=50, help="Number of CRLB-scaled noise perturbations per metabolite used to build the connectivity similarity matrix.")
+    connectivity.add_argument("--connectivity-sigma-scale", type=float, default=2.0, help="Scale factor applied to the CRLB-derived noise sigma when perturbing metabolite maps for connectivity.")
+    connectivity.add_argument(
+        "--connectivity-exclude-parcels",
+        default=None,
+        help="Comma-separated substrings; parcels whose name contains any of them are excluded from the connectivity matrix (e.g. 'wm-lh,cer-').",
+    )
+    connectivity.add_argument(
+        "--connectivity-max-parcel-id",
+        type=int,
+        default=None,
+        help="Exclude parcels whose label/ID is greater than or equal to this value from the connectivity matrix.",
+    )
+    connectivity.add_argument(
+        "--regional-summary",
+        choices=["mean", "median", "weighted_mean"],
+        default="mean",
+        help="How each parcel's per-voxel metabolite values are summarized into a single regional value: "
+        "'mean', 'median', or 'weighted_mean' (SNR-weighted average; falls back to an unweighted mean if no "
+        "SNR map is available for that recording).",
+    )
+
     quality = parser.add_argument_group("quality thresholds")
     quality.add_argument(
         "--quantification-tool",
@@ -182,298 +511,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Tissue segmentation backend for PVC. 'none' disables tissue segmentation and PVC entirely.",
     )
 
-    registration = parser.add_argument_group("Specific options for registrations")
-    registration.add_argument(
-        "--correct-mrsi-orientation",
-        dest="correct_mrsi_orientation",
-        action="store_true",
-        default=False,
-        help="Off by default. Post-quantification MRSI maps can occasionally come out with a wrong "
-        "sform/qform -- close enough to plausible that later steps 'succeed' on a misaligned recording. "
-        "When set, a quick rigid-only registration of the reference metabolite map to the T1w anatomical "
-        "runs first, before any MRSI preprocessing, and that same rigid correction is applied to every "
-        "other metabolite/CRLB/SNR/FWHM map and the brainmask, in place, at native MRSI resolution. Uses "
-        "--registration-backend (ANTs Rigid, or FLIRT dof=6 for fsl).",
-    )
-    registration.add_argument(
-        "--registration-backend",
-        choices=["ants", "fsl", "flirt-fnirt", "flirt_fnirt", "flirt/fnirt"],
-        default="ants",
-        help="Registration toolchain. 'ants' is the default: rigid+SyN for MRSI-to-T1w and "
-        "rigid+affine+SyN for T1w-to-MNI. "
-        "'fsl'/'flirt-fnirt' uses FLIRT+FNIRT (deformable) for MRSI-to-T1w by default; pass --no-fsl-deformable "
-        "for FLIRT-only. See the registration benchmark for the evaluated configurations and metrics.",
-    )
-    registration.add_argument(
-        "--ants-mrsi-to-t1-transform",
-        default="sr",
-        help="ANTs transform preset/code for MRSI-to-T1w registration. Default matches the previous implementation: 'sr'.",
-    )
-    registration.add_argument(
-        "--ants-t1-to-template-transform",
-        default="s",
-        help="ANTs transform preset/code for T1w-to-MNI registration. Default matches the previous implementation: 's'.",
-    )
-    registration.add_argument(
-        "--fsl-mrsi-to-t1-dof",
-        type=int,
-        choices=[6, 7, 9, 12],
-        default=6,
-        help="FLIRT degrees of freedom for MRSI-to-T1w registration: 6=rigid, 7=rigid+global scale, "
-        "9=rigid+per-axis scale, 12=full affine. Default 6 (rigid), appropriate for the low-resolution "
-        "MRSI reference map.",
-    )
-    registration.add_argument(
-        "--fsl-mrsi-to-t1-init",
-        choices=["flirt", "usesqform"],
-        default="flirt",
-        help="FSL MRSI-to-T1w initialization. 'usesqform' applies the NIfTI qform/sform geometry with FLIRT and no "
-        "further optimization. 'flirt' (default) seeds FLIRT from that same qform/sform frame, then runs a local "
-        "(no-search) optimization from it -- FLIRT's own unrestricted global search was found to reliably diverge "
-        "on MRSI-reference-vs-T1w registration and is not offered.",
-    )
-    registration.add_argument(
-        "--fsl-t1-to-template-dof",
-        type=int,
-        choices=[6, 7, 9, 12],
-        default=12,
-        help="FLIRT degrees of freedom for T1w-to-MNI registration: 6=rigid, 7=rigid+global scale, "
-        "9=rigid+per-axis scale, 12=full affine. Default 12 (full affine), appropriate for inter-subject "
-        "spatial normalization.",
-    )
-    registration.add_argument(
-        "--fsl-cost",
-        default="corratio",
-        help="FLIRT cost function for FSL registrations. Default changed from FLIRT's own 'mutualinfo' default to "
-        "'corratio': mutualinfo was found to diverge on the small, low-contrast MRSI reference maps used for "
-        "MRSI-to-T1w registration.",
-    )
-    registration.add_argument(
-        "--fsl-deformable",
-        dest="fsl_deformable",
-        action="store_true",
-        default=True,
-        help="Add an FNIRT deformable stage after FLIRT for the fsl MRSI-to-T1w registration, to more closely "
-        "mimic ANTs' default SyN warp. On by default when --registration-backend fsl is selected (confirmed to "
-        "give consistently better MRSI-brainmask/T1w-brain overlap than FLIRT-only across a 3T and a 7T subject, "
-        "see experiments/registration_backend_benchmark.py); pass --no-fsl-deformable for FLIRT-only (faster, "
-        "seconds instead of several minutes per subject). Has no effect on --registration-backend ants.",
-    )
-    registration.add_argument(
-        "--no-fsl-deformable",
-        dest="fsl_deformable",
-        action="store_false",
-        help="Use FLIRT-only for the fsl MRSI-to-T1w registration (no FNIRT deformable stage). See --fsl-deformable.",
-    )
-    registration.add_argument(
-        "--fsl-fnirt-warpres",
-        type=int,
-        nargs=3,
-        metavar=("X", "Y", "Z"),
-        default=None,
-        help="FNIRT --warpres (B-spline control-point grid spacing, mm) for the fsl-deformable MRSI-to-T1w stage. "
-        "Default: auto-computed as ~2x the MRSI reference image's own native voxel size per axis, floored at 6mm "
-        "(a higher-resolution MRSI acquisition can support a finer deformation grid without just fitting noise; "
-        "validated at warpres=10mm for 5mm MRSI data -- see mrsiprep.interfaces.fsl.default_fnirt_warpres). Pass "
-        "three values (e.g. --fsl-fnirt-warpres 6 6 6) to override.",
-    )
-    registration.add_argument(
-        "--fsl-fnirt-lambda",
-        default="300,200,150,150",
-        help="FNIRT --lambda regularization-weight schedule for the fsl-deformable MRSI-to-T1w stage.",
-    )
-    registration.add_argument(
-        "--normalization",
-        choices=["simple", "ants-syn", "existing"],
-        default="simple",
-        help="Legacy T1w-to-MNI normalization setting. 'simple' and 'ants-syn' use the toolchain "
-        "selected by --registration-backend and its transform settings; the default ANTs path includes SyN. "
-        "'existing' reuses a previously computed T1w-to-MNI transform instead of recomputing it.",
-    )
-    registration.add_argument(
-        "--output-spaces",
-        nargs="+",
-        default=["MNI152NLin2009cAsym"],
-        help="One or more target spaces to resample final MRSI derivatives into, each optionally qualified "
-        "with a resolution, e.g. 'MNI152NLin2009cAsym:res-2 T1w'. Accepts case-insensitive aliases: "
-        "'mni'/'mni152'/'mni152nlin2009casym' (MNI152NLin2009cAsym, default), 't1'/'t1w' (T1w space, "
-        "equivalent to also passing --output-mrsi-t1w), 'mrsi'/'orig' (native MRSI grid). The 'res-' "
-        "modifier takes an integer millimetre value ('res-2'), 'res-origres' (MRSI native -- the default, "
-        "since it avoids implying spatial precision the acquisition never had) or 'res-t1wres' (T1w "
-        "native). Qualifying each space individually replaces the old global --mni-resolution flag, which "
-        "could not express different resolutions for different spaces. See docs/usage_normalization.md.",
-    )
-    registration.add_argument(
-        "--output-mrsi-t1w",
-        action="store_true",
-        help="Also resample all metabolite (and CRLB/SNR/FWHM/spikemask) maps into T1w space as permanent "
-        "derivatives (mrsi-t1w/). Off by default; the registration-overview report generates its own single "
-        "reference-metabolite T1w map in the work directory regardless of this flag.",
-    )
-    registration.add_argument(
-        "--registration-t1-target",
-        choices=["brain-csf", "brain", "raw"],
-        default=None,
-        help="Which T1w image registration targets. 'brain' registers directly to the skull-stripped T1w "
-        "(default when --parcellation-mode synthseg). 'brain-csf' re-adds the CSF compartment to the "
-        "skull-stripped image before registering, so CSF-adjacent MRSI signal isn't clipped at the "
-        "brain-only boundary (default when --parcellation-mode chimera or atlas; requires a CAT12 p3 CSF "
-        "map). 'raw' registers to the original, non-skull-stripped T1w with no fixed mask.",
-    )
-    registration.add_argument(
-        "--csf-pv-threshold",
-        type=float,
-        default=0.95,
-        help="CSF partial-volume probability threshold used when building the 'brain-csf' registration "
-        "target: voxels with CAT12 p3 CSF probability at or above this value are added back to the "
-        "skull-stripped brain image.",
-    )
-    registration.add_argument(
-        "--ref-met",
-        required=True,
-        help="Reference metabolite map used to build the MRSI registration target, e.g. 'CrPCr'.",
-    )
-    registration.add_argument(
-        "--t1",
-        dest="t1_pattern",
-        default="desc-brain_T1w",
-        help="BIDS entity/suffix pattern used to locate the skull-stripped T1w derivative for each "
-        "recording (e.g. 'desc-brain_T1w', or 'acq-mprage_T1w' to select among multiple raw T1w "
-        "acquisitions -- see --bids-filter-file for finer-grained disambiguation).",
-    )
-
-    parcellation = parser.add_argument_group("parcellation")
-    parcellation.add_argument(
-        "--parcellation-mode",
-        choices=["synthseg", "chimera", "atlas"],
-        default="synthseg",
-        help="Parcellation scheme, and the primary switch for how much of the pipeline runs. 'synthseg' "
-        "(default) uses SynthSeg's own cortical/subcortical labels for parcellation, needs no FreeSurfer "
-        "recon-all, and is the lighter-weight default (see --registration-t1-target). 'chimera' runs the "
-        "Chimera multi-atlas fusion tool live, combining several region-specific atlases per "
-        "--chimera-scheme (requires FreeSurfer recon-all and FS_LICENSE). 'atlas' warps a pre-bundled or "
-        "custom standardized MNI-space atlas (see --atlas) into subject space instead of running Chimera. "
-        "Regional metabolite extraction, per-parcel metabolite-profile export, and CRLB-scaled Monte Carlo "
-        "profile estimation all run unconditionally regardless of this flag's value -- 'chimera'/'atlas' "
-        "additionally run that parcellation step itself on top of SynthSeg's own parcellation, which "
-        "always runs for QC. See --write-connectivity for the optional connectivity matrix.",
-    )
-    parcellation.add_argument(
-        "--synthseg-mode",
-        choices=["fast", "standard", "robust"],
-        default="robust",
-        help="mri_synthseg inference mode, trading speed for accuracy/robustness: 'fast' (quickest, "
-        "lower-memory), 'standard', or 'robust' (default; most accurate but the most memory-hungry -- can "
-        "exceed 16GB RAM on some inputs, consider 'fast' on memory-constrained runners).",
-    )
-    parcellation.add_argument(
-        "--chimera-scheme",
-        default="LFMIHIFIFF",
-        help="10-character Chimera parcellation code, one letter per supra-region in order: cortex, basal "
-        "ganglia, thalamus, amygdala, hippocampus, hypothalamus, cerebellum, brainstem, gyral WM, WM. "
-        "Default 'LFMIHIFIFF' = Lausanne cortex, FreeSurfer/Aseg subcortex/cerebellum/WM, MIALThalParc "
-        "thalamus, FSAmygHippoParc amygdala, HBT hippocampus, FSHypoThalParc hypothalamus, FSBrainStemParc "
-        "brainstem. See the Chimera documentation for the full per-position letter set. Accepts a "
-        "comma-separated list (e.g. 'LFMIHIFIFF,LFMIHIFIS') to build several parcellations in one run; "
-        "see --chimera-scale for how the lists combine.",
-    )
-    parcellation.add_argument(
-        "--chimera-scale",
-        default="3",
-        help="Lausanne2018 cortical parcellation granularity (1-5; higher = more, finer parcels), used only "
-        "when --chimera-scheme's cortex position is 'L'. Accepts a bare integer or 'scaleN'. Also accepts a "
-        "comma-separated list (e.g. '1,3'), which is combined with --chimera-scheme and --chimera-grow as a "
-        "cross product -- '--chimera-scheme A,B --chimera-scale 1,3' builds four parcellations. Every "
-        "parcellation gets its own regional table, metabolite profiles, and connectivity outputs, all off a "
-        "single shared preprocessing pass. Schemes whose cortex position isn't 'L' aren't multi-resolution, "
-        "so they yield one parcellation regardless of how many scales are listed.",
-    )
-    parcellation.add_argument(
-        "--chimera-grow",
-        default="2",
-        help="Distance (mm) to grow cortical/subcortical gray-matter parcel labels into adjacent white "
-        "matter when building the gyral-WM parcellation. Set to 0 to disable growing. Accepts a "
-        "comma-separated list, combined as a cross product with --chimera-scheme/--chimera-scale.",
-    )
-    parcellation.add_argument(
-        "--atlas",
-        default="chimera-LFMIHIFIS_scale3",
-        help="Atlas used when --parcellation-mode atlas. One of: a bundled atlas name (see "
-        "mrsiprep.parcellation.atlas_registry.available_bundled_atlases(), e.g. 'chimera-LFMIHIFIS_scale3'); "
-        "'custom' (requires --custom-atlas and --custom-atlas-lut); 'schaefer<N>' for the Schaefer 2018 "
-        "N-parcel cortical atlas (e.g. 'schaefer400'); 'mist197'/'mist-197' for the BASC multiscale "
-        "atlas at scale 197; or 'cubic<N>mm' (e.g. 'cubic10mm') for a non-anatomical grid parcellation -- "
-        "the bundled MNI-space gray-matter mask tiled into N-millimeter cubes, generated on demand at any "
-        "N rather than shipped as fixed sizes. Accepts a comma-separated list to project several atlases "
-        "in one run.",
-    )
-    parcellation.add_argument(
-        "--custom-atlas",
-        type=Path,
-        default=None,
-        help="Path to a custom MNI-space atlas NIfTI (integer parcel-ID label image). Requires "
-        "--atlas custom and --custom-atlas-lut.",
-    )
-    parcellation.add_argument(
-        "--custom-atlas-lut",
-        type=Path,
-        default=None,
-        help="Path to the lookup table (TSV) for --custom-atlas. Must have a 'parcel_id' column (or legacy "
-        "'index') matching the label image's integer values; optional 'parcel_name' ('name') and "
-        "'hemisphere' columns (hemisphere is inferred from the name if omitted).",
-    )
-    parcellation.add_argument(
-        "--fs-subjects-dir",
-        type=Path,
-        default=None,
-        help="FreeSurfer SUBJECTS_DIR to reuse pre-existing recon-all output from, instead of running "
-        "recon-all inside MRSIPrep. Only relevant with --parcellation-mode chimera.",
-    )
-
-    connectivity = parser.add_argument_group("connectivity")
-    connectivity.add_argument(
-        "--write-connectivity",
-        action="store_true",
-        help="Build and write a regional metabolic connectivity (similarity) matrix on top of the "
-        "regional metabolic profiles that mrsiprep already computes unconditionally for every recording, "
-        "using CRLB-scaled noise perturbations to estimate edge similarity between parcels' metabolite profiles.",
-    )
-    connectivity.add_argument(
-        "--connectivity-method",
-        choices=["pearson", "spearman", "cosine", "euclidean_distance"],
-        default="spearman",
-        help="Similarity/distance measure between parcels' perturbed metabolite profiles used to build "
-        "connectivity edges: 'pearson' or 'spearman' correlation, 'cosine' similarity, or "
-        "'euclidean_distance'.",
-    )
-    connectivity.add_argument(
-        "--connectivity-space",
-        choices=["MRSI", "T1w", "MNI"],
-        default="MRSI",
-        help="Legacy space setting retained for compatibility. Current regional profiles and connectivity "
-        "are computed from native MRSI maps and atlas regardless of this value.",
-    )
-    connectivity.add_argument("--connectivity-n-perturbations", type=int, default=50, help="Number of CRLB-scaled noise perturbations per metabolite used to build the connectivity similarity matrix.")
-    connectivity.add_argument("--connectivity-sigma-scale", type=float, default=2.0, help="Scale factor applied to the CRLB-derived noise sigma when perturbing metabolite maps for connectivity.")
-    connectivity.add_argument(
-        "--connectivity-exclude-parcels",
-        default=None,
-        help="Comma-separated substrings; parcels whose name contains any of them are excluded from the connectivity matrix (e.g. 'wm-lh,cer-').",
-    )
-    connectivity.add_argument(
-        "--connectivity-max-parcel-id",
-        type=int,
-        default=None,
-        help="Exclude parcels whose label/ID is greater than or equal to this value from the connectivity matrix.",
-    )
-    connectivity.add_argument(
-        "--regional-summary",
-        choices=["mean", "median", "weighted_mean"],
-        default="mean",
-        help="How each parcel's per-voxel metabolite values are summarized into a single regional value: "
-        "'mean', 'median', or 'weighted_mean' (SNR-weighted average; falls back to an unweighted mean if no "
-        "SNR map is available for that recording).",
-    )
 
     processing_control = parser.add_argument_group("Workflow configuration")
     processing_control.add_argument("--transform", default="", help="Legacy output transform override; prefer --output-spaces.")
@@ -522,13 +559,6 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Skip partial-volume correction (PETPVC) entirely. Equivalent to --tissue-backend none, "
         "except tissue segmentation itself still runs (its maps are just not used for PVC).",
-    )
-    processing_control.add_argument(
-        "--longitudinal",
-        action="store_true",
-        help="Build one unbiased ANTs template across a subject's sessions and register it to MNI once, "
-        "composing (session-to-template)+(template-to-MNI) instead of registering each session directly to MNI. "
-        "No-op for subjects with a single session. Requires --registration-backend ants.",
     )
     processing_control.add_argument("--transform-spikemask", action="store_true", help="Also transform per-metabolite spike masks into T1w/MNI space.")
     processing_control.add_argument("--nthreads", type=int, default=16, help="ANTs/ITK thread count per subject/session process.")
@@ -748,6 +778,7 @@ def parse_args(argv: list[str] | None = None) -> MRSIPrepConfig:
         ref_met=args.ref_met,
         t1_pattern=args.t1_pattern,
         parcellation_mode=args.parcellation_mode,
+        fs_license=args.fs_license,
         synthseg_mode=args.synthseg_mode,
         chimera_scheme=args.chimera_scheme,
         chimera_scale=args.chimera_scale,

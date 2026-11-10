@@ -6,6 +6,7 @@ import os
 import sys
 
 from mrsiprep.cli.parser import parse_args, print_presets
+from mrsiprep.interfaces.freesurfer import FreeSurferError, check_license
 from mrsiprep.utils.banner import print_banner
 from mrsiprep.utils.debug import Debug
 from mrsiprep.utils.logging import setup_logging
@@ -89,7 +90,9 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         config = parse_args(argv)
-    except (FileNotFoundError, ValueError) as exc:
+        if config.parcellation_mode == "chimera":
+            check_license(config.fs_license)
+    except (FileNotFoundError, ValueError, FreeSurferError) as exc:
         print(f"MRSIPrep configuration error: {exc}", file=sys.stderr)
         return 2
     logger = setup_logging(config.verbose, log_dir=config.logs_dir)

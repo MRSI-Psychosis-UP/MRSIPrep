@@ -23,7 +23,7 @@ parcellation → regional → connectivity → metprofiles → reports
 ```
 
 **`STEP_SEQUENCE` in `mrsiprep/workflows/nipype_engine/nodes.py` is the
-authoritative order.** The static diagram in the report's Preproc tab mirrors
+authoritative order.** The static diagram in the report's Provenance tab mirrors
 it; if you add a stage, both live there.
 
 ## Package responsibilities

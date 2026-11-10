@@ -16,7 +16,7 @@ from pathlib import Path
 import pandas as pd
 
 from mrsiprep.io.mrsinmrs import load_mrsinmrs, resolve_mrsinmrs
-from mrsiprep.io.naming import coverage_report_html
+from mrsiprep.io.naming import coverage_report_html, provenance_derivative
 from mrsiprep.reports.preproc_overview import build_preproc_overview_sections
 from mrsiprep.reports.registration_overview import leakage_table_html
 from mrsiprep.utils.version import mrsiprep_version
@@ -38,6 +38,9 @@ _TAB_STYLE = (
     "pre.filetree{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:0.85rem;line-height:1.45;"
     "background:#fafafa;border:1px solid #eee;padding:0.75rem;overflow-x:auto}"
     "ul.filetree{list-style:none;padding-left:1rem;margin:0.2rem 0}"
+    ".download-button{display:inline-block;padding:0.5rem 1rem;background:#2a6fd6;color:#fff;"
+    "border-radius:4px;text-decoration:none;font-size:0.95rem}"
+    ".download-button:hover{background:#1f57ab}"
 )
 
 _TAB_SCRIPT = """
@@ -129,7 +132,24 @@ def _build_tabs(config, subject, session, out, outputs, qc_sections, mrsi_raw_bo
     if connectivity_sections is not None:
         tabs.append(("connectivity", "Connectivity", _sections_html(connectivity_sections)))
     tabs.append(("acquisition", "MRSinMRS", _mrsinmrs_html(config, subject, session)))
-    tabs.append(("preproc", "PrepParams", _sections_html(build_preproc_overview_sections(config))))
+    provenance_filename = provenance_derivative(config.derivative_dir, subject, session).name
+    provenance_download_section = [(
+        "Provenance file",
+        # Relative link: provenance.json is written alongside this HTML
+        # report in the same reports/ directory (see
+        # mrsiprep.io.naming.provenance_derivative vs. coverage_report_html),
+        # so a bare filename resolves correctly regardless of where the
+        # derivatives tree is later moved/copied to.
+        f"<p><a href='{provenance_filename}' download "
+        f"class='download-button'>Download provenance JSON</a></p>",
+    )]
+    tabs.append((
+        "preproc",
+        "Provenance",
+        _sections_html(
+            provenance_download_section + build_preproc_overview_sections(config) + citations_sections_html(config)
+        ),
+    ))
     tabs.append(("runtime", "Runtime", _sections_html(qc_sections.get("runtime"))))
     # out is reports/sub-X..._report.html, so its recording root (ses-Y/, or
     # sub-X/ for a session-less dataset) is two levels up: .parent is
@@ -223,8 +243,6 @@ def generate_subject_report(config, subject: str, session: str | None, outputs: 
         f"<div class='tab-panel{' active' if index == 0 else ''}' id='{tab_id}'><h2>{label}</h2>{body}</div>"
         for index, (tab_id, label, body) in enumerate(tabs)
     )
-    lines.append("<h2>Citations</h2>")
-    lines.append(_citations_html(config))
     lines.append(_TAB_SCRIPT)
     lines.extend(["</body></html>"])
     out.write_text("\n".join(lines), encoding="utf-8")
@@ -438,23 +456,92 @@ _MRSIPREP_CITATION_TEXT = (
     "Imaging. <i>bioRxiv</i>."
 )
 
+# Chimera (--parcellation-mode chimera) has no published methods paper/DOI to
+# cite -- only a GitHub repository and Read the Docs site (confirmed: neither
+# lists a "how to cite" section, CITATION.cff, or Zenodo DOI as of
+# chimera-brainparcellation 0.4.1). Cite it as software via its repository,
+# not a fabricated paper.
+_CHIMERA_TOOL_CITATION = (
+    "Chimera (Alemán-Gómez, Y. et al.), an open-source framework for combining multiple brain "
+    "parcellations: <a href='https://github.com/connectomicslab/chimera'>"
+    "github.com/connectomicslab/chimera</a>."
+)
 
-def _citations_html(config) -> str:
-    parts = [
-        f"<p>If you use MRSIPrep, please cite: {_MRSIPREP_CITATION_TEXT} "
-        f"<a href='https://doi.org/{_MRSIPREP_CITATION_DOI}'>doi:{_MRSIPREP_CITATION_DOI}</a>. "
-        "A downloadable BibTeX entry is in <code>CITATION.cff</code> in the "
-        "<a href='https://github.com/MRSI-Psychosis-UP/MRSIPrep'>MRSIPrep repository</a>.</p>",
-        f"<p>MRSI acquisition reporting follows the <a href='{_MRSINMRS_URL}'>MRSinMRS</a> minimum reporting "
-        "standard (Lin et al. 2021).</p>",
+
+def _chimera_atlas_citations_html(config) -> str | None:
+    """Full reference for every individual atlas this run's selected
+    --chimera-scheme letter(s) actually combine (not the Chimera tool itself
+    -- see _CHIMERA_TOOL_CITATION for that).
+
+    Each letter's full reference comes from mrsiprep/config/chimera_schemes.json
+    -- a data file, not code, so adding a new scheme/letter always means also
+    filling in that letter's own "full_citation" field (verified against the
+    real published paper -- see
+    mrsiprep.config.chimera_schemes.load_chimera_schemes's validation, and
+    docs/extending.md), rather than a run silently shipping an uncredited atlas.
+    """
+    if getattr(config, "parcellation_mode", None) != "chimera":
+        return None
+
+    from mrsiprep.config.chimera_schemes import NONE_KEY, parse_scheme_code, valid_letters
+
+    # Keyed by (name, full_citation): FSAmygHippoParc, for example, carries
+    # two genuinely different references depending on whether it's used for
+    # the amygdala or the hippocampus position -- a plain name-keyed dedup
+    # would silently drop one.
+    seen: dict[tuple[str, str], None] = {}
+    for code in config.chimera_schemes():
+        for region, letter in parse_scheme_code(code).items():
+            if letter == NONE_KEY:
+                continue
+            if region == "GyralWM":
+                # GyralWM has no atlas of its own -- it's always derived from
+                # whichever cortical atlas was selected (upstream's citation
+                # for it is literally "Depends on the cortical parcellation"),
+                # which is already cited separately via the Cortical position.
+                continue
+            info = valid_letters(region)[letter]
+            seen[(info["name"], info.get("full_citation", "").strip())] = None
+
+    if not seen:
+        return None
+    return "<ul>" + "".join(f"<li>{name}: {full_citation}</li>" for name, full_citation in sorted(seen)) + "</ul>"
+
+
+def citations_sections_html(config) -> list[tuple[str, str]]:
+    """(heading, body_html) subsections for the Provenance tab's Citations
+    section -- MRSIPrep itself, the MRSinMRS reporting standard, Chimera
+    parcellation (tool + every atlas it combined for this run, only when
+    --parcellation-mode chimera), then any other applicable citation
+    (currently just --config-preset's own "_citation", if set)."""
+    sections = [
+        (
+            "MRSIPrep",
+            f"<p>If you use MRSIPrep, please cite: {_MRSIPREP_CITATION_TEXT} "
+            f"<a href='https://doi.org/{_MRSIPREP_CITATION_DOI}'>doi:{_MRSIPREP_CITATION_DOI}</a>. "
+            "A downloadable BibTeX entry is in <code>CITATION.cff</code> in the "
+            "<a href='https://github.com/MRSI-Psychosis-UP/MRSIPrep'>MRSIPrep repository</a>.</p>",
+        ),
+        (
+            "MRSinMRS",
+            f"<p>MRSI acquisition reporting follows the <a href='{_MRSINMRS_URL}'>MRSinMRS</a> minimum "
+            "reporting standard (Lin et al. 2021).</p>",
+        ),
     ]
+    if getattr(config, "parcellation_mode", None) == "chimera":
+        atlas_citations = _chimera_atlas_citations_html(config) or ""
+        sections.append((
+            "Chimera parcellation",
+            f"<p>Parcellation used {_CHIMERA_TOOL_CITATION}</p>"
+            f"<p>Combined atlases for this run's selected --chimera-scheme:</p>{atlas_citations}",
+        ))
     citation = getattr(config, "preset_citation", None)
     if citation:
         text = citation.get("text", citation.get("label", ""))
         url = citation.get("url") or (f"https://doi.org/{citation['doi']}" if citation.get("doi") else None)
         cited = f"<a href='{url}'>{text}</a>" if url else text
-        parts.append(f"<p>Processing parameters replicate: {cited}</p>")
-    return "\n".join(parts)
+        sections.append(("Other", f"<p>Processing parameters replicate: {cited}</p>"))
+    return sections
 
 
 def _parcel_figures_html(report_dir: Path) -> str:

@@ -211,4 +211,4 @@ print(result.median_dice, result.passed)
 If you're adding something that doesn't fit these shapes, please open an issue
 before writing much code. The stage sequence itself (`STEP_SEQUENCE` in
 `workflows/nipype_engine/nodes.py`) is intentionally fixed and linear; changing
-it affects caching, the report's PrepParams tab, and the provenance trace together.
+it affects caching, the report's Provenance tab, and the provenance trace together.

@@ -19,10 +19,18 @@ from __future__ import annotations
 
 import argparse
 import shlex
+from pathlib import Path
 
+import pandas as pd
 import streamlit as st
 
 from mrsiprep.cli.parser import build_parser
+from mrsiprep.config.chimera_schemes import (
+    SUPRA_REGION_LABELS,
+    SUPRA_REGIONS,
+    build_scheme_code,
+    valid_letters,
+)
 
 # Debug/internal flags not useful in a user-facing form.
 EXCLUDED_FLAGS = {"--hello-world", "--help", "-h"}
@@ -46,6 +54,116 @@ def _is_flag(action: argparse.Action) -> bool:
     return action.nargs == 0
 
 
+def _render_participants_widget(action: argparse.Action):
+    """Text input for --participants plus a "View" button that previews the
+    TSV/CSV's first rows, since a bad/mistyped subject-session list here
+    silently filters out every subject rather than erroring loudly."""
+    label = _dest_label(action)
+    help_text = (action.help or "").strip()
+    key = f"field_{action.dest}"
+    path_str = st.text_input(label, value="", help=help_text, key=key)
+    if path_str and st.button("View", key=f"{key}_view"):
+        path = Path(path_str)
+        if not path.exists():
+            st.error(f"File not found: {path}")
+        else:
+            try:
+                sep = "\t" if path.suffix.lower() == ".tsv" else None
+                preview = pd.read_csv(path, sep=sep, engine="python", nrows=20)
+                st.dataframe(preview)
+            except Exception as exc:  # noqa: BLE001 -- best-effort preview, any parse error is shown as-is
+                st.error(f"Could not preview {path}: {exc}")
+    return path_str or None
+
+
+# mrsiprep's own recommended --chimera-scheme default: not the same as each
+# position's upstream-chimera "default" letter (several positions, e.g.
+# Thalamus/Amygdala/Hippocampus/Hypothalamus/Brainstem, use a more specific
+# FreeSurfer sub-parcellation instead of upstream's own plain Aseg default).
+RECOMMENDED_CHIMERA_CODE = "LFMIHIFIFF"
+
+
+def _render_chimera_scheme_picker(scheme_action: argparse.Action, scale_action: argparse.Action, grow_action: argparse.Action):
+    """One dropdown per supra-region (instead of a raw 10-letter code), composing
+    --chimera-scheme live; the cortex dropdown's scale/seg choices (e.g. Lausanne's
+    1-5 vs. Schaefer's 100-1000) replace --chimera-scale's own generic widget,
+    since valid values depend entirely on which cortical atlas is picked."""
+    recommended = {region: letter for region, letter in zip(SUPRA_REGIONS, RECOMMENDED_CHIMERA_CODE)}
+    by_region: dict[str, str] = {}
+    cols = st.columns(5)
+    for i, region in enumerate(SUPRA_REGIONS):
+        letters = valid_letters(region)
+        options = sorted(letters)
+        label = SUPRA_REGION_LABELS.get(region, region)
+        if len(options) == 1:
+            by_region[region] = options[0]
+            cols[i % 5].caption(f"**{label}**: {letters[options[0]]['name']} ({options[0]}) (only option)")
+            continue
+        default_letter = recommended.get(region, options[0])
+        fmt = lambda letter, letters=letters, default_letter=default_letter: (
+            f"{letters[letter]['name']} ({letter})" + (" (default)" if letter == default_letter else "")
+        )
+        selected = cols[i % 5].selectbox(label, options, index=options.index(default_letter), format_func=fmt, key=f"chimera_{region}")
+        by_region[region] = selected
+
+    code = build_scheme_code(by_region)
+    st.code(code, language=None)
+
+    scale_value, grow_value = None, None
+    cortical_letter = by_region["Cortical"]
+    cortical_info = valid_letters("Cortical")[cortical_letter]
+    scales = cortical_info["scales"]
+    if scales:
+        label = f"--chimera-scale ({cortical_info['name']} resolution)"
+        default = "3" if "3" in scales else scales[0]
+        # Key includes the cortical letter: scale's valid options depend
+        # entirely on which cortical atlas is chosen (Lausanne's 1-5 vs.
+        # Schaefer's 100-1000, etc), so switching atlas must start this
+        # widget fresh rather than try to reconcile old state against a
+        # new, unrelated options list.
+        scale_value = st.selectbox(
+            label, scales, index=scales.index(default) if default in scales else 0,
+            key=f"chimera_scale_adaptive_{cortical_letter}",
+        )
+    else:
+        st.caption(f"{cortical_info['name']} has no --chimera-scale resolution variants; --chimera-scale is ignored for this cortical choice.")
+
+    grow_value = str(st.number_input(
+        _dest_label(grow_action),
+        value=int(grow_action.default),
+        min_value=0,
+        help=(grow_action.help or "").strip(),
+        key="chimera_grow_adaptive",
+    ))
+
+    return code, scale_value, grow_value
+
+
+def _render_atlas_widget(action: argparse.Action):
+    """Dropdown of every bundled atlas actually found under mrsiprep/data/atlas/
+    (instead of a free-text field defaulting to one hardcoded name), plus the
+    parameterized synthetic choices --atlas also accepts (custom/schaefer<N>/
+    mist197/cubic<N>mm)."""
+    from mrsiprep.parcellation.atlas_registry import available_bundled_atlases
+
+    bundled = available_bundled_atlases()
+    synthetic = ["custom", "schaefer100", "schaefer400", "schaefer1000", "mist197", "cubic10mm"]
+    options = bundled + synthetic + ["(custom value...)"]
+    default = action.default if action.default in options else options[0]
+    key = f"field_{action.dest}"
+    selected = st.selectbox(
+        _dest_label(action), options, index=options.index(default),
+        help=(action.help or "").strip(), key=key,
+    )
+    if selected == "(custom value...)":
+        return st.text_input(
+            f"{_dest_label(action)} (custom value)",
+            help="e.g. 'schaefer200', 'cubic15mm', or another bundled/registered atlas name not listed above.",
+            key=f"{key}_custom",
+        ) or None
+    return selected
+
+
 def _widget_for(action: argparse.Action):
     label = _dest_label(action)
     help_text = (action.help or "").strip()
@@ -56,6 +174,17 @@ def _widget_for(action: argparse.Action):
 
     if action.choices:
         choices = list(action.choices)
+        if label == "--registration-backend":
+            # The parser also accepts 'flirt-fnirt'/'flirt_fnirt'/'flirt/fnirt' as
+            # deprecated spellings of 'fsl' (FNIRT is FSL's own deformable stage,
+            # not a separate backend) -- the form only ever needs to offer 'fsl'.
+            choices = ["ants", "fsl"]
+        if label == "--normalization":
+            # 'simple' and 'ants-syn' are behaviorally identical (both just
+            # recompute using --registration-backend); 'ants-syn' only exists
+            # for backward compatibility with older configs -- don't offer it
+            # as if it were a meaningfully different third choice.
+            choices = ["simple", "existing"]
         if action.nargs in ("+", "*"):
             default = action.default if isinstance(action.default, list) else []
             return st.multiselect(label, choices, default=default, help=help_text, key=key)
@@ -139,6 +268,26 @@ def _build_command(positional_values: dict, optionals: list[argparse.Action], va
     return " ".join(parts)
 
 
+# Argparse group titles combined under one tab each, in display order. A
+# title not listed here falls into "Other" (see _tab_for_title).
+TAB_GROUPS: dict[str, list[str]] = {
+    "BIDS input": ["Options for filtering BIDS queries"],
+    "Registration": ["Specific options for registrations"],
+    "Parcellation": ["parcellation"],
+    "Connectivity": ["connectivity"],
+    "Quality": ["quality thresholds", "T1 saturation correction"],
+    "Workflow": ["Options for performing only a subset of the workflow", "Workflow configuration"],
+    "Overwrite / runtime": ["overwrite/recompute", "Other options"],
+}
+
+
+def _tab_for_title(title: str) -> str:
+    for tab, titles in TAB_GROUPS.items():
+        if title in titles:
+            return tab
+    return "Other"
+
+
 def main() -> None:
     st.set_page_config(page_title="MRSIPrep Command Builder", layout="wide")
     st.title("MRSIPrep Command Builder")
@@ -154,6 +303,23 @@ def main() -> None:
         if a.option_strings
         and _dest_label(a) not in EXCLUDED_FLAGS
         and _dest_label(a) not in NEGATIVE_FLAG_PAIRS
+    ]
+    # Flags marked required=True (e.g. --metabolites, --ref-met) belong in the
+    # "Required arguments" section, not buried in a tab.
+    required_optionals = [a for a in optionals if a.required]
+    other_optionals = [a for a in optionals if not a.required]
+
+    # --parcellation-mode and --fs-license need to be known/rendered before
+    # the rest of "Required arguments", since --fs-license is only mandatory
+    # when chimera is selected -- pull both out of the normal options flow.
+    parcellation_mode_action = next(a for a in other_optionals if _dest_label(a) == "--parcellation-mode")
+    fs_license_action = next(a for a in other_optionals if _dest_label(a) == "--fs-license")
+    chimera_scheme_action = next(a for a in other_optionals if _dest_label(a) == "--chimera-scheme")
+    chimera_scale_action = next(a for a in other_optionals if _dest_label(a) == "--chimera-scale")
+    chimera_grow_action = next(a for a in other_optionals if _dest_label(a) == "--chimera-grow")
+    other_optionals = [
+        a for a in other_optionals
+        if _dest_label(a) not in ("--parcellation-mode", "--fs-license")
     ]
 
     st.header("Generated command")
@@ -175,45 +341,107 @@ def main() -> None:
             continue
         positional_values[action.dest] = _widget_for(action)
 
-    st.header("Options")
-    st.caption("Grouped to match the Read the Docs CLI reference; only changed values are included in the command.")
+    values: dict[str, object] = {}
+    for action in required_optionals:
+        values[_dest_label(action)] = _widget_for(action)
 
-    # Preserve the parser's own argument_group order and titles.
+    st.caption(
+        "Tissue segmentation always runs via SynthSeg and never needs a FreeSurfer license. "
+        "`--parcellation-mode` below only picks the region-labeling backend for connectivity/per-parcel "
+        "output -- a separate concern."
+    )
+    parcellation_mode = _widget_for(parcellation_mode_action)
+    values[_dest_label(parcellation_mode_action)] = parcellation_mode
+    if parcellation_mode == "chimera":
+        fs_license_action.required = True
+        st.warning(
+            "`chimera` runs real FreeSurfer `recon-all` and needs a license -- fill in `--fs-license` below.",
+            icon="⚠️",
+        )
+        values[_dest_label(fs_license_action)] = _widget_for(fs_license_action)
+    else:
+        st.info(
+            "No FreeSurfer license needed for this mode. `--fs-license` only becomes required if "
+            "`--parcellation-mode` above is set to `chimera`.",
+            icon="ℹ️",
+        )
+
+    # Preserve the parser's own argument_group order and titles, grouped into tabs.
     groups: dict[str, list[argparse.Action]] = {}
-    for action in optionals:
+    for action in other_optionals:
         title = getattr(action.container, "title", None) or "Other options"
         groups.setdefault(title, []).append(action)
 
-    values: dict[str, object] = {}
-    for title, actions in groups.items():
-        with st.expander(title, expanded=False):
-            backend_choice = None
-            for action in actions:
-                flag = _dest_label(action)
+    tab_titles = list(TAB_GROUPS) + (["Other"] if any(_tab_for_title(t) == "Other" for t in groups) else [])
+    tabs = st.tabs(tab_titles)
 
-                if flag == "--registration-backend":
-                    backend_choice = _widget_for(action)
-                    values[flag] = backend_choice
-                    continue
-
-                if flag in BACKEND_SPECIFIC_FLAGS:
-                    # Rendered right after the backend selectbox is known,
-                    # further down this same expander -- skip here.
-                    continue
-
-                values[flag] = _widget_for(action)
-
-            if backend_choice is not None:
-                # choices are "ants" or one of the fsl spellings
-                # ("fsl"/"flirt-fnirt"/"flirt_fnirt"/"flirt/fnirt").
-                wanted = ANTS_ONLY_FLAGS if backend_choice == "ants" else FSL_ONLY_FLAGS
+    for tab_name, tab in zip(tab_titles, tabs):
+        with tab:
+            group_titles = [t for t in groups if _tab_for_title(t) == tab_name]
+            for title in group_titles:
+                actions = groups[title]
+                st.subheader(title)
+                backend_choice = None
                 for action in actions:
                     flag = _dest_label(action)
-                    if flag in wanted:
-                        values[flag] = _widget_for(action)
 
-        # Keep the generated command live-updated as each expander's
-        # widgets are filled in, without waiting for the full script rerun.
+                    if flag == "--registration-backend":
+                        backend_choice = _widget_for(action)
+                        values[flag] = backend_choice
+                        continue
+
+                    if flag in BACKEND_SPECIFIC_FLAGS:
+                        # Rendered right after the backend selectbox is known,
+                        # further down this same tab -- skip here.
+                        continue
+
+                    if flag == "--participants":
+                        values[flag] = _render_participants_widget(action)
+                        continue
+
+                    if flag in ("--chimera-scheme", "--chimera-scale", "--chimera-grow"):
+                        # Rendered together as the guided per-position picker,
+                        # right after --parcellation-mode is known to be chimera
+                        # -- skip the generic widgets here.
+                        continue
+
+                    if flag == "--fs-subjects-dir" and parcellation_mode != "chimera":
+                        # Only relevant with --parcellation-mode chimera (reuses
+                        # existing recon-all output instead of running it).
+                        continue
+
+                    if flag in ("--atlas", "--custom-atlas", "--custom-atlas-lut") and parcellation_mode != "atlas":
+                        # Only relevant with --parcellation-mode atlas -- hidden
+                        # under synthseg/chimera to keep the paths from blurring
+                        # together (chimera has its own guided scheme picker below).
+                        continue
+
+                    if flag == "--atlas":
+                        values[flag] = _render_atlas_widget(action)
+                        continue
+
+                    values[flag] = _widget_for(action)
+
+                if backend_choice is not None:
+                    # choices are "ants" or one of the fsl spellings
+                    # ("fsl"/"flirt-fnirt"/"flirt_fnirt"/"flirt/fnirt").
+                    wanted = ANTS_ONLY_FLAGS if backend_choice == "ants" else FSL_ONLY_FLAGS
+                    for action in actions:
+                        flag = _dest_label(action)
+                        if flag in wanted:
+                            values[flag] = _widget_for(action)
+
+                if title == "parcellation" and parcellation_mode == "chimera":
+                    st.markdown("**Chimera scheme** -- one atlas per supra-region, guided:")
+                    code, scale, grow = _render_chimera_scheme_picker(
+                        chimera_scheme_action, chimera_scale_action, chimera_grow_action
+                    )
+                    values["--chimera-scheme"] = code
+                    values["--chimera-scale"] = scale
+                    values["--chimera-grow"] = grow
+
+        # Keep the generated command live-updated as each tab's widgets are
+        # filled in, without waiting for the full script rerun.
         command_slot.code(_build_command(positional_values, optionals, values), language="bash")
 
     command_slot.code(_build_command(positional_values, optionals, values), language="bash")
