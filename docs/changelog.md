@@ -1,5 +1,25 @@
 # Changelog
 
+## 2.2.1
+
+### Reports
+
+- New `report_overview.html`, written at the derivatives root
+  (`<output_dir>/mrsiprep/report_overview.html`) and rebuilt after every
+  recording's own HTML report is generated. Lists every recording the
+  project's BIDS directory names, each with a status (processed,
+  failed/incomplete, raw MRSI data found but not yet processed, or no
+  MRSI data found) and its median ventricle registration Dice score,
+  linking through to that recording's own report in a new tab.
+- The Command Builder page now shows its own (`mrsiprep`) version and the
+  installed `mrsiprep-docker` wrapper's version.
+
+### Fixes
+
+- `BIDSLayout.discover_recordings()` no longer crashes when
+  `participants_allsessions.tsv` exists but isn't valid UTF-8 (e.g. kept
+  GPG-encrypted at rest); it now falls back to a directory scan instead.
+
 ## 2.2.0
 
 ### Quality metrics
