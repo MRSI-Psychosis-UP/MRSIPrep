@@ -90,7 +90,13 @@ class BIDSLayout:
         if participants.exists():
             from mrsiprep.utils.misc import read_participant_pairs
 
-            return [Recording(sub, ses) for sub, ses in read_participant_pairs(participants)]
+            try:
+                return [Recording(sub, ses) for sub, ses in read_participant_pairs(participants)]
+            except UnicodeDecodeError:
+                # Some projects keep this file encrypted at rest (e.g. GPG) for
+                # identifying-data protection; fall back to a directory scan
+                # rather than treating an unreadable file as a hard error.
+                pass
 
         out: list[Recording] = []
         for sub_dir in sorted(self.bids_dir.glob("sub-*")):

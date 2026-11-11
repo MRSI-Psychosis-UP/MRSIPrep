@@ -25,6 +25,7 @@ import pandas as pd
 import streamlit as st
 
 from mrsiprep.cli.parser import build_parser
+from mrsiprep.utils.version import mrsiprep_version
 from mrsiprep.config.chimera_schemes import (
     SUPRA_REGION_LABELS,
     SUPRA_REGIONS,
@@ -288,12 +289,29 @@ def _tab_for_title(title: str) -> str:
     return "Other"
 
 
+def _mrsiprep_docker_version() -> str:
+    """The installed `mrsiprep-docker` wrapper's version, or a hint to install
+    it -- it's a separate pip package from `mrsiprep` itself (see
+    docs/installation.md), so it may be missing even when this app runs."""
+    try:
+        from mrsiprep_docker import __version__
+
+        return __version__
+    except ImportError:
+        return "not installed (pip install mrsiprep-docker)"
+
+
 def main() -> None:
     st.set_page_config(page_title="MRSIPrep Command Builder", layout="wide")
     st.title("MRSIPrep Command Builder")
     st.caption(
         "Builds a runnable `mrsiprep-docker` command from the actual CLI definition. "
         "This page does not execute anything -- copy the generated command and run it yourself."
+    )
+    st.caption(
+        f"Command builder (mrsiprep) version: `{mrsiprep_version()}` &nbsp;|&nbsp; "
+        f"mrsiprep-docker wrapper version: `{_mrsiprep_docker_version()}`",
+        unsafe_allow_html=True,
     )
 
     parser = build_parser()

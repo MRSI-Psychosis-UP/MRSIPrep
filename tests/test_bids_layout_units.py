@@ -101,6 +101,15 @@ class DiscoverRecordingsTests(BidsLayoutFixture):
         recordings = layout.discover_recordings()
         self.assertEqual([(r.subject, r.session) for r in recordings], [("01", "01")])
 
+    def test_falls_back_to_directory_scan_when_participants_file_is_undecodable(self):
+        # Some projects keep this file encrypted at rest (e.g. GPG); its bytes
+        # are not valid UTF-8/CSV, so this must not be a hard crash.
+        (self.bids_dir / "participants_allsessions.tsv").write_bytes(b"\x85\x02\x50\xd9\x10\x00")
+        self._touch("sub-01/ses-01/anat/sub-01_ses-01_T1w.nii.gz")
+        layout = BIDSLayout(self.bids_dir)
+        recordings = layout.discover_recordings()
+        self.assertEqual([(r.subject, r.session) for r in recordings], [("01", "01")])
+
 
 class RawT1Tests(BidsLayoutFixture):
     def test_returns_none_when_anat_dir_missing(self):
