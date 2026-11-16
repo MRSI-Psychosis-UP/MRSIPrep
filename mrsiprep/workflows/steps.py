@@ -38,7 +38,7 @@ from mrsiprep.tissue.synthseg_fast import (
 )
 from mrsiprep.workflows.anatomical import prepare_anatomical
 from mrsiprep.workflows.connectivity import run_connectivity_workflow
-from mrsiprep.workflows.mrsi import run_mrsi_workflow
+from mrsiprep.workflows.mrsi import run_mrsi_finish_workflow, run_mrsi_load_workflow, run_spike_filter_workflow, run_t1_water_correction_workflow
 from mrsiprep.workflows.parcellation import run_parcellation_workflow
 from mrsiprep.workflows.registration import run_registration_workflow
 from mrsiprep.workflows.reports import run_reports_workflow
@@ -83,20 +83,37 @@ def _step_anatomical_prep(config, subject, session, t1_path, p3_override, brain_
         return prepare_anatomical(config, subject, session, t1_path, p3_override=p3_override, brain_mask_override=brain_mask_override)
 
 
-def _step_mrsi_preprocessing(config, subject, session, inputs, debug, anat=None):
-    with debug.step("MRSI preprocessing"):
+def _step_mrsi_load(config, subject, session, inputs, debug, anat=None):
+    with debug.step("MRSI loading"):
         t1_path = anat.registration_t1w if anat is not None else None
-        mrsi = run_mrsi_workflow(config, subject, session, inputs, t1_path=t1_path)
+        load = run_mrsi_load_workflow(config, subject, session, inputs, t1_path=t1_path)
+    return load
+
+
+def _step_spike_filter(config, subject, session, load, debug):
+    with debug.step("Spike filtering"):
+        filtered = run_spike_filter_workflow(config, subject, session, load)
+        qc_sections_mrsi_raw = build_mrsi_raw_qc_sections(config, subject, session, load.raw_maps, filtered.preproc_maps)
+        qc_sections_mrsi_preproc = build_mrsi_preproc_qc_sections(config, subject, session, load.raw_maps, filtered.preproc_maps)
+    return filtered, qc_sections_mrsi_raw, qc_sections_mrsi_preproc
+
+
+def _step_t1_water_correction(config, subject, session, load, filtered, debug):
+    with debug.step("T1 water correction"):
+        water = run_t1_water_correction_workflow(config, subject, session, load, filtered)
+        qc_sections_t1_correction = None
+        if water.provenance is not None:
+            qc_sections_t1_correction = build_t1_correction_qc_sections(
+                config, subject, session, filtered.preproc_maps, water.corrected_maps, water.provenance
+            )
+    return water, qc_sections_t1_correction
+
+
+def _step_mrsi_finish(config, subject, session, load, filtered, water, inputs, debug):
+    with debug.step("MRSI finishing"):
         # The ventricle section is appended at the reports step
         # (_step_ventricle_qc), once the MRSI->T1w transform exists to score it.
-        qc_sections_mrsi_raw = build_mrsi_raw_qc_sections(config, subject, session, mrsi.raw_maps, mrsi.preproc_maps)
-        qc_sections_mrsi_preproc = build_mrsi_preproc_qc_sections(config, subject, session, mrsi.raw_maps, mrsi.preproc_maps)
-        qc_sections_t1_correction = None
-        if mrsi.t1_correction_provenance is not None:
-            qc_sections_t1_correction = build_t1_correction_qc_sections(
-                config, subject, session, mrsi.preproc_maps, mrsi.corrected_maps, mrsi.t1_correction_provenance
-            )
-    return mrsi, qc_sections_mrsi_raw, qc_sections_mrsi_preproc, qc_sections_t1_correction
+        return run_mrsi_finish_workflow(config, subject, session, load, filtered, water, inputs)
 
 
 def _step_ventricle_qc(config, subject, session, raw_t1, mrsi, registration):

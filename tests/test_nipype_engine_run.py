@@ -180,7 +180,7 @@ class RunOneRecordingNipypeFixture(unittest.TestCase):
     def setUp(self):
         self._tmpdir = tempfile.TemporaryDirectory()
         self.tmp = Path(self._tmpdir.name)
-        self.config = SimpleNamespace(verbose=0, derivative_dir=self.tmp / "derivatives", stop_on_first_crash=False)
+        self.config = SimpleNamespace(verbose=0, derivative_dir=self.tmp / "derivatives", stop_on_first_crash=False, steps=None)
         self._patches = [
             patch("mrsiprep.workflows.nipype_engine.run._configure_nipype_logging"),
             patch("mrsiprep.utils.runtime_metrics.write_runtime_metrics"),

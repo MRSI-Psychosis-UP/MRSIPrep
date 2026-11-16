@@ -56,30 +56,61 @@ def step_tissue_seg(config, subject, session, ctx):
     return ctx
 
 
-def step_anat(config, subject, session, ctx):
+def step_anatprep(config, subject, session, ctx):
     from mrsiprep.utils.debug import Debug
     from mrsiprep.workflows.participant import _step_anatomical_prep
 
     debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""))
     ctx = dict(ctx)
-    ctx["anat"] = _step_anatomical_prep(config, subject, session, ctx["t1_path"], ctx["p3_override"], ctx["brain_mask_override"], debug)
+    ctx["anatprep"] = _step_anatomical_prep(config, subject, session, ctx["t1_path"], ctx["p3_override"], ctx["brain_mask_override"], debug)
     return ctx
 
 
-def step_mrsi(config, subject, session, ctx):
+def step_mrsi_load(config, subject, session, ctx):
     from mrsiprep.utils.debug import Debug
-    from mrsiprep.workflows.participant import _step_mrsi_preprocessing
+    from mrsiprep.workflows.participant import _step_mrsi_load
 
     debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""))
-    mrsi, qc_sections_mrsi_raw, qc_sections_mrsi_preproc, qc_sections_t1_correction = _step_mrsi_preprocessing(
-        config, subject, session, ctx["inputs"], debug, anat=ctx.get("anat")
-    )
+    load = _step_mrsi_load(config, subject, session, ctx["inputs"], debug, anat=ctx.get("anatprep"))
+    ctx = dict(ctx)
+    ctx["mrsi_load"] = load
+    return ctx
+
+
+def step_spike_filter(config, subject, session, ctx):
+    from mrsiprep.utils.debug import Debug
+    from mrsiprep.workflows.participant import _step_spike_filter
+
+    debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""))
+    filtered, qc_sections_mrsi_raw, qc_sections_mrsi_preproc = _step_spike_filter(config, subject, session, ctx["mrsi_load"], debug)
     ctx = dict(ctx)
     ctx.update(
-        mrsi=mrsi,
+        spike_filter=filtered,
         qc_sections_mrsi_raw=qc_sections_mrsi_raw,
         qc_sections_mrsi_preproc=qc_sections_mrsi_preproc,
-        qc_sections_t1_correction=qc_sections_t1_correction,
+    )
+    return ctx
+
+
+def step_t1_saturation_correction(config, subject, session, ctx):
+    from mrsiprep.utils.debug import Debug
+    from mrsiprep.workflows.participant import _step_t1_water_correction
+
+    debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""))
+    water, qc_sections_t1_correction = _step_t1_water_correction(config, subject, session, ctx["mrsi_load"], ctx["spike_filter"], debug)
+    ctx = dict(ctx)
+    ctx.update(t1_saturation_correction=water, qc_sections_t1_correction=qc_sections_t1_correction)
+    return ctx
+
+
+def step_mrsi_finish(config, subject, session, ctx):
+    from mrsiprep.utils.debug import Debug
+    from mrsiprep.workflows.participant import _step_mrsi_finish
+
+    debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""))
+    ctx = dict(ctx)
+    ctx["mrsi"] = _step_mrsi_finish(
+        config, subject, session, ctx["mrsi_load"], ctx["spike_filter"], ctx["t1_saturation_correction"], ctx["inputs"], debug
     )
     return ctx
 
@@ -91,7 +122,7 @@ def step_registration(config, subject, session, ctx):
     debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""))
     ctx = dict(ctx)
     ctx["registration"] = _step_registration(
-        config, subject, session, ctx["mrsi"], ctx["anat"], debug, subject_template=ctx.get("subject_template")
+        config, subject, session, ctx["mrsi"], ctx["anatprep"], debug, subject_template=ctx.get("subject_template")
     )
     return ctx
 
@@ -103,7 +134,7 @@ def step_tissue_probmaps(config, subject, session, ctx):
     debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""))
     ctx = dict(ctx)
     ctx["tissue"] = _step_tissue_probmaps(
-        config, subject, session, ctx["anat"], ctx["mrsi"], ctx["registration"], ctx["precomputed_tissue_t1"], debug
+        config, subject, session, ctx["anatprep"], ctx["mrsi"], ctx["registration"], ctx["precomputed_tissue_t1"], debug
     )
     return ctx
 
@@ -152,7 +183,7 @@ def step_resampling(config, subject, session, ctx):
 
     debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""))
     transformed, qc_sections_t1w_alignment, qc_sections_mni_alignment = _step_resampling(
-        config, subject, session, ctx["anat"], ctx["mrsi"], ctx["registration"], ctx["corrected_maps"], ctx["raw_t1"], debug
+        config, subject, session, ctx["anatprep"], ctx["mrsi"], ctx["registration"], ctx["corrected_maps"], ctx["raw_t1"], debug
     )
     ctx = dict(ctx)
     ctx.update(transformed=transformed, qc_sections_t1w_alignment=qc_sections_t1w_alignment, qc_sections_mni_alignment=qc_sections_mni_alignment)
@@ -165,11 +196,11 @@ def step_leakage_qc(config, subject, session, ctx):
 
     debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""))
     ctx = dict(ctx)
-    ctx["leakage_qc"] = _step_leakage_qc(config, subject, session, ctx["anat"], ctx["transformed"], debug)
+    ctx["leakage_qc"] = _step_leakage_qc(config, subject, session, ctx["anatprep"], ctx["transformed"], debug)
     return ctx
 
 
-def step_synthseg_parc_qc(config, subject, session, ctx):
+def step_anat_parcellation_qc(config, subject, session, ctx):
     from mrsiprep.utils.debug import Debug
     from mrsiprep.workflows.participant import _step_synthseg_parcellation_qc
 
@@ -182,13 +213,13 @@ def step_synthseg_parc_qc(config, subject, session, ctx):
     return ctx
 
 
-def step_parcellation(config, subject, session, ctx):
+def step_mrsi_parcellation(config, subject, session, ctx):
     from mrsiprep.utils.debug import Debug
     from mrsiprep.workflows.participant import _step_parcellation
 
     debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""))
     parcels, qc_sections_parcellation = _step_parcellation(
-        config, subject, session, ctx["raw_t1"], ctx["mrsi"], ctx["anat"], ctx["registration"], ctx["preliminary_parcels"], debug
+        config, subject, session, ctx["raw_t1"], ctx["mrsi"], ctx["anatprep"], ctx["registration"], ctx["preliminary_parcels"], debug
     )
     ctx = dict(ctx)
     # `parcels` is a list: one entry per comma-separated scheme/scale/atlas.
@@ -227,7 +258,7 @@ def step_metprofiles(config, subject, session, ctx):
 
     ctx = dict(ctx)
     ctx["metprofiles"] = _step_metprofiles(
-        config, subject, session, ctx["corrected_maps"], ctx["mrsi"], ctx["parcels"], ctx["regional"], ctx["anat"]
+        config, subject, session, ctx["corrected_maps"], ctx["mrsi"], ctx["parcels"], ctx["regional"], ctx["anatprep"]
     )
     return ctx
 
@@ -241,7 +272,7 @@ def step_reports(config, subject, session, ctx):
     from mrsiprep.workflows.participant import _step_reports, _step_ventricle_qc
 
     debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""))
-    anat = ctx["anat"]
+    anat = ctx["anatprep"]
     mrsi = ctx["mrsi"]
     parcels_list = ctx["parcels"]
     primary = parcels_list[0]
@@ -319,16 +350,19 @@ def step_reports(config, subject, session, ctx):
 STEP_SEQUENCE = [
     ("prepare", step_prepare),
     ("tissue_seg", step_tissue_seg),
-    ("anat", step_anat),
-    ("mrsi", step_mrsi),
+    ("anatprep", step_anatprep),
+    ("mrsi_load", step_mrsi_load),
+    ("spike_filter", step_spike_filter),
+    ("t1_saturation_correction", step_t1_saturation_correction),
+    ("mrsi_finish", step_mrsi_finish),
     ("registration", step_registration),
     ("tissue_probmaps", step_tissue_probmaps),
     ("tissue_qc", step_tissue_qc),
     ("pvc", step_pvc),
     ("resampling", step_resampling),
     ("leakage_qc", step_leakage_qc),
-    ("synthseg_parc_qc", step_synthseg_parc_qc),
-    ("parcellation", step_parcellation),
+    ("anat_parcellation_qc", step_anat_parcellation_qc),
+    ("mrsi_parcellation", step_mrsi_parcellation),
     ("regional", step_regional),
     ("connectivity", step_connectivity),
     ("metprofiles", step_metprofiles),

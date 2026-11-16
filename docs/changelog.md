@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.2.2
+
+### Inputs
+
+- New optional `--mrsi-input-dir` lets the raw MRSI derivatives
+  (`derivatives/mrsi-orig/...`, and `mrsinmrs.json` unless
+  `--mrsinmrs-file` is also given) be read from a different folder than
+  `bids_dir`. Defaults to `bids_dir`, unchanged from before; the T1w
+  anatomicals always still come from `bids_dir`. The Command Builder page
+  has a matching `mrsi_input_dir` field next to `bids_dir`/`output_dir`,
+  blank by default ("same as bids_dir"). With `mrsiprep-docker`, pass a
+  host path; the wrapper mounts it read-only.
+
 ## 2.2.1
 
 ### Reports

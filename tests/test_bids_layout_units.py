@@ -1,9 +1,10 @@
 import json
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
 
-from mrsiprep.io.bids import BIDSLayout, Recording, _matches_filter, load_bids_filters
+from mrsiprep.io.bids import BIDSLayout, Recording, _matches_filter, _normalize_mrsi_input_dir, load_bids_filters
 
 
 class RecordingPrefixTests(unittest.TestCase):
@@ -110,6 +111,27 @@ class DiscoverRecordingsTests(BidsLayoutFixture):
         recordings = layout.discover_recordings()
         self.assertEqual([(r.subject, r.session) for r in recordings], [("01", "01")])
 
+    def test_directory_scan_also_finds_sessions_under_a_separate_mrsi_input_dir(self):
+        # A subject can have an empty/missing anat folder on bids_dir (e.g.
+        # its T1w isn't on this tree) while its MRSI data, with its own
+        # session, only exists under a separate --mrsi-input-dir. Scanning
+        # bids_dir alone must not report that subject as sessionless just
+        # because the participants file (GPG-encrypted here, as above) isn't
+        # readable and MRSI data lives elsewhere.
+        (self.bids_dir / "participants_allsessions.tsv").write_bytes(b"\x85\x02\x50\xd9\x10\x00")
+        self._touch("sub-01/ses-01/anat/sub-01_ses-01_T1w.nii.gz")
+        (self.bids_dir / "sub-02").mkdir()  # present but empty: no anat, no sessions
+
+        mrsi_dir = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, mrsi_dir, ignore_errors=True)
+        mrsi_sub02 = mrsi_dir / "derivatives" / "mrsi-orig" / "sub-02" / "ses-05"
+        mrsi_sub02.mkdir(parents=True)
+        (mrsi_sub02 / "sub-02_ses-05_space-orig_met-CrPCr_desc-signal_mrsi.nii.gz").touch()
+
+        layout = BIDSLayout(self.bids_dir, mrsi_input_dir=mrsi_dir)
+        recordings = {(r.subject, r.session) for r in layout.discover_recordings()}
+        self.assertEqual(recordings, {("01", "01"), ("02", "05")})
+
 
 class RawT1Tests(BidsLayoutFixture):
     def test_returns_none_when_anat_dir_missing(self):
@@ -210,6 +232,63 @@ class MrsiMapTests(BidsLayoutFixture):
         wanted = self._touch(f"derivatives/mrsi-orig/sub-01/ses-01/sub-01_ses-01_space-orig_met-{alias}_desc-signal_mrsi.nii.gz")
         layout = BIDSLayout(self.bids_dir)
         result = layout.mrsi_map("01", "01", desc="signal", met=met, space="orig")
+        self.assertEqual(result, wanted)
+
+
+class NormalizeMrsiInputDirTests(unittest.TestCase):
+    def test_root_path_passes_through_unchanged(self):
+        self.assertEqual(_normalize_mrsi_input_dir("/data/project"), Path("/data/project"))
+
+    def test_strips_trailing_derivatives_mrsi_space(self):
+        self.assertEqual(_normalize_mrsi_input_dir("/data/project/derivatives/mrsi-orig"), Path("/data/project"))
+
+    def test_trailing_slash_does_not_change_the_result(self):
+        self.assertEqual(_normalize_mrsi_input_dir("/data/project/derivatives/mrsi-orig/"), Path("/data/project"))
+
+    def test_different_space_name_is_also_stripped(self):
+        self.assertEqual(_normalize_mrsi_input_dir("/data/project/derivatives/mrsi-mni"), Path("/data/project"))
+
+
+class MrsiInputDirTests(BidsLayoutFixture):
+    def test_defaults_to_bids_dir_when_unset(self):
+        layout = BIDSLayout(self.bids_dir)
+        self.assertEqual(layout.mrsi_root, self.bids_dir)
+
+    def test_mrsi_map_reads_from_custom_mrsi_input_dir(self):
+        other_dir = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, other_dir, ignore_errors=True)
+        wanted = other_dir / "derivatives/mrsi-orig/sub-01/ses-01/sub-01_ses-01_space-orig_met-CrPCr_desc-signal_mrsi.nii.gz"
+        wanted.parent.mkdir(parents=True)
+        wanted.touch()
+        # Something of the same name under bids_dir must NOT be picked instead.
+        self._touch("derivatives/mrsi-orig/sub-01/ses-01/sub-01_ses-01_space-orig_met-CrPCr_desc-signal_mrsi.nii.gz")
+
+        layout = BIDSLayout(self.bids_dir, mrsi_input_dir=other_dir)
+        result = layout.mrsi_map("01", "01", desc="signal", met="CrPCr", space="orig")
+        self.assertEqual(result, wanted)
+
+    def test_raw_t1_still_reads_from_bids_dir_when_mrsi_input_dir_set(self):
+        other_dir = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, other_dir, ignore_errors=True)
+        wanted = self._touch("sub-01/ses-01/anat/sub-01_ses-01_T1w.nii.gz")
+
+        layout = BIDSLayout(self.bids_dir, mrsi_input_dir=other_dir)
+        self.assertEqual(layout.raw_t1("01", "01"), wanted)
+
+    def test_accepts_the_mrsi_orig_data_folder_directly_without_doubling_it(self):
+        # Pointing --mrsi-input-dir at the folder the files actually live in
+        # (rather than its bids_dir-equivalent root) is a natural thing to
+        # do; it must resolve to the same root as passing that root itself,
+        # not look under <value>/derivatives/mrsi-orig/derivatives/mrsi-orig.
+        other_dir = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, other_dir, ignore_errors=True)
+        wanted = other_dir / "derivatives/mrsi-orig/sub-01/ses-01/sub-01_ses-01_space-orig_met-CrPCr_desc-signal_mrsi.nii.gz"
+        wanted.parent.mkdir(parents=True)
+        wanted.touch()
+
+        layout = BIDSLayout(self.bids_dir, mrsi_input_dir=other_dir / "derivatives" / "mrsi-orig")
+        self.assertEqual(layout.mrsi_root, other_dir)
+        result = layout.mrsi_map("01", "01", desc="signal", met="CrPCr", space="orig")
         self.assertEqual(result, wanted)
 
 

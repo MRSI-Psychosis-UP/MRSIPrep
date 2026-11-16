@@ -166,6 +166,32 @@ class RequiredMetadataCLITests(unittest.TestCase):
             self.assertEqual(config.mrsinmrs_file, path.resolve())
             self.assertIn("CustomProtocol", _mrsinmrs_html(config, "01", "01"))
 
+    def test_mrsi_input_dir_moves_default_metadata_location(self):
+        from mrsiprep.cli.parser import parse_args
+
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            mrsi_root = root / "mrsi-data"
+            path = mrsi_root / "derivatives" / "mrsi-orig" / "mrsinmrs.json"
+            path.parent.mkdir(parents=True)
+            data = {"CommonMetadata": {"Nucleus": "1H", "SequenceName": "DefaultProtocol", "QuantificationTool": "lcmodel", "LinewidthUnit": "Hz", "CRLBUnit": "percent"}}
+            path.write_text(json.dumps(data))
+            config = parse_args(self._args(root) + ["--mrsi-input-dir", str(mrsi_root)])
+            self.assertEqual(config.mrsinmrs, data)
+            self.assertEqual(config.mrsinmrs_file, path.resolve())
+            self.assertEqual(config.mrsi_input_dir, mrsi_root.resolve())
+
+    def test_mrsi_input_dir_defaults_to_bids_dir(self):
+        from mrsiprep.cli.parser import parse_args
+
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            path = root / "derivatives" / "mrsi-orig" / "mrsinmrs.json"
+            path.parent.mkdir(parents=True)
+            path.write_text(json.dumps({"CommonMetadata": {"QuantificationTool": "lcmodel", "LinewidthUnit": "Hz", "CRLBUnit": "percent"}}))
+            config = parse_args(self._args(root))
+            self.assertEqual(config.mrsi_input_dir, root.resolve())
+
     def test_cli_reports_missing_file_without_starting_processing(self):
         from mrsiprep.cli.run import main
 
@@ -223,6 +249,29 @@ class MetadataDockerWrapperTests(unittest.TestCase):
                 self.assertEqual(wrapper.main(), 2)
                 check.assert_not_called()
             self.assertIn("--mrsinmrs-file", error.getvalue())
+
+    def test_custom_mrsi_input_dir_is_mounted_read_only_and_forwarded(self):
+        wrapper = self.wrapper
+        with tempfile.TemporaryDirectory() as td, redirect_stdout(io.StringIO()):
+            root = Path(td)
+            mrsi_dir = root / "mrsi-data"
+            mrsi_dir.mkdir()
+            argv = ["mrsiprep-docker", str(root / "bids"), str(root / "out"), "participant", "--mrsi-input-dir", str(mrsi_dir)]
+            with patch.object(sys, "argv", argv), patch.object(wrapper, "check_docker", return_value=1), patch.object(wrapper, "check_image", return_value=True):
+                with patch.object(wrapper.subprocess, "run", return_value=SimpleNamespace(returncode=0)) as run:
+                    self.assertEqual(wrapper.main(), 0)
+            command = run.call_args.args[0]
+            self.assertIn(f"{mrsi_dir}:/mrsi-input:ro", command)
+            self.assertEqual(command[command.index("--mrsi-input-dir") + 1], "/mrsi-input")
+
+    def test_missing_mrsi_input_dir_fails_before_docker_is_used(self):
+        wrapper = self.wrapper
+        with tempfile.TemporaryDirectory() as td, redirect_stderr(io.StringIO()) as error:
+            argv = ["mrsiprep-docker", td, str(Path(td) / "out"), "participant", "--mrsi-input-dir", str(Path(td) / "absent")]
+            with patch.object(sys, "argv", argv), patch.object(wrapper, "check_docker") as check:
+                self.assertEqual(wrapper.main(), 2)
+                check.assert_not_called()
+            self.assertIn("--mrsi-input-dir", error.getvalue())
 
 
 if __name__ == "__main__":

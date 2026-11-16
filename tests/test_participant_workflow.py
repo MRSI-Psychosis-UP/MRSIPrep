@@ -301,6 +301,27 @@ class CollectRecordingsTests(unittest.TestCase):
         recordings = P.collect_recordings(config)
         self.assertEqual([(r.subject, r.session) for r in recordings], [("01", None)])
 
+    def test_participant_label_without_session_label_looks_up_real_sessions(self):
+        # A named subject can have real session data (discover_recordings()
+        # knows how to find it, including under a separate --mrsi-input-dir)
+        # even though --session-label was never given -- this must not be
+        # silently treated as a sessionless recording.
+        config = make_config(
+            ["/tmp/bids", "/tmp/out", "participant"],
+            participants_file=None,
+            participant_label=["01", "02", "missing"],
+            session_label=[],
+        )
+        discovered = [Recording("01", "V6"), Recording("02", "V1"), Recording("02", "V2"), Recording("03", "V1")]
+        with patch("mrsiprep.workflows.participant.BIDSLayout") as layout_cls:
+            layout_cls.from_config.return_value = layout_cls.return_value
+            layout_cls.return_value.discover_recordings.return_value = discovered
+            recordings = P.collect_recordings(config)
+        self.assertEqual(
+            [(r.subject, r.session) for r in recordings],
+            [("01", "V6"), ("02", "V1"), ("02", "V2"), ("missing", None)],
+        )
+
     def test_falls_back_to_bids_discovery(self):
         config = make_config(["/tmp/bids", "/tmp/out", "participant"], participants_file=None, participant_label=[], session_label=[])
         discovered = [Recording("03", "01")]

@@ -3,8 +3,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from mrsiprep.io.loaders import MRSIInputs
-from mrsiprep.workflows.mrsi import run_mrsi_workflow
+from mrsiprep.workflows.mrsi import MRSILoadResult, SpikeFilterResult, run_t1_water_correction_workflow
 
 
 def _config(**overrides):
@@ -22,69 +21,75 @@ def _config(**overrides):
     return SimpleNamespace(**base)
 
 
-def _inputs(**overrides):
-    base = dict(metabolite_maps={"CrPCr": Path("cr.nii.gz")}, crlb_maps={}, brainmask=Path("mask.nii.gz"))
+def _load(**overrides):
+    base = dict(
+        raw_maps={"CrPCr": Path("raw-cr.nii.gz")},
+        brainmask=Path("mask.nii.gz"),
+        crlb_maps={},
+        snr_map=None,
+        linewidth_map=None,
+        water_map=None,
+        flip_angle_map=None,
+    )
     base.update(overrides)
-    return MRSIInputs(**base)
+    return MRSILoadResult(**base)
 
 
-def _patches():
-    return [
-        patch("mrsiprep.workflows.mrsi._copy_native_maps"),
-        patch("mrsiprep.workflows.mrsi.ensure_brainmask", return_value=Path("mask.nii.gz")),
-        patch("mrsiprep.workflows.mrsi.filter_metabolite_maps", return_value={"CrPCr": Path("preproc-cr.nii.gz")}),
-        patch("mrsiprep.workflows.mrsi.generate_reference", return_value=Path("ref.nii.gz")),
-        patch("mrsiprep.workflows.mrsi.make_quality_masks", return_value=({}, Path("qc.tsv"))),
-    ]
+def _filtered(**overrides):
+    base = dict(preproc_maps={"CrPCr": Path("preproc-cr.nii.gz")})
+    base.update(overrides)
+    return SpikeFilterResult(**base)
 
 
-class RunMrsiWorkflowVoxelwiseT1CorrectionTests(unittest.TestCase):
+class RunT1WaterCorrectionWorkflowVoxelwiseTests(unittest.TestCase):
     def test_raises_a_clear_error_without_a_flip_angle_map(self):
-        patches = _patches()
-        with patches[0], patches[1], patches[2], patches[3], patches[4]:
-            with self.assertRaisesRegex(ValueError, "--t1-correction voxelwise requires"):
-                run_mrsi_workflow(_config(t1_correction="voxelwise"), "S001", "V1", _inputs(flip_angle_map=None))
+        with self.assertRaisesRegex(ValueError, "--t1-correction voxelwise requires"):
+            run_t1_water_correction_workflow(
+                _config(t1_correction="voxelwise"), "S001", "V1", _load(flip_angle_map=None), _filtered()
+            )
 
     def test_dispatches_to_voxelwise_correction_when_flip_angle_map_present(self):
-        patches = _patches()
-        with patches[0], patches[1], patches[2], patches[3], patches[4], patch(
+        with patch(
             "mrsiprep.workflows.mrsi.resolve_mrsinmrs", return_value={"RepetitionTime": 2.0, "FlipAngle": 90.0, "MagneticFieldStrength": 3.0}
         ), patch("mrsiprep.workflows.mrsi.apply_t1_correction_voxelwise", return_value=({"CrPCr": Path("corrected.nii.gz")}, ["row"], Path("summary.tsv"))) as apply_voxelwise, patch(
             "mrsiprep.workflows.mrsi.apply_t1_correction"
         ) as apply_literature:
-            result = run_mrsi_workflow(
-                _config(t1_correction="voxelwise"), "S001", "V1", _inputs(flip_angle_map=Path("b1map.nii.gz"))
+            result = run_t1_water_correction_workflow(
+                _config(t1_correction="voxelwise"), "S001", "V1", _load(flip_angle_map=Path("b1map.nii.gz")), _filtered()
             )
 
         apply_voxelwise.assert_called_once()
         apply_literature.assert_not_called()
         self.assertEqual(apply_voxelwise.call_args.args[4], Path("b1map.nii.gz"))
         self.assertEqual(result.corrected_maps, {"CrPCr": Path("corrected.nii.gz")})
-        self.assertEqual(result.t1_correction_provenance, ["row"])
-        self.assertEqual(result.flip_angle_map, Path("b1map.nii.gz"))
+        self.assertEqual(result.provenance, ["row"])
 
     def test_literature_mode_does_not_require_a_flip_angle_map(self):
-        patches = _patches()
-        with patches[0], patches[1], patches[2], patches[3], patches[4], patch(
+        with patch(
             "mrsiprep.workflows.mrsi.resolve_mrsinmrs", return_value={"RepetitionTime": 2.0, "FlipAngle": 90.0, "MagneticFieldStrength": 3.0}
         ), patch("mrsiprep.workflows.mrsi.apply_t1_correction", return_value=({"CrPCr": Path("corrected.nii.gz")}, ["row"], Path("summary.tsv"))) as apply_literature, patch(
             "mrsiprep.workflows.mrsi.apply_t1_correction_voxelwise"
         ) as apply_voxelwise:
-            run_mrsi_workflow(_config(t1_correction="literature"), "S001", "V1", _inputs(flip_angle_map=None))
+            run_t1_water_correction_workflow(
+                _config(t1_correction="literature"), "S001", "V1", _load(flip_angle_map=None), _filtered()
+            )
 
         apply_literature.assert_called_once()
         apply_voxelwise.assert_not_called()
 
-    def test_none_mode_calls_neither_correction_function(self):
-        patches = _patches()
-        with patches[0], patches[1], patches[2], patches[3], patches[4], patch(
-            "mrsiprep.workflows.mrsi.apply_t1_correction"
-        ) as apply_literature, patch("mrsiprep.workflows.mrsi.apply_t1_correction_voxelwise") as apply_voxelwise:
-            result = run_mrsi_workflow(_config(t1_correction="none"), "S001", "V1", _inputs())
+    def test_none_mode_calls_neither_correction_function_and_is_a_pure_passthrough(self):
+        with patch("mrsiprep.workflows.mrsi.apply_t1_correction") as apply_literature, patch(
+            "mrsiprep.workflows.mrsi.apply_t1_correction_voxelwise"
+        ) as apply_voxelwise:
+            load = _load()
+            filtered = _filtered()
+            result = run_t1_water_correction_workflow(_config(t1_correction="none"), "S001", "V1", load, filtered)
 
         apply_literature.assert_not_called()
         apply_voxelwise.assert_not_called()
-        self.assertIsNone(result.t1_correction_provenance)
+        self.assertIsNone(result.provenance)
+        # True no-op: the same object, not merely an equal copy.
+        self.assertIs(result.corrected_maps, filtered.preproc_maps)
 
 
 if __name__ == "__main__":

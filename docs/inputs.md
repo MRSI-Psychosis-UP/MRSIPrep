@@ -88,6 +88,15 @@ standard BIDS sidecar. To use another location, pass
 `--mrsinmrs-file /path/to/metadata.json` (a host path with
 `mrsiprep-docker`). A missing, invalid, or empty file stops the run.
 
+By default, the whole `derivatives/mrsi-orig/...` tree above (including
+`mrsinmrs.json`) is read from `bids_dir`, same as the T1w anatomicals. If
+the MRSI acquisition data lives in a separate folder from the BIDS root
+(e.g. a different disk or project tree), pass `--mrsi-input-dir
+/path/to/mrsi/root` (a host path with `mrsiprep-docker`) to read
+`derivatives/mrsi-orig/...` from there instead; the T1w anatomicals are
+still read from `bids_dir`. `mrsinmrs.json`'s default location moves with
+`--mrsi-input-dir` too, unless `--mrsinmrs-file` is also given explicitly.
+
 See [MRSinMRS](mrsinmrs.md) for the full dictionary structure, required
 fields, and unit conventions.
 

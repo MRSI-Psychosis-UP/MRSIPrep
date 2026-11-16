@@ -53,14 +53,17 @@ from mrsiprep.workflows.steps import (  # noqa: F401
     _step_connectivity,
     _step_leakage_qc,
     _step_metprofiles,
-    _step_mrsi_preprocessing,
+    _step_mrsi_finish,
+    _step_mrsi_load,
     _step_parcellation,
     _step_pvc,
     _step_registration,
     _step_regional_extraction,
     _step_reports,
     _step_resampling,
+    _step_spike_filter,
     _step_synthseg_parcellation_qc,
+    _step_t1_water_correction,
     _step_tissue_probmaps,
     _step_tissue_segmentation,
     _step_ventricle_qc,
@@ -88,7 +91,21 @@ def collect_recordings(config) -> list[Recording]:
     if subjects:
         if sessions:
             return [Recording(normalize_subject(sub), normalize_session(ses)) for sub in subjects for ses in sessions]
-        return [Recording(normalize_subject(sub), None) for sub in subjects]
+        # No --session-label given: look up each named subject's actual
+        # session(s) instead of assuming sessionless (None) -- a subject can
+        # have real session data (discover_recordings() already merges
+        # bids_dir and --mrsi-input-dir for this), and silently ignoring it
+        # here would validate against the wrong (empty) location.
+        wanted_subjects = {normalize_subject(sub) for sub in subjects}
+        by_subject: dict[str, list[str | None]] = {}
+        for recording in BIDSLayout.from_config(config).discover_recordings():
+            if recording.subject in wanted_subjects:
+                by_subject.setdefault(recording.subject, []).append(recording.session)
+        out = []
+        for sub in subjects:
+            normalized = normalize_subject(sub)
+            out.extend(Recording(normalized, ses) for ses in by_subject.get(normalized, [None]))
+        return out
     return BIDSLayout.from_config(config).discover_recordings()
 
 
@@ -112,7 +129,7 @@ def _run_one_recording_reports_only(config, subject: str, session: str | None, s
     from mrsiprep.io.naming import subject_session_dir
     from mrsiprep.utils.debug import collect_timings, set_logbook, set_status_queue, set_timing_sink
     from mrsiprep.utils.runtime_metrics import write_runtime_metrics
-    from mrsiprep.workflows.nipype_engine.nodes import STEP_SEQUENCE
+    from mrsiprep.workflows.nipype_engine.steps_registry import resolve_step_order
 
     logbook = subject_session_dir(config.derivative_dir, subject, session, "logs") / f"{name_prefix(subject, session)}_desc-mrsiprep_log.txt"
     set_logbook(logbook)
@@ -126,7 +143,7 @@ def _run_one_recording_reports_only(config, subject: str, session: str | None, s
     start = time.monotonic()
     try:
         ctx: dict = {"subject_template": subject_template}
-        for _name, step_fn in STEP_SEQUENCE:
+        for _name, step_fn in resolve_step_order(config):
             ctx = step_fn(config, subject, session, ctx)
         elapsed = time.monotonic() - start
         debug.always(f"[success]FINISHED[/success] {tag} in {_format_elapsed(elapsed)}")
@@ -177,8 +194,8 @@ def _build_subject_templates(config, ready: list[Recording], debug: Debug) -> di
                 _, precomputed_tissue_t1, p3_override, brain_mask_override = _step_tissue_segmentation(
                     config, subject, session, raw_t1, t1_path, debug
                 )
-                anat = _step_anatomical_prep(config, subject, session, t1_path, p3_override, brain_mask_override, debug)
-                session_t1_paths[session] = anat.registration_t1w
+                anatprep = _step_anatomical_prep(config, subject, session, t1_path, p3_override, brain_mask_override, debug)
+                session_t1_paths[session] = anatprep.registration_t1w
             templates[subject] = build_subject_template(config, subject, session_t1_paths)
     return templates
 

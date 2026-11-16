@@ -19,10 +19,15 @@ class MRSIPrepConfig:
     participants_file: Path | None = None
     bids_filter_file: Path | None = None
     mrsinmrs_file: Path | None = None
+    mrsi_input_dir: Path | None = None
     quantification_tool: str | None = None
     linewidth_unit: str | None = None
     crlb_unit: str | None = None
     metabolites: list[str] | None = None
+    # None means "the full default pipeline, in its normal order" -- see
+    # workflows/nipype_engine/steps_registry.py. An explicit list is a
+    # --steps request: exactly these steps, in this order, nothing implied.
+    steps: list[str] | None = None
     quality_metrics: list[str] = field(default_factory=lambda: ["snr", "linewidth", "crlb"])
     # Acquired nucleus. None means "resolve it": --nucleus wins, else
     # mrsinmrs.json's Nucleus field, else 1H. See config/nuclei.json.
@@ -121,17 +126,20 @@ class MRSIPrepConfig:
 
         self.bids_dir = Path(self.bids_dir).resolve()
         self.output_dir = Path(self.output_dir).resolve()
+        self.mrsi_input_dir = (
+            Path(self.mrsi_input_dir).resolve() if self.mrsi_input_dir is not None else self.bids_dir
+        )
         if self.bids_filter_file is not None:
             self.bids_filter_file = Path(self.bids_filter_file).resolve()
         self.bids_filters = load_bids_filters(self.bids_filter_file)
         explicit_metadata = self.mrsinmrs_file is not None
         self.mrsinmrs_file = (
             Path(self.mrsinmrs_file).resolve() if explicit_metadata
-            else self.bids_dir / "derivatives" / "mrsi-orig" / "mrsinmrs.json"
+            else self.mrsi_input_dir / "derivatives" / "mrsi-orig" / "mrsinmrs.json"
         )
         # Library callers may prepare configuration before inputs exist.
         # The CLI and complete workflows call require_mrsinmrs before work.
-        self.mrsinmrs = load_mrsinmrs(self.bids_dir, self.mrsinmrs_file, required=explicit_metadata)
+        self.mrsinmrs = load_mrsinmrs(self.mrsi_input_dir, self.mrsinmrs_file, required=explicit_metadata)
         self.output_spaces, parsed_resolutions = _normalize_output_spaces(self.output_spaces)
         # Precedence: an explicit res- modifier > a --config-preset's
         # space_resolutions > the default. A parsed value equal to the default
@@ -150,7 +158,7 @@ class MRSIPrepConfig:
         from mrsiprep.io.mrsinmrs import load_mrsinmrs
 
         if self.mrsinmrs is None:
-            self.mrsinmrs = load_mrsinmrs(self.bids_dir, self.mrsinmrs_file)
+            self.mrsinmrs = load_mrsinmrs(self.mrsi_input_dir, self.mrsinmrs_file)
         self.require_quantification_tool()
 
     def require_quantification_tool(self) -> None:
@@ -212,6 +220,17 @@ class MRSIPrepConfig:
                 raise ValueError(f"--chimera-grow must not be negative: {self.chimera_grow!r}")
         elif self.parcellation_mode == "atlas" and not self.atlases():
             raise ValueError("--atlas must name at least one atlas.")
+
+    def _validate_steps(self) -> None:
+        """Validate a --steps request against each step's declared data
+        dependencies. A no-op when --steps was omitted (self.steps is
+        None), which must behave identically to the full default pipeline.
+        """
+        if self.steps is None:
+            return
+        from mrsiprep.workflows.nipype_engine.steps_registry import validate_step_order
+
+        validate_step_order(self.steps)
 
     def _validate_registration_backend(self) -> None:
         if self.registration_backend in {"flirt/fnirt", "flirt_fnirt", "flirt-fnirt"}:
@@ -303,6 +322,7 @@ class MRSIPrepConfig:
         self._resolve_nucleus()
         self._resolve_quality_defaults()
         self._validate_enum_choices()
+        self._validate_steps()
         self._validate_registration_backend()
         self._resolve_derived_defaults()
         self._validate_registration_t1_target()

@@ -17,14 +17,54 @@ One run resolves to a list of `(subject, session)` recordings, each processed
 through the same fixed stage sequence:
 
 ```
-prepare → tissue_seg → anat → mrsi → registration → tissue_probmaps →
-tissue_qc → pvc → resampling → leakage_qc → synthseg_parc_qc →
-parcellation → regional → connectivity → metprofiles → reports
+prepare → tissue_seg → anatprep → mrsi_load → spike_filter → t1_saturation_correction → mrsi_finish →
+registration → tissue_probmaps → tissue_qc → pvc → resampling → leakage_qc →
+anat_parcellation_qc → mrsi_parcellation → regional → connectivity → metprofiles → reports
 ```
 
 **`STEP_SEQUENCE` in `mrsiprep/workflows/nipype_engine/nodes.py` is the
 authoritative order.** The static diagram in the report's Provenance tab mirrors
 it; if you add a stage, both live there.
+
+### How modular is the step sequence really?
+
+Each of the 18 entries in `STEP_SEQUENCE` is a plain `(config, subject,
+session, ctx) -> ctx` function, and `STEP_DEPENDENCIES` in
+`workflows/nipype_engine/steps_registry.py` declares the `ctx` keys each one
+requires/produces/optionally-uses. `--steps` (and the command builder GUI's
+Custom Pipeline tab) uses that registry to let a user pick an arbitrary
+ordered subset, validated before a run starts (`validate_step_order`) rather
+than failing with a bare `KeyError` mid-run. That much is real, working
+module-style composition today.
+
+It stops short of a true LabVIEW-style "pick a block, see typed input/output
+sockets, swap the implementation, rewire" model in three specific ways:
+
+1. **`ctx` keys are untyped and unvalidated.** `STEP_DEPENDENCIES` declares
+   *which* keys a step touches, not what type they hold. Wiring two steps
+   together that don't actually agree on a key's shape is only caught by an
+   exception deep inside execution, never at composition time.
+2. **A few steps wrap more than one underlying operation.** `prepare`,
+   `tissue_qc`, and `reports` each do this. (`registration` is *not* an
+   example of this: `run_registration_workflow` calls the same registration
+   backend machinery for both of its invocations — MRSI↔T1w and, when
+   requested, T1w↔MNI — differing only in fixed/moving image, which is
+   exactly the kind of thing a single generic "registration" step should
+   stay agnostic to. Spike filtering is also no longer an example: it is
+   its own `spike_filter` step, between `mrsi_load` and
+   `t1_saturation_correction`, backed by `run_spike_filter_workflow`.) The
+   remaining wrapped sub-operations can't be individually swapped or
+   reordered even though they are conceptually separable.
+3. **Backend choice is an if/else inside the step, not a registry.**
+   `--tissue-backend`, `--parcellation-mode`, and `--registration-backend`
+   branch *inside* `_step_tissue_segmentation`/`_step_parcellation`/the
+   registration leaf functions. There is no mechanism to register a new
+   backend as a drop-in alternate module without editing that function's
+   body.
+
+None of this blocks today's `--steps` usage — it's a scoping note for anyone
+considering a deeper rework (typed ports, a backend registry, splitting the
+fused steps above) before they start, not a bug.
 
 ## Package responsibilities
 

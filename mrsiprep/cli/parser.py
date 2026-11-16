@@ -58,9 +58,18 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=None,
         help="Custom acquisition metadata JSON file. Defaults to "
-        "<bids_dir>/derivatives/mrsi-orig/mrsinmrs.json. A valid, nonempty metadata file "
-        "is required; processing and --validate-only fail if it is missing. "
+        "<mrsi-input-dir or bids_dir>/derivatives/mrsi-orig/mrsinmrs.json. A valid, nonempty "
+        "metadata file is required; processing and --validate-only fail if it is missing. "
         "With mrsiprep-docker, provide a host path; the wrapper mounts the file read-only.",
+    )
+    selection.add_argument(
+        "--mrsi-input-dir",
+        type=Path,
+        default=None,
+        help="Root folder containing the raw MRSI derivatives (derivatives/mrsi-<space>/sub-*/ses-*/...). "
+        "Defaults to --bids-dir, i.e. the MRSI data is expected under <bids_dir>/derivatives/... like the "
+        "anatomical (T1w) data. Set this only when the MRSI derivatives live in a separate tree from the "
+        "BIDS root used for anatomicals. With mrsiprep-docker, provide a host path; the wrapper mounts it.",
     )
 
     registration = parser.add_argument_group("Specific options for registrations")
@@ -510,6 +519,19 @@ def build_parser() -> argparse.ArgumentParser:
         default="synthseg-fast",
         help="Tissue segmentation backend for PVC. 'none' disables tissue segmentation and PVC entirely.",
     )
+    processing.add_argument(
+        "--steps",
+        type=_parse_comma_list,
+        default=None,
+        help="Comma-separated, ordered list of pipeline steps to run (default: the full pipeline, in its "
+        "normal order). An explicit list means exactly these steps, in this order -- omitting a step also "
+        "skips it, and any step that reads another step's output must list that step earlier; dependency "
+        "steps are never inserted automatically. Any order the steps' real data dependencies allow is "
+        "accepted; an order that is not is rejected before the run starts, naming the missing step. Steps, "
+        "in their normal order: prepare, tissue_seg, anatprep, mrsi_load, spike_filter, t1_saturation_correction, "
+        "mrsi_finish, registration, tissue_probmaps, tissue_qc, pvc, resampling, leakage_qc, anat_parcellation_qc, "
+        "mrsi_parcellation, regional, connectivity, metprofiles, reports.",
+    )
 
 
     processing_control = parser.add_argument_group("Workflow configuration")
@@ -745,10 +767,12 @@ def parse_args(argv: list[str] | None = None) -> MRSIPrepConfig:
         participants_file=args.participants,
         bids_filter_file=args.bids_filter_file,
         mrsinmrs_file=args.mrsinmrs_file,
+        mrsi_input_dir=args.mrsi_input_dir,
         quantification_tool=args.quantification_tool,
         linewidth_unit=args.linewidth_unit,
         crlb_unit=args.crlb_unit,
         metabolites=args.metabolites,
+        steps=args.steps,
         quality_metrics=args.quality_metrics,
         nucleus=args.nucleus,
         snr_min=args.snr_min,

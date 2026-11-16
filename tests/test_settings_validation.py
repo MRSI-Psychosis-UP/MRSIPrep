@@ -310,5 +310,22 @@ class ParcellationListAccessorTests(unittest.TestCase):
         self.assertEqual(cfg.chimera_schemes(), ["LFMIHIFIS"])
 
 
+class StepsValidationTests(unittest.TestCase):
+    def test_omitted_steps_is_not_validated_and_stays_none(self):
+        self.assertIsNone(_config().steps)
+
+    def test_valid_custom_steps_list_is_accepted(self):
+        cfg = _config(steps=["prepare", "tissue_seg", "anatprep"])
+        self.assertEqual(cfg.steps, ["prepare", "tissue_seg", "anatprep"])
+
+    def test_invalid_steps_order_raises_at_construction(self):
+        with self.assertRaisesRegex(ValueError, "--steps"):
+            _config(steps=["prepare", "anatprep"])  # anatprep needs tissue_seg's output first
+
+    def test_unknown_step_name_raises_at_construction(self):
+        with self.assertRaisesRegex(ValueError, "unknown step"):
+            _config(steps=["not_a_real_step"])
+
+
 if __name__ == "__main__":
     unittest.main()

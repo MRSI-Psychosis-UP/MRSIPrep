@@ -5,8 +5,9 @@ import unittest
 from pathlib import Path
 
 from mrsiprep.config.settings import MRSIPrepConfig
-from mrsiprep.workflows.nipype_engine.build import TERMINAL_NODE, build_recording_workflow, recording_base_dir
+from mrsiprep.workflows.nipype_engine.build import build_recording_workflow, recording_base_dir
 from mrsiprep.workflows.nipype_engine.nodes import STEP_SEQUENCE
+from mrsiprep.workflows.nipype_engine.steps_registry import resolve_step_order, terminal_node
 
 
 def _cfg(**over):
@@ -18,19 +19,32 @@ def _cfg(**over):
 
 class NipypeEngineBuildTests(unittest.TestCase):
     def test_workflow_is_a_linear_chain_mirroring_step_sequence(self):
-        wf = build_recording_workflow(_cfg(), "S001", "V1")
+        cfg = _cfg()
+        wf = build_recording_workflow(cfg, "S001", "V1")
         names = sorted(n.name for n in wf._graph.nodes())
-        self.assertEqual(names, sorted(n for n, _ in STEP_SEQUENCE))
-        self.assertEqual(len(names), len(STEP_SEQUENCE))
+        order = [n for n, _ in resolve_step_order(cfg)]
+        self.assertEqual(names, sorted(order))
+        self.assertEqual(len(names), len(order))
         edges = {(a.name, b.name) for a, b in wf._graph.edges()}
-        order = [n for n, _ in STEP_SEQUENCE]
         for a, b in zip(order, order[1:]):
             self.assertIn((a, b), edges)
         self.assertEqual(len(edges), len(order) - 1)
 
-    def test_terminal_node_is_reports(self):
-        self.assertEqual(TERMINAL_NODE, "reports")
+    def test_workflow_respects_a_custom_steps_subset_and_order(self):
+        cfg = _cfg(steps=["prepare", "tissue_seg", "anatprep"])
+        wf = build_recording_workflow(cfg, "S001", "V1")
+        names = sorted(n.name for n in wf._graph.nodes())
+        self.assertEqual(names, sorted(["prepare", "tissue_seg", "anatprep"]))
+        edges = {(a.name, b.name) for a, b in wf._graph.edges()}
+        self.assertEqual(edges, {("prepare", "tissue_seg"), ("tissue_seg", "anatprep")})
+
+    def test_terminal_node_is_reports_by_default(self):
+        self.assertEqual(terminal_node(_cfg()), "reports")
         self.assertEqual(STEP_SEQUENCE[-1][0], "reports")
+
+    def test_terminal_node_follows_a_custom_steps_subset(self):
+        cfg = _cfg(steps=["prepare", "tissue_seg", "anatprep"])
+        self.assertEqual(terminal_node(cfg), "anatprep")
 
     def test_base_dir_is_per_recording_under_work_dir(self):
         cfg = _cfg()

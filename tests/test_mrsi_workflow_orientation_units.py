@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 from mrsiprep.io.loaders import MRSIInputs
 from mrsiprep.io.naming import mrsi_derivative
-from mrsiprep.workflows.mrsi import _derivative_map_paths, run_mrsi_workflow
+from mrsiprep.workflows.mrsi import _derivative_map_paths, run_mrsi_load_workflow, run_spike_filter_workflow
 
 
 def _config(**overrides):
@@ -79,22 +79,19 @@ class DerivativeMapPathsTests(unittest.TestCase):
         self.assertIsNone(flip_angle_map)
 
 
-class RunMrsiWorkflowOrientationTests(unittest.TestCase):
+class RunMrsiLoadWorkflowOrientationTests(unittest.TestCase):
     def _patches(self):
         return [
             patch("mrsiprep.workflows.mrsi._copy_native_maps"),
             patch("mrsiprep.workflows.mrsi.ensure_brainmask", return_value=Path("mask.nii.gz")),
-            patch("mrsiprep.workflows.mrsi.filter_metabolite_maps", return_value={"CrPCr": Path("cr.nii.gz")}),
-            patch("mrsiprep.workflows.mrsi.generate_reference", return_value=Path("ref.nii.gz")),
-            patch("mrsiprep.workflows.mrsi.make_quality_masks", return_value=({}, Path("qc.tsv"))),
         ]
 
     def test_orientation_correction_is_skipped_by_default(self):
         patches = self._patches()
-        with patches[0], patches[1], patches[2], patches[3], patches[4], patch(
+        with patches[0], patches[1], patch(
             "mrsiprep.workflows.mrsi.correct_mrsi_orientation"
         ) as correct:
-            run_mrsi_workflow(_config(), "S001", "V1", _inputs(), t1_path=Path("t1.nii.gz"))
+            run_mrsi_load_workflow(_config(), "S001", "V1", _inputs(), t1_path=Path("t1.nii.gz"))
         correct.assert_not_called()
 
     def test_orientation_correction_runs_first_when_enabled_against_derivative_paths(self):
@@ -103,10 +100,10 @@ class RunMrsiWorkflowOrientationTests(unittest.TestCase):
         # read-only, not the writable derivatives copies this run owns.
         derivative_paths = ({"CrPCr": Path("/out/derivatives/mrsi/orig/cr.nii.gz")}, {}, None, None, None, None)
         patches = self._patches()
-        with patches[0], patches[1], patches[2], patches[3], patches[4], patch(
+        with patches[0], patches[1], patch(
             "mrsiprep.workflows.mrsi._derivative_map_paths", return_value=derivative_paths
         ), patch("mrsiprep.workflows.mrsi.correct_mrsi_orientation") as correct:
-            run_mrsi_workflow(_config(correct_mrsi_orientation=True), "S001", "V1", _inputs(), t1_path=Path("t1.nii.gz"))
+            run_mrsi_load_workflow(_config(correct_mrsi_orientation=True), "S001", "V1", _inputs(), t1_path=Path("t1.nii.gz"))
         correct.assert_called_once()
         self.assertEqual(correct.call_args.args[3], derivative_paths[0])
         self.assertEqual(correct.call_args.args[4], Path("t1.nii.gz"))
@@ -114,27 +111,39 @@ class RunMrsiWorkflowOrientationTests(unittest.TestCase):
 
     def test_inputs_are_reassigned_to_the_corrected_derivative_paths(self):
         # Regression guard: correction rewrote maps in place under new
-        # derivative paths, but ensure_brainmask/filter_metabolite_maps
-        # right after it were still reading inputs.metabolite_maps -- the
-        # original (uncorrected, possibly read-only) paths -- unless inputs
-        # itself gets updated to point at the corrected copies too.
+        # derivative paths, but ensure_brainmask right after it was still
+        # reading inputs.metabolite_maps -- the original (uncorrected,
+        # possibly read-only) paths -- unless inputs itself gets updated to
+        # point at the corrected copies too.
         derivative_maps = {"CrPCr": Path("/out/derivatives/mrsi/orig/cr-corrected.nii.gz")}
         derivative_water = Path("/out/derivatives/mrsi/orig/water-corrected.nii.gz")
         derivative_paths = (derivative_maps, {}, None, None, derivative_water, None)
         patches = self._patches()
-        with patches[0], patches[1] as ensure_brainmask, patches[2] as filter_maps, patches[3], patches[4], patch(
+        with patches[0], patches[1] as ensure_brainmask, patch(
             "mrsiprep.workflows.mrsi._derivative_map_paths", return_value=derivative_paths
         ), patch("mrsiprep.workflows.mrsi.correct_mrsi_orientation"):
-            run_mrsi_workflow(_config(correct_mrsi_orientation=True), "S001", "V1", _inputs(), t1_path=Path("t1.nii.gz"))
+            run_mrsi_load_workflow(_config(correct_mrsi_orientation=True), "S001", "V1", _inputs(), t1_path=Path("t1.nii.gz"))
         self.assertEqual(ensure_brainmask.call_args.args[4], derivative_water)
         self.assertEqual(ensure_brainmask.call_args.args[5], derivative_maps)
-        self.assertEqual(filter_maps.call_args.args[3], derivative_maps)
 
     def test_raises_a_clear_error_without_a_t1_path(self):
         patches = self._patches()
-        with patches[0], patches[1], patches[2], patches[3], patches[4]:
+        with patches[0], patches[1]:
             with self.assertRaisesRegex(ValueError, "--correct-mrsi-orientation"):
-                run_mrsi_workflow(_config(correct_mrsi_orientation=True), "S001", "V1", _inputs(), t1_path=None)
+                run_mrsi_load_workflow(_config(correct_mrsi_orientation=True), "S001", "V1", _inputs(), t1_path=None)
+
+
+class RunSpikeFilterWorkflowTests(unittest.TestCase):
+    def _load(self):
+        return SimpleNamespace(raw_maps={"CrPCr": Path("cr.nii.gz")}, brainmask=Path("mask.nii.gz"))
+
+    def test_delegates_to_filter_metabolite_maps(self):
+        with patch(
+            "mrsiprep.workflows.mrsi.filter_metabolite_maps", return_value={"CrPCr": Path("cr-filt.nii.gz")}
+        ) as filter_maps:
+            result = run_spike_filter_workflow(_config(), "S001", "V1", self._load())
+        filter_maps.assert_called_once_with(unittest.mock.ANY, "S001", "V1", {"CrPCr": Path("cr.nii.gz")}, Path("mask.nii.gz"))
+        self.assertEqual(result.preproc_maps, {"CrPCr": Path("cr-filt.nii.gz")})
 
 
 if __name__ == "__main__":

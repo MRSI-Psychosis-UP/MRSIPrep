@@ -64,12 +64,49 @@ def load_bids_filters(path: str | Path | None) -> dict:
     return data
 
 
+def _normalize_mrsi_input_dir(mrsi_input_dir: str | Path) -> Path:
+    """Resolve --mrsi-input-dir to the bids_dir-equivalent root
+    _mrsi_input_roots() expects, accepting either that root directly or the
+    mrsi-<space> data folder itself (e.g. a path ending in
+    "derivatives/mrsi-orig" or "derivatives/mrsiprep/sub-X/ses-Y/mrsi/orig")
+    -- a natural thing to point at, since that is where the files actually
+    are. Walks back up past any "mrsi-<space>"/"mrsi"/"derivatives" and
+    "sub-*"/"ses-*" path segments it finds at the tail, so either spelling
+    resolves to the same root.
+    """
+    path = Path(mrsi_input_dir).resolve()
+    parts = list(path.parts)
+    while parts:
+        tail = parts[-1]
+        if tail == "derivatives" or tail.startswith("mrsi-") or tail == "mrsi" or re.fullmatch(r"(sub|ses)-.+", tail):
+            parts.pop()
+            continue
+        break
+    return Path(*parts) if parts else path
+
+
 class BIDSLayout:
     """Minimal path resolver for the MRSI-Metabolic-Connectome derivative layout."""
 
-    def __init__(self, bids_dir: str | Path, filters: dict | None = None, metabolite_aliases: dict | None = None):
+    def __init__(
+        self,
+        bids_dir: str | Path,
+        filters: dict | None = None,
+        metabolite_aliases: dict | None = None,
+        mrsi_input_dir: str | Path | None = None,
+    ):
         self.bids_dir = Path(bids_dir).resolve()
         self.derivatives = self.bids_dir / "derivatives"
+        # Root that raw MRSI derivatives (derivatives/mrsi-<space>/...) are
+        # read from. Defaults to bids_dir, same as the anatomical (T1w) data;
+        # set separately when the MRSI acquisition tree lives elsewhere.
+        # Accepts either a bids_dir-equivalent root, or the mrsi-<space>
+        # data folder itself (e.g. ".../derivatives/mrsi-orig") -- a very
+        # natural thing to point at directly, so it's auto-normalized back
+        # to the root level _mrsi_input_roots() expects, rather than
+        # silently doubling "derivatives/mrsi-<space>" in the looked-up path.
+        self.mrsi_root = _normalize_mrsi_input_dir(mrsi_input_dir) if mrsi_input_dir is not None else self.bids_dir
+        self.mrsi_derivatives = self.mrsi_root / "derivatives"
         self.filters = filters or {}
         # Alias spellings tried when a metabolite's map isn't found under its
         # requested name. Nucleus-dependent, so callers with a config should
@@ -83,6 +120,7 @@ class BIDSLayout:
             config.bids_dir,
             filters=config.bids_filters,
             metabolite_aliases=config.nucleus_metabolite_aliases(),
+            mrsi_input_dir=getattr(config, "mrsi_input_dir", None),
         )
 
     def discover_recordings(self) -> list[Recording]:
@@ -98,16 +136,44 @@ class BIDSLayout:
                 # rather than treating an unreadable file as a hard error.
                 pass
 
-        out: list[Recording] = []
+        # Union sessions found under bids_dir (anat) and under mrsi_root
+        # (raw MRSI) -- when --mrsi-input-dir points at a separate tree from
+        # bids_dir, a subject can have session data on one side but not the
+        # other (e.g. anat missing/incomplete on bids_dir while their MRSI
+        # data is only under mrsi_root, or vice versa). Scanning only
+        # bids_dir would silently report such a subject as sessionless/empty
+        # even though real data exists.
+        sessions_by_subject: dict[str, set[str | None]] = {}
+
         for sub_dir in sorted(self.bids_dir.glob("sub-*")):
             if not sub_dir.is_dir():
                 continue
             subject = normalize_subject(sub_dir.name)
             ses_dirs = sorted(sub_dir.glob("ses-*"))
-            if not ses_dirs:
-                out.append(Recording(subject, None))
+            sessions_by_subject.setdefault(subject, set())
             for ses_dir in ses_dirs:
-                out.append(Recording(subject, normalize_session(ses_dir.name)))
+                sessions_by_subject[subject].add(normalize_session(ses_dir.name))
+
+        for mrsi_space_dir in sorted(self.mrsi_derivatives.glob("mrsi-*")):
+            if not mrsi_space_dir.is_dir():
+                continue
+            for sub_dir in sorted(mrsi_space_dir.glob("sub-*")):
+                if not sub_dir.is_dir():
+                    continue
+                subject = normalize_subject(sub_dir.name)
+                ses_dirs = sorted(sub_dir.glob("ses-*"))
+                sessions_by_subject.setdefault(subject, set())
+                for ses_dir in ses_dirs:
+                    sessions_by_subject[subject].add(normalize_session(ses_dir.name))
+
+        out: list[Recording] = []
+        for subject in sorted(sessions_by_subject):
+            sessions = sessions_by_subject[subject]
+            if not sessions:
+                out.append(Recording(subject, None))
+                continue
+            for session in sorted(sessions, key=lambda s: (s is None, s)):
+                out.append(Recording(subject, session))
         return out
 
     def raw_t1(self, subject: str, session: str | None, reference_name: str | None = None) -> Path | None:
@@ -181,7 +247,7 @@ class BIDSLayout:
         """
         sub = f"sub-{normalize_subject(subject)}"
         ses = self._ses_dir(session)
-        primary = self.derivatives / f"mrsi-{space}" / sub / ses
+        primary = self.mrsi_derivatives / f"mrsi-{space}" / sub / ses
         roots = [primary]
         if not primary.exists() or not any(primary.iterdir()):
             fallback = self.derivatives / "mrsiprep" / sub / ses / "mrsi" / space

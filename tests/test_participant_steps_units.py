@@ -137,62 +137,76 @@ class StepAnatomicalPrepTests(unittest.TestCase):
         self.assertEqual(result, "anat-result")
 
 
-class StepMrsiPreprocessingTests(unittest.TestCase):
-    def _mrsi(self, t1_correction_provenance=None):
-        return SimpleNamespace(
-            raw_maps={"raw": 1}, preproc_maps={"preproc": 1}, corrected_maps=None, t1_correction_provenance=t1_correction_provenance
-        )
-
-    def test_without_t1_correction_skips_that_qc_section(self):
-        with patch("mrsiprep.workflows.steps.run_mrsi_workflow", return_value=self._mrsi()), patch(
-            "mrsiprep.workflows.steps.build_mrsi_raw_qc_sections", return_value=["raw"]
-        ), patch(
-            "mrsiprep.workflows.steps.build_ventricle_qc_sections", return_value=["ventricle"]
-        ), patch(
-            "mrsiprep.workflows.steps.build_mrsi_preproc_qc_sections", return_value=["preproc"]
-        ), patch(
-            "mrsiprep.workflows.steps.build_t1_correction_qc_sections"
-        ) as t1_corr:
-            mrsi, qc_raw, qc_preproc, qc_t1corr = P._step_mrsi_preprocessing(SimpleNamespace(), "01", "01", object(), _debug())
-        t1_corr.assert_not_called()
-        self.assertIsNone(qc_t1corr)
-        # The ventricle section moved to the reports step (_step_ventricle_qc).
-        self.assertEqual(qc_raw, ["raw"])
-        self.assertEqual(qc_preproc, ["preproc"])
-
-    def test_with_t1_correction_builds_that_qc_section(self):
-        mrsi_obj = self._mrsi(t1_correction_provenance="prov")
-        with patch("mrsiprep.workflows.steps.run_mrsi_workflow", return_value=mrsi_obj), patch(
-            "mrsiprep.workflows.steps.build_mrsi_raw_qc_sections", return_value=[]
-        ), patch(
-            "mrsiprep.workflows.steps.build_ventricle_qc_sections", return_value=[]
-        ), patch(
-            "mrsiprep.workflows.steps.build_mrsi_preproc_qc_sections", return_value=[]
-        ), patch(
-            "mrsiprep.workflows.steps.build_t1_correction_qc_sections", return_value=["t1corr"]
-        ) as t1_corr:
-            _mrsi, _qc_raw, _qc_preproc, qc_t1corr = P._step_mrsi_preprocessing(SimpleNamespace(), "01", "01", object(), _debug())
-        t1_corr.assert_called_once()
-        self.assertEqual(qc_t1corr, ["t1corr"])
+class StepMrsiLoadTests(unittest.TestCase):
+    def _load(self):
+        return SimpleNamespace(raw_maps={"raw": 1})
 
     def test_threads_anat_registration_t1w_through_as_t1_path(self):
         anat = SimpleNamespace(registration_t1w=Path("t1.nii.gz"))
-        with patch("mrsiprep.workflows.steps.run_mrsi_workflow", return_value=self._mrsi()) as run_mrsi, patch(
-            "mrsiprep.workflows.steps.build_mrsi_raw_qc_sections", return_value=[]
-        ), patch("mrsiprep.workflows.steps.build_ventricle_qc_sections", return_value=[]), patch(
-            "mrsiprep.workflows.steps.build_mrsi_preproc_qc_sections", return_value=[]
-        ):
-            P._step_mrsi_preprocessing(SimpleNamespace(), "01", "01", object(), _debug(), anat=anat)
-        run_mrsi.assert_called_once_with(unittest.mock.ANY, "01", "01", unittest.mock.ANY, t1_path=Path("t1.nii.gz"))
+        with patch("mrsiprep.workflows.steps.run_mrsi_load_workflow", return_value=self._load()) as run_load:
+            P._step_mrsi_load(SimpleNamespace(), "01", "01", object(), _debug(), anat=anat)
+        run_load.assert_called_once_with(unittest.mock.ANY, "01", "01", unittest.mock.ANY, t1_path=Path("t1.nii.gz"))
 
     def test_t1_path_is_none_without_anat(self):
-        with patch("mrsiprep.workflows.steps.run_mrsi_workflow", return_value=self._mrsi()) as run_mrsi, patch(
-            "mrsiprep.workflows.steps.build_mrsi_raw_qc_sections", return_value=[]
-        ), patch("mrsiprep.workflows.steps.build_ventricle_qc_sections", return_value=[]), patch(
-            "mrsiprep.workflows.steps.build_mrsi_preproc_qc_sections", return_value=[]
+        with patch("mrsiprep.workflows.steps.run_mrsi_load_workflow", return_value=self._load()) as run_load:
+            P._step_mrsi_load(SimpleNamespace(), "01", "01", object(), _debug())
+        run_load.assert_called_once_with(unittest.mock.ANY, "01", "01", unittest.mock.ANY, t1_path=None)
+
+
+class StepSpikeFilterTests(unittest.TestCase):
+    def _load(self):
+        return SimpleNamespace(raw_maps={"raw": 1})
+
+    def _filtered(self):
+        return SimpleNamespace(preproc_maps={"preproc": 1})
+
+    def test_wires_qc_sections(self):
+        with patch("mrsiprep.workflows.steps.run_spike_filter_workflow", return_value=self._filtered()), patch(
+            "mrsiprep.workflows.steps.build_mrsi_raw_qc_sections", return_value=["raw"]
+        ), patch(
+            "mrsiprep.workflows.steps.build_mrsi_preproc_qc_sections", return_value=["preproc"]
         ):
-            P._step_mrsi_preprocessing(SimpleNamespace(), "01", "01", object(), _debug())
-        run_mrsi.assert_called_once_with(unittest.mock.ANY, "01", "01", unittest.mock.ANY, t1_path=None)
+            filtered, qc_raw, qc_preproc = P._step_spike_filter(SimpleNamespace(), "01", "01", self._load(), _debug())
+        self.assertEqual(qc_raw, ["raw"])
+        self.assertEqual(qc_preproc, ["preproc"])
+
+
+class StepT1WaterCorrectionTests(unittest.TestCase):
+    def _water(self, provenance=None):
+        return SimpleNamespace(corrected_maps={"corrected": 1}, provenance=provenance)
+
+    def test_without_t1_correction_skips_that_qc_section(self):
+        load = SimpleNamespace()
+        filtered = SimpleNamespace(preproc_maps={"preproc": 1})
+        with patch("mrsiprep.workflows.steps.run_t1_water_correction_workflow", return_value=self._water()), patch(
+            "mrsiprep.workflows.steps.build_t1_correction_qc_sections"
+        ) as t1_corr:
+            water, qc_t1corr = P._step_t1_water_correction(SimpleNamespace(), "01", "01", load, filtered, _debug())
+        t1_corr.assert_not_called()
+        self.assertIsNone(qc_t1corr)
+
+    def test_with_t1_correction_builds_that_qc_section(self):
+        load = SimpleNamespace()
+        filtered = SimpleNamespace(preproc_maps={"preproc": 1})
+        water_obj = self._water(provenance="prov")
+        with patch("mrsiprep.workflows.steps.run_t1_water_correction_workflow", return_value=water_obj), patch(
+            "mrsiprep.workflows.steps.build_t1_correction_qc_sections", return_value=["t1corr"]
+        ) as t1_corr:
+            _water, qc_t1corr = P._step_t1_water_correction(SimpleNamespace(), "01", "01", load, filtered, _debug())
+        t1_corr.assert_called_once()
+        self.assertEqual(qc_t1corr, ["t1corr"])
+
+
+class StepMrsiFinishTests(unittest.TestCase):
+    def test_delegates_to_run_mrsi_finish_workflow(self):
+        load = SimpleNamespace()
+        filtered = SimpleNamespace()
+        water = SimpleNamespace()
+        inputs = SimpleNamespace()
+        with patch("mrsiprep.workflows.steps.run_mrsi_finish_workflow", return_value="mrsi_obj") as run_finish:
+            result = P._step_mrsi_finish(SimpleNamespace(), "01", "01", load, filtered, water, inputs, _debug())
+        run_finish.assert_called_once_with(unittest.mock.ANY, "01", "01", load, filtered, water, inputs)
+        self.assertEqual(result, "mrsi_obj")
 
 
 class StepVentricleQcTests(unittest.TestCase):

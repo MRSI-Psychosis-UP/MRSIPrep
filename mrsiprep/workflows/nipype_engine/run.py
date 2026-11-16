@@ -262,7 +262,8 @@ def _run_one_recording_nipype(config, subject: str, session: str | None, subject
     from mrsiprep.io.naming import subject_session_dir
     from mrsiprep.utils.debug import collect_timings, set_logbook, set_status_queue, set_timing_sink
     from mrsiprep.utils.runtime_metrics import write_runtime_metrics
-    from mrsiprep.workflows.nipype_engine.build import TERMINAL_NODE, build_recording_workflow
+    from mrsiprep.workflows.nipype_engine.build import build_recording_workflow
+    from mrsiprep.workflows.nipype_engine.steps_registry import terminal_node
     from mrsiprep.workflows.participant import RecordingStatus, _format_elapsed
 
     _configure_nipype_logging(config)
@@ -288,7 +289,7 @@ def _run_one_recording_nipype(config, subject: str, session: str | None, subject
     try:
         wf = build_recording_workflow(config, subject, session, subject_template=subject_template)
         exec_graph = wf.run(plugin="Linear")
-        outputs = _terminal_outputs(exec_graph, TERMINAL_NODE)
+        outputs = _terminal_outputs(exec_graph, terminal_node(config))
         elapsed = time.monotonic() - start
         debug.always(f"[success]FINISHED[/success] {msg} in {_format_elapsed(elapsed)}")
         LOGGER.info("FINISHED %s in %s", msg, _format_elapsed(elapsed))

@@ -234,3 +234,17 @@ class ConfigPresetTests(unittest.TestCase):
                 "--ref-met",
                 "CrPCr",
             ])
+
+
+class StepsFlagTests(unittest.TestCase):
+    def test_omitted_steps_flag_defaults_to_none(self):
+        cfg = parse_args(["/tmp/bids", "/tmp/out", "participant"])
+        self.assertIsNone(cfg.steps)
+
+    def test_steps_flag_parses_comma_separated_order(self):
+        cfg = parse_args(["/tmp/bids", "/tmp/out", "participant", "--steps", "prepare,tissue_seg,anatprep"])
+        self.assertEqual(cfg.steps, ["prepare", "tissue_seg", "anatprep"])
+
+    def test_invalid_steps_order_raises_at_parse_time(self):
+        with self.assertRaisesRegex(ValueError, "--steps"):
+            parse_args(["/tmp/bids", "/tmp/out", "participant", "--steps", "prepare,anat"])
