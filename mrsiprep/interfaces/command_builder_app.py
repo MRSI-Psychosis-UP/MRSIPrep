@@ -71,11 +71,14 @@ POSITIONAL_HELP = {
 # --regional-summary affects metprofiles, not regional; the quality-
 # threshold flags (--snr-min/--linewidth-max/--crlb-max/--quantification-tool/
 # --linewidth-unit/--nucleus/--quality-metrics) belong to mrsi_quality (where
-# make_quality_masks runs), not mrsi_load; --ref-met belongs to mrsi_reference
-# (where generate_reference runs) as well as mrsi_load, where it also seeds
-# orientation correction; --crlb-unit/--connectivity-space are validation-
-# only/legacy no-ops never read by any step's own logic, so neither gets a
-# widget here.
+# make_quality_masks runs), not mrsi_load; --metabolites belongs to prepare
+# (it gates which metabolite maps load_mrsi_inputs loads at all, inside
+# validate_recording -- see mrsiprep/io/validators.py), not mrsi_quality or
+# mrsi_load, neither of which reads config.metabolites directly; --ref-met
+# belongs to mrsi_reference (where generate_reference runs) as well as
+# mrsi_load, where it also seeds orientation correction; --crlb-unit/
+# --connectivity-space are validation-only/legacy no-ops never read by any
+# step's own logic, so neither gets a widget here.
 #
 # Order within each step's list matters where one flag's visibility depends
 # on another's value (e.g. "mrsi_parcellation"'s --parcellation-mode must
@@ -85,7 +88,7 @@ POSITIONAL_HELP = {
 # Custom tab still lists them (for ordering/validation) but renders only a
 # "No step-specific options" caption.
 CUSTOM_STEP_FLAGS: dict[str, list[str]] = {
-    "prepare": [],
+    "prepare": ["--metabolites"],
     "tissue_seg": ["--tissue-backend", "--overwrite-seg"],
     "anatprep": ["--registration-t1-target", "--csf-pv-threshold", "--overwrite-t1-reg"],
     "mrsi_load": ["--correct-mrsi-orientation", "--registration-backend", "--fsl-cost", "--ref-met"],
@@ -861,7 +864,7 @@ def _build_command(positional_values: dict, optionals: list[argparse.Action], va
 # the flowchart's branches), so this dict collapses the finer step groups
 # back into the same coarser topic tabs this GUI has always shown.
 TAB_GROUPS: dict[str, list[str]] = {
-    "BIDS input": ["Options for filtering BIDS queries", "Workflow: step selection"],
+    "BIDS input": ["Prepare: input selection", "Workflow: step selection"],
     "Anatomical": ["Anatomical branch: tissue segmentation", "Anatomical branch: anatomical preparation"],
     "MRSI": [
         "MRSI branch: loading",
@@ -1360,7 +1363,7 @@ def _render_standardized_pipeline_tab(
     # --t1-correction are already resolved into `values` -- the flowchart
     # must reflect the form's actual current settings, not just the
     # required-args defaults it would see if rendered earlier.
-    with st.expander("Pipeline flowchart (fixed 18-step order)", expanded=False):
+    with st.expander("Pipeline flowchart (fixed 19-step order)", expanded=False):
         # CUSTOM_STEP_FLAGS' key order matches STEP_SEQUENCE's exactly (the
         # module-level assertion near its definition guarantees this stays
         # true) -- reused here rather than importing nodes.STEP_SEQUENCE,

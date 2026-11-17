@@ -10,18 +10,22 @@
   spike filtering", "MRSI branch: quality masking", "Shared:
   registration"), with genuinely cross-cutting flags (BIDS selection,
   workflow-wide config, cache invalidation, other/runtime) kept as
-  their own separate sections. Most notably, `--metabolites` moves out
-  of the old "quality thresholds" section (it selects what
-  `mrsi_quality` processes, not a quality threshold) and the five
-  spike-filter flags move out of "Workflow configuration" into their
-  own "MRSI branch: spike filtering" section. No flag was renamed,
-  removed, or had its behavior changed -- only which `--help` section
-  it's listed under. The Command Builder GUI's "Standardized Pipeline"
-  tab mirrors the same new sections (see `TAB_GROUPS` in
-  `command_builder_app.py`).
+  their own separate sections. Most notably, the five spike-filter
+  flags move out of "Workflow configuration" into their own "MRSI
+  branch: spike filtering" section. No flag was renamed, removed, or
+  had its behavior changed -- only which `--help` section it's listed
+  under. The Command Builder GUI's "Standardized Pipeline" tab mirrors
+  the same new sections (see `TAB_GROUPS` in `command_builder_app.py`).
 - Fixed the Command Builder GUI's "Custom Pipeline" tab never showing a
   widget for `--quality-metrics` under the `mrsi_quality` step (a
   pre-existing gap, unrelated to the section regrouping above).
+- Moved `--metabolites` into the renamed "Prepare: input selection"
+  section (previously "Options for filtering BIDS queries"): it is
+  read inside `validate_recording` (`prepare`, the very first step) to
+  decide which metabolite maps get loaded from the BIDS layout at all,
+  not inside `mrsi_quality`/`mrsi_load`, neither of which reads
+  `config.metabolites` directly. It had briefly lived under
+  "quality thresholds"/"MRSI branch: quality masking" instead.
 
 ### Pipeline
 

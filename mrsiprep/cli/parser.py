@@ -28,7 +28,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Processing stage to be run, only 'participant' in the case of MRSIPrep (see BIDS-Apps specification).",
     )
 
-    selection = parser.add_argument_group("Options for filtering BIDS queries")
+    selection = parser.add_argument_group("Prepare: input selection")
     selection.add_argument(
         "--participant-label",
         nargs="+",
@@ -79,6 +79,14 @@ def build_parser() -> argparse.ArgumentParser:
         "recording (e.g. 'desc-brain_T1w', or 'acq-mprage_T1w' to select among multiple raw T1w "
         "acquisitions -- see --bids-filter-file for finer-grained disambiguation). Also determines what "
         "the anatprep and registration steps operate on.",
+    )
+    selection.add_argument(
+        "--metabolites",
+        type=_parse_comma_list,
+        required=True,
+        help="Comma-separated metabolite names to process, e.g. 'CrPCr,GluGln,GPCPCh,NAANAAG,Ins'. Selects "
+        "which metabolite maps are loaded from the BIDS layout at all; every later step only ever sees "
+        "these metabolites.",
     )
 
     processing = parser.add_argument_group("Workflow: step selection")
@@ -255,12 +263,6 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Unit the upstream tool's CRLB map is stored in. Required: pass this explicitly, or add "
         "\"CRLBUnit\" to CommonMetadata in mrsinmrs.json. --crlb-max is defined as a percentage.",
-    )
-    mrsi_quality.add_argument(
-        "--metabolites",
-        type=_parse_comma_list,
-        required=True,
-        help="Comma-separated metabolite names to process, e.g. 'CrPCr,GluGln,GPCPCh,NAANAAG,Ins'.",
     )
     mrsi_quality.add_argument(
         "--nucleus",
