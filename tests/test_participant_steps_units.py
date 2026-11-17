@@ -197,16 +197,27 @@ class StepT1WaterCorrectionTests(unittest.TestCase):
         self.assertEqual(qc_t1corr, ["t1corr"])
 
 
-class StepMrsiFinishTests(unittest.TestCase):
-    def test_delegates_to_run_mrsi_finish_workflow(self):
+class StepMrsiReferenceTests(unittest.TestCase):
+    def test_delegates_to_run_mrsi_reference_workflow(self):
         load = SimpleNamespace()
         filtered = SimpleNamespace()
         water = SimpleNamespace()
         inputs = SimpleNamespace()
-        with patch("mrsiprep.workflows.steps.run_mrsi_finish_workflow", return_value="mrsi_obj") as run_finish:
-            result = P._step_mrsi_finish(SimpleNamespace(), "01", "01", load, filtered, water, inputs, _debug())
-        run_finish.assert_called_once_with(unittest.mock.ANY, "01", "01", load, filtered, water, inputs)
-        self.assertEqual(result, "mrsi_obj")
+        with patch("mrsiprep.workflows.steps.run_mrsi_reference_workflow", return_value="mrsi_reference_obj") as run_reference:
+            result = P._step_mrsi_reference(SimpleNamespace(), "01", "01", load, filtered, water, inputs, _debug())
+        run_reference.assert_called_once_with(unittest.mock.ANY, "01", "01", load, filtered, water, inputs)
+        self.assertEqual(result, "mrsi_reference_obj")
+
+
+class StepMrsiQualityTests(unittest.TestCase):
+    def test_delegates_to_run_mrsi_quality_workflow(self):
+        water = SimpleNamespace()
+        inputs = SimpleNamespace()
+        brainmask = Path("brainmask.nii.gz")
+        with patch("mrsiprep.workflows.steps.run_mrsi_quality_workflow", return_value="mrsi_quality_obj") as run_quality:
+            result = P._step_mrsi_quality(SimpleNamespace(), "01", "01", water, inputs, brainmask, _debug())
+        run_quality.assert_called_once_with(unittest.mock.ANY, "01", "01", water, inputs, brainmask)
+        self.assertEqual(result, "mrsi_quality_obj")
 
 
 class StepVentricleQcTests(unittest.TestCase):
@@ -267,7 +278,7 @@ class StepTissueProbmapsTests(unittest.TestCase):
 
 class StepPvcTests(unittest.TestCase):
     def _mrsi(self):
-        return SimpleNamespace(preproc_maps={"preproc": 1}, reference=Path("ref"), brainmask=Path("mask"), corrected_maps=None)
+        return SimpleNamespace(preproc_maps={"preproc": 1}, reference=Path("ref"), brainmask=Path("mask"))
 
     def test_no_pvc_flag_skips_correction(self):
         config = SimpleNamespace(no_pvc=True)
@@ -286,7 +297,7 @@ class StepPvcTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "PVC requires tissue segmentation"):
             P._step_pvc(config, "01", "01", self._mrsi(), None, _debug())
 
-    def test_runs_pvc_and_mutates_mrsi_corrected_maps(self):
+    def test_runs_pvc(self):
         config = SimpleNamespace(no_pvc=False)
         mrsi = self._mrsi()
         tissue = SimpleNamespace(mrsi={"GM": Path("gm")})
@@ -298,7 +309,6 @@ class StepPvcTests(unittest.TestCase):
         pvc.assert_called_once_with(config, "01", "01", {"preproc": 1}, "tissue_4d", Path("mask"), Path("ref"))
         self.assertEqual(corrected, {"corrected": 1})
         self.assertEqual(tissue4d, "tissue_4d")
-        self.assertEqual(mrsi.corrected_maps, {"corrected": 1})  # mutated as a side effect
 
 
 class StepResamplingTests(unittest.TestCase):
@@ -355,8 +365,11 @@ class StepLeakageQcTests(unittest.TestCase):
 
 
 class StepSynthsegParcellationQcTests(unittest.TestCase):
-    def _mrsi(self):
-        return SimpleNamespace(reference=Path("ref"), brainmask=Path("mask"), crlb_maps={}, qcmasks={})
+    def _mrsi_reference(self):
+        return SimpleNamespace(reference=Path("ref"), brainmask=Path("mask"), crlb_maps={})
+
+    def _mrsi_quality(self):
+        return SimpleNamespace(qcmasks={})
 
     def test_with_t1_to_mni_forward_passed_to_figures(self):
         registration = SimpleNamespace(mrsi_to_t1=SimpleNamespace(inverse="inv"), t1_to_mni=SimpleNamespace(forward="mni_fwd"))
@@ -364,7 +377,9 @@ class StepSynthsegParcellationQcTests(unittest.TestCase):
         with patch("mrsiprep.workflows.steps.run_synthseg_parcellation", return_value=parcels), patch(
             "mrsiprep.workflows.steps.write_parcel_qc", return_value="parcel-qc"
         ), patch("mrsiprep.workflows.steps.write_parcel_qc_figures") as figures:
-            result = P._step_synthseg_parcellation_qc(SimpleNamespace(), "01", "01", Path("raw_t1"), self._mrsi(), registration, _debug())
+            result = P._step_synthseg_parcellation_qc(
+                SimpleNamespace(), "01", "01", Path("raw_t1"), self._mrsi_reference(), self._mrsi_quality(), registration, _debug()
+            )
         self.assertEqual(figures.call_args.kwargs["t1_to_mni"], "mni_fwd")
         self.assertEqual(result, (parcels, "parcel-qc"))
 
@@ -374,13 +389,15 @@ class StepSynthsegParcellationQcTests(unittest.TestCase):
         with patch("mrsiprep.workflows.steps.run_synthseg_parcellation", return_value=parcels), patch(
             "mrsiprep.workflows.steps.write_parcel_qc", return_value="parcel-qc"
         ), patch("mrsiprep.workflows.steps.write_parcel_qc_figures") as figures:
-            P._step_synthseg_parcellation_qc(SimpleNamespace(), "01", "01", Path("raw_t1"), self._mrsi(), registration, _debug())
+            P._step_synthseg_parcellation_qc(
+                SimpleNamespace(), "01", "01", Path("raw_t1"), self._mrsi_reference(), self._mrsi_quality(), registration, _debug()
+            )
         self.assertIsNone(figures.call_args.kwargs["t1_to_mni"])
 
-    def _mrsi_with_crlb(self, metabolites):
+    def _mrsi_reference_with_crlb(self, metabolites):
         return SimpleNamespace(
             reference=Path("ref"), brainmask=Path("mask"),
-            crlb_maps={met: Path(f"crlb-{met}.nii.gz") for met in metabolites}, qcmasks={},
+            crlb_maps={met: Path(f"crlb-{met}.nii.gz") for met in metabolites},
         )
 
     def test_extracts_mni_space_crlb_maps_from_transformed(self):
@@ -399,8 +416,8 @@ class StepSynthsegParcellationQcTests(unittest.TestCase):
             "mrsiprep.workflows.steps.write_parcel_qc", return_value="parcel-qc"
         ), patch("mrsiprep.workflows.steps.write_parcel_qc_figures") as figures:
             P._step_synthseg_parcellation_qc(
-                SimpleNamespace(), "01", "01", Path("raw_t1"), self._mrsi_with_crlb(["CrPCr", "GluGln"]), registration,
-                _debug(), transformed=transformed,
+                SimpleNamespace(), "01", "01", Path("raw_t1"), self._mrsi_reference_with_crlb(["CrPCr", "GluGln"]),
+                self._mrsi_quality(), registration, _debug(), transformed=transformed,
             )
         self.assertEqual(
             figures.call_args.kwargs["crlb_maps"],
@@ -419,8 +436,8 @@ class StepSynthsegParcellationQcTests(unittest.TestCase):
             "mrsiprep.workflows.steps.write_parcel_qc", return_value="parcel-qc"
         ), patch("mrsiprep.workflows.steps.write_parcel_qc_figures") as figures:
             P._step_synthseg_parcellation_qc(
-                SimpleNamespace(), "01", "01", Path("raw_t1"), self._mrsi_with_crlb(["CrPCr"]), registration,
-                _debug(), transformed=transformed,
+                SimpleNamespace(), "01", "01", Path("raw_t1"), self._mrsi_reference_with_crlb(["CrPCr"]),
+                self._mrsi_quality(), registration, _debug(), transformed=transformed,
             )
         self.assertEqual(figures.call_args.kwargs["crlb_maps"], {"CrPCr": Path("crpcr.nii.gz")})
 
@@ -433,8 +450,8 @@ class StepSynthsegParcellationQcTests(unittest.TestCase):
             "mrsiprep.workflows.steps.write_parcel_qc", return_value="parcel-qc"
         ), patch("mrsiprep.workflows.steps.write_parcel_qc_figures") as figures:
             P._step_synthseg_parcellation_qc(
-                SimpleNamespace(), "01", "01", Path("raw_t1"), self._mrsi_with_crlb(["CrPCr"]), registration,
-                _debug(), transformed=None,
+                SimpleNamespace(), "01", "01", Path("raw_t1"), self._mrsi_reference_with_crlb(["CrPCr"]),
+                self._mrsi_quality(), registration, _debug(), transformed=None,
             )
         self.assertIsNone(figures.call_args.kwargs["crlb_maps"])
 
@@ -494,21 +511,28 @@ class StepParcellationTests(unittest.TestCase):
 
 
 class StepRegionalExtractionTests(unittest.TestCase):
-    def _mrsi(self):
-        return SimpleNamespace(qcmasks={}, snr_map=None, linewidth_map=None, crlb_maps={})
+    def _mrsi_reference(self):
+        return SimpleNamespace(snr_map=None, linewidth_map=None, crlb_maps={})
+
+    def _mrsi_quality(self):
+        return SimpleNamespace(qcmasks={})
 
     def test_with_tissue_passes_tissue_fractions(self):
         config = SimpleNamespace()
         tissue = SimpleNamespace(mrsi={"GM": Path("gm")})
         with patch("mrsiprep.workflows.steps.extract_regional_metabolites", return_value="regional") as extract:
-            regional = P._step_regional_extraction(config, "01", "01", {}, [_parcels()], self._mrsi(), tissue, _debug())
+            regional = P._step_regional_extraction(
+                config, "01", "01", {}, [_parcels()], self._mrsi_reference(), self._mrsi_quality(), tissue, _debug()
+            )
         self.assertEqual(extract.call_args.args[-1], {"GM": Path("gm")})
         self.assertEqual(regional, {"atlasA": "regional"})
 
     def test_without_tissue_passes_empty_dict(self):
         config = SimpleNamespace()
         with patch("mrsiprep.workflows.steps.extract_regional_metabolites", return_value="regional") as extract:
-            P._step_regional_extraction(config, "01", "01", {}, [_parcels()], self._mrsi(), None, _debug())
+            P._step_regional_extraction(
+                config, "01", "01", {}, [_parcels()], self._mrsi_reference(), self._mrsi_quality(), None, _debug()
+            )
         self.assertEqual(extract.call_args.args[-1], {})
 
     def test_runs_once_per_parcellation_keyed_by_id(self):
@@ -517,7 +541,9 @@ class StepRegionalExtractionTests(unittest.TestCase):
         with patch(
             "mrsiprep.workflows.steps.extract_regional_metabolites", side_effect=["first", "second"]
         ) as extract:
-            regional = P._step_regional_extraction(config, "01", "01", {}, parcels, self._mrsi(), None, _debug())
+            regional = P._step_regional_extraction(
+                config, "01", "01", {}, parcels, self._mrsi_reference(), self._mrsi_quality(), None, _debug()
+            )
         self.assertEqual(extract.call_count, 2)
         self.assertEqual(regional, {"chimeraA-scale1": "first", "chimeraB-scale3": "second"})
 

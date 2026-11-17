@@ -17,9 +17,9 @@ One run resolves to a list of `(subject, session)` recordings, each processed
 through the same fixed stage sequence:
 
 ```
-prepare → tissue_seg → anatprep → mrsi_load → spike_filter → t1_saturation_correction → mrsi_finish →
-registration → tissue_probmaps → tissue_qc → pvc → resampling → leakage_qc →
-anat_parcellation_qc → mrsi_parcellation → regional → connectivity → metprofiles → reports
+prepare → tissue_seg → anatprep → mrsi_load → spike_filter → t1_saturation_correction →
+mrsi_reference → mrsi_quality → registration → tissue_probmaps → tissue_qc → pvc → resampling →
+leakage_qc → anat_parcellation_qc → mrsi_parcellation → regional → connectivity → metprofiles → reports
 ```
 
 **`STEP_SEQUENCE` in `mrsiprep/workflows/nipype_engine/nodes.py` is the
@@ -28,7 +28,7 @@ it; if you add a stage, both live there.
 
 ### How modular is the step sequence really?
 
-Each of the 18 entries in `STEP_SEQUENCE` is a plain `(config, subject,
+Each of the 19 entries in `STEP_SEQUENCE` is a plain `(config, subject,
 session, ctx) -> ctx` function, and `STEP_DEPENDENCIES` in
 `workflows/nipype_engine/steps_registry.py` declares the `ctx` keys each one
 requires/produces/optionally-uses. `--steps` (and the command builder GUI's

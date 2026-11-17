@@ -1,7 +1,7 @@
 """Declared per-step data dependencies, backing ``--steps``.
 
 :data:`STEP_SEQUENCE` (see :mod:`nodes`) threads a shared ``ctx`` dict through
-a fixed 18-step chain; each step reads some ``ctx`` keys and writes others,
+a fixed 19-step chain; each step reads some ``ctx`` keys and writes others,
 but that dependency structure only exists implicitly, inside each step
 function's body (``ctx["key"]`` vs ``ctx.get("key")``). :data:`STEP_DEPENDENCIES`
 makes it explicit, so a user-supplied custom order/subset (``--steps``) can be
@@ -58,17 +58,21 @@ STEP_DEPENDENCIES: dict[str, StepDeps] = {
         requires=frozenset({"mrsi_load", "spike_filter"}),
         produces=frozenset({"t1_saturation_correction", "qc_sections_t1_correction"}),
     ),
-    "mrsi_finish": StepDeps(
+    "mrsi_reference": StepDeps(
         requires=frozenset({"mrsi_load", "spike_filter", "t1_saturation_correction", "inputs"}),
-        produces=frozenset({"mrsi"}),
+        produces=frozenset({"mrsi_reference"}),
+    ),
+    "mrsi_quality": StepDeps(
+        requires=frozenset({"t1_saturation_correction", "inputs", "mrsi_reference"}),
+        produces=frozenset({"mrsi_quality"}),
     ),
     "registration": StepDeps(
-        requires=frozenset({"mrsi", "anatprep"}),
+        requires=frozenset({"mrsi_reference", "anatprep"}),
         optional=frozenset({"subject_template"}),
         produces=frozenset({"registration"}),
     ),
     "tissue_probmaps": StepDeps(
-        requires=frozenset({"anatprep", "mrsi", "registration", "precomputed_tissue_t1"}),
+        requires=frozenset({"anatprep", "mrsi_reference", "registration", "precomputed_tissue_t1"}),
         produces=frozenset({"tissue"}),
     ),
     "tissue_qc": StepDeps(
@@ -76,11 +80,11 @@ STEP_DEPENDENCIES: dict[str, StepDeps] = {
         produces=frozenset({"qc_sections_tissue"}),
     ),
     "pvc": StepDeps(
-        requires=frozenset({"mrsi", "tissue"}),
+        requires=frozenset({"mrsi_reference", "tissue"}),
         produces=frozenset({"corrected_maps", "tissue_4d", "qc_sections_mrsi_pvc"}),
     ),
     "resampling": StepDeps(
-        requires=frozenset({"anatprep", "mrsi", "registration", "corrected_maps", "raw_t1"}),
+        requires=frozenset({"anatprep", "mrsi_reference", "registration", "corrected_maps", "raw_t1"}),
         produces=frozenset({"transformed", "qc_sections_t1w_alignment", "qc_sections_mni_alignment"}),
     ),
     "leakage_qc": StepDeps(
@@ -88,33 +92,33 @@ STEP_DEPENDENCIES: dict[str, StepDeps] = {
         produces=frozenset({"leakage_qc"}),
     ),
     "anat_parcellation_qc": StepDeps(
-        requires=frozenset({"raw_t1", "mrsi", "registration"}),
+        requires=frozenset({"raw_t1", "mrsi_reference", "mrsi_quality", "registration"}),
         optional=frozenset({"transformed"}),
         produces=frozenset({"preliminary_parcels", "parcel_qc"}),
     ),
     "mrsi_parcellation": StepDeps(
-        requires=frozenset({"raw_t1", "mrsi", "anatprep", "registration", "preliminary_parcels"}),
+        requires=frozenset({"raw_t1", "mrsi_reference", "anatprep", "registration", "preliminary_parcels"}),
         produces=frozenset({"parcels", "qc_sections_parcellation"}),
     ),
     "regional": StepDeps(
-        requires=frozenset({"corrected_maps", "parcels", "mrsi", "tissue"}),
+        requires=frozenset({"corrected_maps", "parcels", "mrsi_reference", "mrsi_quality", "tissue"}),
         produces=frozenset({"regional"}),
     ),
     "connectivity": StepDeps(
-        requires=frozenset({"regional", "parcels", "corrected_maps", "mrsi", "tissue"}),
+        requires=frozenset({"regional", "parcels", "corrected_maps", "mrsi_reference", "tissue"}),
         produces=frozenset({"connectivity", "qc_sections_connectivity"}),
     ),
     "metprofiles": StepDeps(
-        requires=frozenset({"corrected_maps", "mrsi", "parcels", "regional", "anatprep"}),
+        requires=frozenset({"corrected_maps", "mrsi_reference", "parcels", "regional", "anatprep"}),
         produces=frozenset({"metprofiles"}),
     ),
     "reports": StepDeps(
         requires=frozenset({
-            "anatprep", "mrsi", "parcels", "parcel_qc", "leakage_qc", "tissue_4d", "preliminary_parcels",
-            "regional", "metprofiles", "connectivity", "transformed", "registration", "raw_t1",
-            "qc_sections_tissue", "qc_sections_mrsi_raw", "qc_sections_mrsi_preproc", "qc_sections_t1_correction",
-            "qc_sections_t1w_alignment", "qc_sections_mni_alignment", "qc_sections_parcellation",
-            "qc_sections_connectivity",
+            "anatprep", "mrsi_reference", "mrsi_quality", "parcels", "parcel_qc", "leakage_qc", "tissue_4d",
+            "preliminary_parcels", "regional", "metprofiles", "connectivity", "transformed", "registration",
+            "raw_t1", "qc_sections_tissue", "qc_sections_mrsi_raw", "qc_sections_mrsi_preproc",
+            "qc_sections_t1_correction", "qc_sections_t1w_alignment", "qc_sections_mni_alignment",
+            "qc_sections_parcellation", "qc_sections_connectivity",
         }),
         optional=frozenset({"qc_sections_mrsi_pvc"}),
         produces=frozenset({"outputs"}),

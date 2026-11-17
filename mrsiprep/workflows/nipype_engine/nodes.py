@@ -103,14 +103,26 @@ def step_t1_saturation_correction(config, subject, session, ctx):
     return ctx
 
 
-def step_mrsi_finish(config, subject, session, ctx):
+def step_mrsi_reference(config, subject, session, ctx):
     from mrsiprep.utils.debug import Debug
-    from mrsiprep.workflows.participant import _step_mrsi_finish
+    from mrsiprep.workflows.participant import _step_mrsi_reference
 
     debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""))
     ctx = dict(ctx)
-    ctx["mrsi"] = _step_mrsi_finish(
+    ctx["mrsi_reference"] = _step_mrsi_reference(
         config, subject, session, ctx["mrsi_load"], ctx["spike_filter"], ctx["t1_saturation_correction"], ctx["inputs"], debug
+    )
+    return ctx
+
+
+def step_mrsi_quality(config, subject, session, ctx):
+    from mrsiprep.utils.debug import Debug
+    from mrsiprep.workflows.participant import _step_mrsi_quality
+
+    debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""))
+    ctx = dict(ctx)
+    ctx["mrsi_quality"] = _step_mrsi_quality(
+        config, subject, session, ctx["t1_saturation_correction"], ctx["inputs"], ctx["mrsi_reference"].brainmask, debug
     )
     return ctx
 
@@ -122,7 +134,7 @@ def step_registration(config, subject, session, ctx):
     debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""))
     ctx = dict(ctx)
     ctx["registration"] = _step_registration(
-        config, subject, session, ctx["mrsi"], ctx["anatprep"], debug, subject_template=ctx.get("subject_template")
+        config, subject, session, ctx["mrsi_reference"], ctx["anatprep"], debug, subject_template=ctx.get("subject_template")
     )
     return ctx
 
@@ -134,7 +146,7 @@ def step_tissue_probmaps(config, subject, session, ctx):
     debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""))
     ctx = dict(ctx)
     ctx["tissue"] = _step_tissue_probmaps(
-        config, subject, session, ctx["anatprep"], ctx["mrsi"], ctx["registration"], ctx["precomputed_tissue_t1"], debug
+        config, subject, session, ctx["anatprep"], ctx["mrsi_reference"], ctx["registration"], ctx["precomputed_tissue_t1"], debug
     )
     return ctx
 
@@ -162,11 +174,11 @@ def step_pvc(config, subject, session, ctx):
     from mrsiprep.workflows.participant import _step_pvc
 
     debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""))
-    corrected_maps, tissue_4d = _step_pvc(config, subject, session, ctx["mrsi"], ctx["tissue"], debug)
+    corrected_maps, tissue_4d = _step_pvc(config, subject, session, ctx["mrsi_reference"], ctx["tissue"], debug)
     # Only when PVC actually ran: with --no-pvc the corrected maps are the
     # preproc maps unchanged, and a tab of identical images is noise.
     pvc_sections = None
-    preproc_maps = getattr(ctx.get("mrsi"), "preproc_maps", None)
+    preproc_maps = getattr(ctx.get("mrsi_reference"), "preproc_maps", None)
     if not getattr(config, "no_pvc", False) and corrected_maps is not None and corrected_maps is not preproc_maps:
         from mrsiprep.reports.mrsi_pvc_overview import build_mrsi_pvc_sections
 
@@ -183,7 +195,7 @@ def step_resampling(config, subject, session, ctx):
 
     debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""))
     transformed, qc_sections_t1w_alignment, qc_sections_mni_alignment = _step_resampling(
-        config, subject, session, ctx["anatprep"], ctx["mrsi"], ctx["registration"], ctx["corrected_maps"], ctx["raw_t1"], debug
+        config, subject, session, ctx["anatprep"], ctx["mrsi_reference"], ctx["registration"], ctx["corrected_maps"], ctx["raw_t1"], debug
     )
     ctx = dict(ctx)
     ctx.update(transformed=transformed, qc_sections_t1w_alignment=qc_sections_t1w_alignment, qc_sections_mni_alignment=qc_sections_mni_alignment)
@@ -206,7 +218,15 @@ def step_anat_parcellation_qc(config, subject, session, ctx):
 
     debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""))
     preliminary_parcels, parcel_qc = _step_synthseg_parcellation_qc(
-        config, subject, session, ctx["raw_t1"], ctx["mrsi"], ctx["registration"], debug, transformed=ctx.get("transformed")
+        config,
+        subject,
+        session,
+        ctx["raw_t1"],
+        ctx["mrsi_reference"],
+        ctx["mrsi_quality"],
+        ctx["registration"],
+        debug,
+        transformed=ctx.get("transformed"),
     )
     ctx = dict(ctx)
     ctx.update(preliminary_parcels=preliminary_parcels, parcel_qc=parcel_qc)
@@ -219,7 +239,15 @@ def step_mrsi_parcellation(config, subject, session, ctx):
 
     debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""))
     parcels, qc_sections_parcellation = _step_parcellation(
-        config, subject, session, ctx["raw_t1"], ctx["mrsi"], ctx["anatprep"], ctx["registration"], ctx["preliminary_parcels"], debug
+        config,
+        subject,
+        session,
+        ctx["raw_t1"],
+        ctx["mrsi_reference"],
+        ctx["anatprep"],
+        ctx["registration"],
+        ctx["preliminary_parcels"],
+        debug,
     )
     ctx = dict(ctx)
     # `parcels` is a list: one entry per comma-separated scheme/scale/atlas.
@@ -233,7 +261,7 @@ def step_regional(config, subject, session, ctx):
 
     debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""))
     regional = _step_regional_extraction(
-        config, subject, session, ctx["corrected_maps"], ctx["parcels"], ctx["mrsi"], ctx["tissue"], debug
+        config, subject, session, ctx["corrected_maps"], ctx["parcels"], ctx["mrsi_reference"], ctx["mrsi_quality"], ctx["tissue"], debug
     )
     ctx = dict(ctx)
     ctx["regional"] = regional
@@ -246,7 +274,7 @@ def step_connectivity(config, subject, session, ctx):
 
     debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""))
     connectivity, qc_sections_connectivity = _step_connectivity(
-        config, subject, session, ctx["regional"], ctx["parcels"], ctx["corrected_maps"], ctx["mrsi"], ctx["tissue"], debug
+        config, subject, session, ctx["regional"], ctx["parcels"], ctx["corrected_maps"], ctx["mrsi_reference"], ctx["tissue"], debug
     )
     ctx = dict(ctx)
     ctx.update(connectivity=connectivity, qc_sections_connectivity=qc_sections_connectivity)
@@ -258,7 +286,7 @@ def step_metprofiles(config, subject, session, ctx):
 
     ctx = dict(ctx)
     ctx["metprofiles"] = _step_metprofiles(
-        config, subject, session, ctx["corrected_maps"], ctx["mrsi"], ctx["parcels"], ctx["regional"], ctx["anatprep"]
+        config, subject, session, ctx["corrected_maps"], ctx["mrsi_reference"], ctx["parcels"], ctx["regional"], ctx["anatprep"]
     )
     return ctx
 
@@ -273,15 +301,16 @@ def step_reports(config, subject, session, ctx):
 
     debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""))
     anat = ctx["anatprep"]
-    mrsi = ctx["mrsi"]
+    mrsi_reference = ctx["mrsi_reference"]
+    mrsi_quality = ctx["mrsi_quality"]
     parcels_list = ctx["parcels"]
     primary = parcels_list[0]
     primary_id = primary.parcellation_id
     outputs = {
         "t1w": anat.t1w,
         "registration_t1w": anat.registration_t1w,
-        "mrsi_reference": mrsi.reference,
-        "qc_summary": mrsi.qc_summary,
+        "mrsi_reference": mrsi_reference.reference,
+        "qc_summary": mrsi_quality.qc_summary,
         "parcel_qc": ctx["parcel_qc"],
         "leakage_qc": ctx["leakage_qc"],
         "tissue_4d": ctx["tissue_4d"],
@@ -314,7 +343,7 @@ def step_reports(config, subject, session, ctx):
         # The ventricle section lives in the MRSI Raw QC tab, not MRSI Raw; it
         # is built here (not earlier, with mrsi_raw) so it can be scored
         # against the subject's ventricles via the registration.
-        "mrsi_raw_qc": _step_ventricle_qc(config, subject, session, ctx.get("raw_t1"), mrsi, ctx.get("registration")),
+        "mrsi_raw_qc": _step_ventricle_qc(config, subject, session, ctx.get("raw_t1"), mrsi_reference, ctx.get("registration")),
         "mrsi_preproc": ctx["qc_sections_mrsi_preproc"],
         "mrsi_pvc": ctx.get("qc_sections_mrsi_pvc"),
         "t1_correction": ctx["qc_sections_t1_correction"],
@@ -335,9 +364,9 @@ def step_reports(config, subject, session, ctx):
             "t1_correction": {
                 "mode": config.t1_correction,
                 "water_status": config.t1_correction_water_status,
-                "per_metabolite": mrsi.t1_correction_provenance,
+                "per_metabolite": mrsi_reference.t1_correction_provenance,
             }
-            if mrsi.t1_correction_provenance is not None
+            if mrsi_reference.t1_correction_provenance is not None
             else None,
         },
     )
@@ -354,7 +383,8 @@ STEP_SEQUENCE = [
     ("mrsi_load", step_mrsi_load),
     ("spike_filter", step_spike_filter),
     ("t1_saturation_correction", step_t1_saturation_correction),
-    ("mrsi_finish", step_mrsi_finish),
+    ("mrsi_reference", step_mrsi_reference),
+    ("mrsi_quality", step_mrsi_quality),
     ("registration", step_registration),
     ("tissue_probmaps", step_tissue_probmaps),
     ("tissue_qc", step_tissue_qc),

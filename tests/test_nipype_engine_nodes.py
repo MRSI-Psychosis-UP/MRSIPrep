@@ -133,7 +133,7 @@ class StepT1SaturationCorrectionTests(unittest.TestCase):
         self.assertEqual(result["qc_sections_t1_correction"], "t1corr_qc")
 
 
-class StepMrsiFinishTests(unittest.TestCase):
+class StepMrsiReferenceTests(unittest.TestCase):
     def test_wires_ctx_in_and_out(self):
         ctx = {
             "mrsi_load": "load_obj",
@@ -141,28 +141,45 @@ class StepMrsiFinishTests(unittest.TestCase):
             "t1_saturation_correction": "water_obj",
             "inputs": "inputs_obj",
         }
-        with patch("mrsiprep.workflows.participant._step_mrsi_finish", return_value="mrsi_obj") as step:
-            result = N.step_mrsi_finish(_fake_config(), _SUBJECT, _SESSION, ctx)
+        with patch("mrsiprep.workflows.participant._step_mrsi_reference", return_value="mrsi_reference_obj") as step:
+            result = N.step_mrsi_reference(_fake_config(), _SUBJECT, _SESSION, ctx)
 
         step.assert_called_once_with(
             unittest.mock.ANY, _SUBJECT, _SESSION, "load_obj", "filtered_obj", "water_obj", "inputs_obj", unittest.mock.ANY
         )
-        self.assertEqual(result["mrsi"], "mrsi_obj")
+        self.assertEqual(result["mrsi_reference"], "mrsi_reference_obj")
+
+
+class StepMrsiQualityTests(unittest.TestCase):
+    def test_wires_ctx_in_and_out(self):
+        mrsi_reference = SimpleNamespace(brainmask="brainmask_obj")
+        ctx = {
+            "t1_saturation_correction": "water_obj",
+            "inputs": "inputs_obj",
+            "mrsi_reference": mrsi_reference,
+        }
+        with patch("mrsiprep.workflows.participant._step_mrsi_quality", return_value="mrsi_quality_obj") as step:
+            result = N.step_mrsi_quality(_fake_config(), _SUBJECT, _SESSION, ctx)
+
+        step.assert_called_once_with(
+            unittest.mock.ANY, _SUBJECT, _SESSION, "water_obj", "inputs_obj", "brainmask_obj", unittest.mock.ANY
+        )
+        self.assertEqual(result["mrsi_quality"], "mrsi_quality_obj")
 
 
 class StepRegistrationTests(unittest.TestCase):
     def test_wires_ctx_in_and_out_including_optional_subject_template(self):
-        ctx = {"mrsi": "mrsi_obj", "anatprep": "anatprep_obj", "subject_template": "template_obj"}
+        ctx = {"mrsi_reference": "mrsi_reference_obj", "anatprep": "anatprep_obj", "subject_template": "template_obj"}
         with patch("mrsiprep.workflows.participant._step_registration", return_value="registration_obj") as step:
             result = N.step_registration(_fake_config(), _SUBJECT, _SESSION, ctx)
 
-        self.assertEqual(step.call_args[0][3], "mrsi_obj")
+        self.assertEqual(step.call_args[0][3], "mrsi_reference_obj")
         self.assertEqual(step.call_args[0][4], "anatprep_obj")
         self.assertEqual(step.call_args.kwargs["subject_template"], "template_obj")
         self.assertEqual(result["registration"], "registration_obj")
 
     def test_subject_template_defaults_to_none_when_absent(self):
-        ctx = {"mrsi": "mrsi_obj", "anatprep": "anatprep_obj"}
+        ctx = {"mrsi_reference": "mrsi_reference_obj", "anatprep": "anatprep_obj"}
         with patch("mrsiprep.workflows.participant._step_registration", return_value="registration_obj") as step:
             N.step_registration(_fake_config(), _SUBJECT, _SESSION, ctx)
 
@@ -171,11 +188,11 @@ class StepRegistrationTests(unittest.TestCase):
 
 class StepTissueProbmapsTests(unittest.TestCase):
     def test_wires_ctx_in_and_out(self):
-        ctx = {"anatprep": "anat_obj", "mrsi": "mrsi_obj", "registration": "reg_obj", "precomputed_tissue_t1": "precomp"}
+        ctx = {"anatprep": "anat_obj", "mrsi_reference": "mrsi_reference_obj", "registration": "reg_obj", "precomputed_tissue_t1": "precomp"}
         with patch("mrsiprep.workflows.participant._step_tissue_probmaps", return_value="tissue_obj") as step:
             result = N.step_tissue_probmaps(_fake_config(), _SUBJECT, _SESSION, ctx)
 
-        step.assert_called_once_with(unittest.mock.ANY, _SUBJECT, _SESSION, "anat_obj", "mrsi_obj", "reg_obj", "precomp", unittest.mock.ANY)
+        step.assert_called_once_with(unittest.mock.ANY, _SUBJECT, _SESSION, "anat_obj", "mrsi_reference_obj", "reg_obj", "precomp", unittest.mock.ANY)
         self.assertEqual(result["tissue"], "tissue_obj")
 
 
@@ -210,19 +227,19 @@ class StepTissueQcTests(unittest.TestCase):
 
 class StepPvcTests(unittest.TestCase):
     def test_wires_ctx_in_and_out(self):
-        ctx = {"mrsi": "mrsi_obj", "tissue": "tissue_obj"}
+        ctx = {"mrsi_reference": "mrsi_reference_obj", "tissue": "tissue_obj"}
         with patch("mrsiprep.workflows.participant._step_pvc", return_value=("corrected", "tissue_4d")) as step, patch(
             "mrsiprep.reports.mrsi_pvc_overview.build_mrsi_pvc_sections", return_value=["pvc_qc"]
         ):
             result = N.step_pvc(_fake_config(), _SUBJECT, _SESSION, ctx)
 
-        self.assertEqual(step.call_args[0][3], "mrsi_obj")
+        self.assertEqual(step.call_args[0][3], "mrsi_reference_obj")
         self.assertEqual(step.call_args[0][4], "tissue_obj")
         self.assertEqual(result["corrected_maps"], "corrected")
         self.assertEqual(result["tissue_4d"], "tissue_4d")
 
     def test_pvc_qc_sections_are_built_when_pvc_ran(self):
-        ctx = {"mrsi": SimpleNamespace(preproc_maps={"CrPCr": Path("/x/pre.nii.gz")}), "tissue": "tissue_obj"}
+        ctx = {"mrsi_reference": SimpleNamespace(preproc_maps={"CrPCr": Path("/x/pre.nii.gz")}), "tissue": "tissue_obj"}
         corrected = {"CrPCr": Path("/x/pvc.nii.gz")}
         with patch("mrsiprep.workflows.participant._step_pvc", return_value=(corrected, "tissue_4d")), patch(
             "mrsiprep.reports.mrsi_pvc_overview.build_mrsi_pvc_sections", return_value=["pvc_qc"]
@@ -235,7 +252,7 @@ class StepPvcTests(unittest.TestCase):
         """--no-pvc returns the preproc maps unchanged, so a PVC tab would show
         images identical to the ones already in MRSI Raw."""
         preproc = {"CrPCr": Path("/x/pre.nii.gz")}
-        ctx = {"mrsi": SimpleNamespace(preproc_maps=preproc), "tissue": None}
+        ctx = {"mrsi_reference": SimpleNamespace(preproc_maps=preproc), "tissue": None}
         with patch("mrsiprep.workflows.participant._step_pvc", return_value=(preproc, None)), patch(
             "mrsiprep.reports.mrsi_pvc_overview.build_mrsi_pvc_sections"
         ) as build:
@@ -246,12 +263,12 @@ class StepPvcTests(unittest.TestCase):
 
 class StepResamplingTests(unittest.TestCase):
     def test_wires_ctx_in_and_out(self):
-        ctx = {"anatprep": "anat_obj", "mrsi": "mrsi_obj", "registration": "reg_obj", "corrected_maps": "corrected", "raw_t1": "raw"}
+        ctx = {"anatprep": "anat_obj", "mrsi_reference": "mrsi_reference_obj", "registration": "reg_obj", "corrected_maps": "corrected", "raw_t1": "raw"}
         with patch("mrsiprep.workflows.participant._step_resampling", return_value=("transformed", "t1w_qc", "mni_qc")) as step:
             result = N.step_resampling(_fake_config(), _SUBJECT, _SESSION, ctx)
 
         step.assert_called_once_with(
-            unittest.mock.ANY, _SUBJECT, _SESSION, "anat_obj", "mrsi_obj", "reg_obj", "corrected", "raw", unittest.mock.ANY
+            unittest.mock.ANY, _SUBJECT, _SESSION, "anat_obj", "mrsi_reference_obj", "reg_obj", "corrected", "raw", unittest.mock.ANY
         )
         self.assertEqual(result["transformed"], "transformed")
         self.assertEqual(result["qc_sections_t1w_alignment"], "t1w_qc")
@@ -271,12 +288,16 @@ class StepLeakageQcTests(unittest.TestCase):
 
 class StepAnatParcellationQcTests(unittest.TestCase):
     def test_wires_ctx_in_and_out(self):
-        ctx = {"raw_t1": "raw", "mrsi": "mrsi_obj", "registration": "reg_obj", "transformed": "transformed_obj"}
+        ctx = {
+            "raw_t1": "raw", "mrsi_reference": "mrsi_reference_obj", "mrsi_quality": "mrsi_quality_obj",
+            "registration": "reg_obj", "transformed": "transformed_obj",
+        }
         with patch("mrsiprep.workflows.participant._step_synthseg_parcellation_qc", return_value=("prelim", "parcel_qc")) as step:
             result = N.step_anat_parcellation_qc(_fake_config(), _SUBJECT, _SESSION, ctx)
 
         step.assert_called_once_with(
-            unittest.mock.ANY, _SUBJECT, _SESSION, "raw", "mrsi_obj", "reg_obj", unittest.mock.ANY, transformed="transformed_obj"
+            unittest.mock.ANY, _SUBJECT, _SESSION, "raw", "mrsi_reference_obj", "mrsi_quality_obj", "reg_obj",
+            unittest.mock.ANY, transformed="transformed_obj",
         )
         self.assertEqual(result["preliminary_parcels"], "prelim")
         self.assertEqual(result["parcel_qc"], "parcel_qc")
@@ -284,7 +305,7 @@ class StepAnatParcellationQcTests(unittest.TestCase):
     def test_tolerates_a_missing_transformed_key(self):
         """resampling's ctx entry might be absent (e.g. a test-fixture ctx);
         the node must not KeyError on it, just pass None through."""
-        ctx = {"raw_t1": "raw", "mrsi": "mrsi_obj", "registration": "reg_obj"}
+        ctx = {"raw_t1": "raw", "mrsi_reference": "mrsi_reference_obj", "mrsi_quality": "mrsi_quality_obj", "registration": "reg_obj"}
         with patch("mrsiprep.workflows.participant._step_synthseg_parcellation_qc", return_value=("prelim", "parcel_qc")) as step:
             N.step_anat_parcellation_qc(_fake_config(), _SUBJECT, _SESSION, ctx)
         self.assertIsNone(step.call_args.kwargs["transformed"])
@@ -292,33 +313,47 @@ class StepAnatParcellationQcTests(unittest.TestCase):
 
 class StepMrsiParcellationTests(unittest.TestCase):
     def test_wires_ctx_in_and_out(self):
-        ctx = {"raw_t1": "raw", "mrsi": "mrsi_obj", "anatprep": "anat_obj", "registration": "reg_obj", "preliminary_parcels": "prelim"}
+        ctx = {
+            "raw_t1": "raw", "mrsi_reference": "mrsi_reference_obj", "anatprep": "anat_obj",
+            "registration": "reg_obj", "preliminary_parcels": "prelim",
+        }
         with patch("mrsiprep.workflows.participant._step_parcellation", return_value=("parcels", "parc_qc")) as step:
             result = N.step_mrsi_parcellation(_fake_config(), _SUBJECT, _SESSION, ctx)
 
-        step.assert_called_once_with(unittest.mock.ANY, _SUBJECT, _SESSION, "raw", "mrsi_obj", "anat_obj", "reg_obj", "prelim", unittest.mock.ANY)
+        step.assert_called_once_with(
+            unittest.mock.ANY, _SUBJECT, _SESSION, "raw", "mrsi_reference_obj", "anat_obj", "reg_obj", "prelim", unittest.mock.ANY
+        )
         self.assertEqual(result["parcels"], "parcels")
         self.assertEqual(result["qc_sections_parcellation"], "parc_qc")
 
 
 class StepRegionalTests(unittest.TestCase):
     def test_wires_ctx_in_and_out(self):
-        ctx = {"corrected_maps": "corrected", "parcels": "parcels_obj", "mrsi": "mrsi_obj", "tissue": "tissue_obj"}
+        ctx = {
+            "corrected_maps": "corrected", "parcels": "parcels_obj", "mrsi_reference": "mrsi_reference_obj",
+            "mrsi_quality": "mrsi_quality_obj", "tissue": "tissue_obj",
+        }
         with patch("mrsiprep.workflows.participant._step_regional_extraction", return_value="regional") as step:
             result = N.step_regional(_fake_config(), _SUBJECT, _SESSION, ctx)
 
-        step.assert_called_once_with(unittest.mock.ANY, _SUBJECT, _SESSION, "corrected", "parcels_obj", "mrsi_obj", "tissue_obj", unittest.mock.ANY)
+        step.assert_called_once_with(
+            unittest.mock.ANY, _SUBJECT, _SESSION, "corrected", "parcels_obj", "mrsi_reference_obj", "mrsi_quality_obj",
+            "tissue_obj", unittest.mock.ANY,
+        )
         self.assertEqual(result["regional"], "regional")
 
 
 class StepConnectivityTests(unittest.TestCase):
     def test_wires_ctx_in_and_out(self):
-        ctx = {"regional": "regional_obj", "parcels": "parcels_obj", "corrected_maps": "corrected", "mrsi": "mrsi_obj", "tissue": "tissue_obj"}
+        ctx = {
+            "regional": "regional_obj", "parcels": "parcels_obj", "corrected_maps": "corrected",
+            "mrsi_reference": "mrsi_reference_obj", "tissue": "tissue_obj",
+        }
         with patch("mrsiprep.workflows.participant._step_connectivity", return_value=("connectivity", "conn_qc")) as step:
             result = N.step_connectivity(_fake_config(), _SUBJECT, _SESSION, ctx)
 
         step.assert_called_once_with(
-            unittest.mock.ANY, _SUBJECT, _SESSION, "regional_obj", "parcels_obj", "corrected", "mrsi_obj", "tissue_obj", unittest.mock.ANY
+            unittest.mock.ANY, _SUBJECT, _SESSION, "regional_obj", "parcels_obj", "corrected", "mrsi_reference_obj", "tissue_obj", unittest.mock.ANY
         )
         self.assertEqual(result["connectivity"], "connectivity")
         self.assertEqual(result["qc_sections_connectivity"], "conn_qc")
@@ -326,18 +361,22 @@ class StepConnectivityTests(unittest.TestCase):
 
 class StepMetprofilesTests(unittest.TestCase):
     def test_wires_ctx_in_and_out(self):
-        ctx = {"corrected_maps": "corrected", "mrsi": "mrsi_obj", "parcels": "parcels_obj", "regional": "regional_obj", "anatprep": "anat_obj"}
+        ctx = {
+            "corrected_maps": "corrected", "mrsi_reference": "mrsi_reference_obj", "parcels": "parcels_obj",
+            "regional": "regional_obj", "anatprep": "anat_obj",
+        }
         with patch("mrsiprep.workflows.participant._step_metprofiles", return_value="metprofiles_result") as step:
             result = N.step_metprofiles(_fake_config(), _SUBJECT, _SESSION, ctx)
 
-        step.assert_called_once_with(unittest.mock.ANY, _SUBJECT, _SESSION, "corrected", "mrsi_obj", "parcels_obj", "regional_obj", "anat_obj")
+        step.assert_called_once_with(unittest.mock.ANY, _SUBJECT, _SESSION, "corrected", "mrsi_reference_obj", "parcels_obj", "regional_obj", "anat_obj")
         self.assertEqual(result["metprofiles"], "metprofiles_result")
 
 
 class StepReportsTests(unittest.TestCase):
     def _ctx(self, t1_correction_provenance=None):
         anat = SimpleNamespace(t1w="t1w_path", registration_t1w="reg_t1w_path")
-        mrsi = SimpleNamespace(reference="ref_map", qc_summary="qc_sum", t1_correction_provenance=t1_correction_provenance)
+        mrsi_reference = SimpleNamespace(reference="ref_map", t1_correction_provenance=t1_correction_provenance)
+        mrsi_quality = SimpleNamespace(qc_summary="qc_sum")
         parcels = ParcellationResult(
             atlas_mrsi="atlas_mrsi_final", labels="labels", atlas_name="chimeraA", scale="scale3"
         )
@@ -345,7 +384,8 @@ class StepReportsTests(unittest.TestCase):
         pid = parcels.parcellation_id
         return {
             "anatprep": anat,
-            "mrsi": mrsi,
+            "mrsi_reference": mrsi_reference,
+            "mrsi_quality": mrsi_quality,
             # parcels is a list; the per-parcellation results are keyed by id.
             "parcels": [parcels],
             "parcel_qc": "parcel_qc_obj",

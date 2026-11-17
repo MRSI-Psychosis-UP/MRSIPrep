@@ -2,6 +2,42 @@
 
 ## 2.2.2
 
+### CLI
+
+- Regrouped `--help`'s argument sections to mirror the pipeline's own
+  step/branch structure (`STEP_SEQUENCE`) instead of loose topics: each
+  section now corresponds to one pipeline step (e.g. "MRSI branch:
+  spike filtering", "MRSI branch: quality masking", "Shared:
+  registration"), with genuinely cross-cutting flags (BIDS selection,
+  workflow-wide config, cache invalidation, other/runtime) kept as
+  their own separate sections. Most notably, `--metabolites` moves out
+  of the old "quality thresholds" section (it selects what
+  `mrsi_quality` processes, not a quality threshold) and the five
+  spike-filter flags move out of "Workflow configuration" into their
+  own "MRSI branch: spike filtering" section. No flag was renamed,
+  removed, or had its behavior changed -- only which `--help` section
+  it's listed under. The Command Builder GUI's "Standardized Pipeline"
+  tab mirrors the same new sections (see `TAB_GROUPS` in
+  `command_builder_app.py`).
+- Fixed the Command Builder GUI's "Custom Pipeline" tab never showing a
+  widget for `--quality-metrics` under the `mrsi_quality` step (a
+  pre-existing gap, unrelated to the section regrouping above).
+
+### Pipeline
+
+- Split the `mrsi_finish` step into `mrsi_reference` (builds the
+  reference-metabolite image used for MRSI->T1w registration) and
+  `mrsi_quality` (normalizes CRLB/SNR/linewidth units and builds the
+  per-voxel quality masks + QC summary). The two did unrelated work
+  with almost entirely disjoint downstream consumers -- `mrsi_reference`
+  is needed immediately by the next step (`registration`) and five
+  others, while `mrsi_quality`'s output is untouched until parcel QC
+  and regional extraction much later in the pipeline -- so they are now
+  independently cacheable Nipype nodes instead of one bundled result.
+  `--steps` users referencing `mrsi_finish` must switch to
+  `mrsi_reference,mrsi_quality` (in that order); cached derivatives
+  keyed by the old step name are recomputed once under the new names.
+
 ### Inputs
 
 - New optional `--mrsi-input-dir` lets the raw MRSI derivatives

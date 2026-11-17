@@ -63,14 +63,19 @@ POSITIONAL_HELP = {
 # Which CLI flags are relevant to each pipeline step, for the "Custom
 # Pipeline" tab's per-step expanders. Hand-maintained against the real
 # per-step `config.*` reads traced in mrsiprep/workflows/steps.py (and its
-# callees) -- NOT derived from argparse group titles, which group flags by
-# *topic* (e.g. "quality thresholds") rather than by which step actually
-# reads them. In particular: --regional-summary affects metprofiles, not
-# regional; the quality-threshold flags (--snr-min/--linewidth-max/
-# --crlb-max/--quantification-tool/--linewidth-unit/--nucleus) belong to
-# mrsi_finish (where generate_reference/make_quality_masks run), not
-# mrsi_load; --crlb-unit/--connectivity-space are validation-only/legacy
-# no-ops never read by any step's own logic, so neither gets a widget here.
+# callees). parser.py's own argparse groups now mirror this same per-step
+# structure (one group per STEP_SEQUENCE step; see TAB_GROUPS below), but
+# this dict is kept independently hand-maintained rather than derived from
+# it, since a handful of flags are read by more than one step and an
+# argparse group can only pick one primary home for each. In particular:
+# --regional-summary affects metprofiles, not regional; the quality-
+# threshold flags (--snr-min/--linewidth-max/--crlb-max/--quantification-tool/
+# --linewidth-unit/--nucleus/--quality-metrics) belong to mrsi_quality (where
+# make_quality_masks runs), not mrsi_load; --ref-met belongs to mrsi_reference
+# (where generate_reference runs) as well as mrsi_load, where it also seeds
+# orientation correction; --crlb-unit/--connectivity-space are validation-
+# only/legacy no-ops never read by any step's own logic, so neither gets a
+# widget here.
 #
 # Order within each step's list matters where one flag's visibility depends
 # on another's value (e.g. "mrsi_parcellation"'s --parcellation-mode must
@@ -89,9 +94,10 @@ CUSTOM_STEP_FLAGS: dict[str, list[str]] = {
         "--spike-extreme-zscore", "--overwrite-filt",
     ],
     "t1_saturation_correction": ["--t1-correction", "--t1-correction-water-status", "--overwrite-t1corr"],
-    "mrsi_finish": [
-        "--ref-met", "--quantification-tool", "--linewidth-unit", "--nucleus",
-        "--snr-min", "--linewidth-max", "--crlb-max",
+    "mrsi_reference": ["--ref-met"],
+    "mrsi_quality": [
+        "--quantification-tool", "--linewidth-unit", "--nucleus",
+        "--quality-metrics", "--snr-min", "--linewidth-max", "--crlb-max",
     ],
     "registration": [
         "--registration-backend", "--ants-mrsi-to-t1-transform", "--ants-t1-to-template-transform",
@@ -127,12 +133,13 @@ assert set(CUSTOM_STEP_FLAGS) == set(STEP_DEPENDENCIES), (
 
 # The two branches that converge at "registration", for the Custom Pipeline
 # tab's two-column add-step UI: prepare/tissue_seg/anatprep (anatomical prep)
-# runs independently of mrsi_load/t1_saturation_correction/mrsi_finish (MRSI
-# loading/correction) -- neither needs the other to finish first, so they're
-# offered as two parallel columns rather than one flat ordered list. Every
-# other step runs after both converge, offered via a single selectbox below.
+# runs independently of mrsi_load/spike_filter/t1_saturation_correction/
+# mrsi_reference/mrsi_quality (MRSI loading/correction) -- neither needs the
+# other to finish first, so they're offered as two parallel columns rather
+# than one flat ordered list. Every other step runs after both converge,
+# offered via a single selectbox below.
 ANAT_BRANCH_STEPS = ["prepare", "tissue_seg", "anatprep"]
-MRSI_BRANCH_STEPS = ["mrsi_load", "spike_filter", "t1_saturation_correction", "mrsi_finish"]
+MRSI_BRANCH_STEPS = ["mrsi_load", "spike_filter", "t1_saturation_correction", "mrsi_reference", "mrsi_quality"]
 DOWNSTREAM_STEPS = [
     name for name in CUSTOM_STEP_FLAGS if name not in ANAT_BRANCH_STEPS and name not in MRSI_BRANCH_STEPS
 ]
@@ -848,14 +855,24 @@ def _build_command(positional_values: dict, optionals: list[argparse.Action], va
 
 
 # Argparse group titles combined under one tab each, in display order. A
-# title not listed here falls into "Other" (see _tab_for_title).
+# title not listed here falls into "Other" (see _tab_for_title). Each title
+# here must match a parser.py add_argument_group(...) title exactly -- that
+# parser now declares one group per pipeline step (mirroring STEP_SEQUENCE/
+# the flowchart's branches), so this dict collapses the finer step groups
+# back into the same coarser topic tabs this GUI has always shown.
 TAB_GROUPS: dict[str, list[str]] = {
-    "BIDS input": ["Options for filtering BIDS queries"],
-    "Registration": ["Specific options for registrations"],
+    "BIDS input": ["Options for filtering BIDS queries", "Workflow: step selection"],
+    "Anatomical": ["Anatomical branch: tissue segmentation", "Anatomical branch: anatomical preparation"],
+    "MRSI": [
+        "MRSI branch: loading",
+        "MRSI branch: spike filtering",
+        "MRSI branch: T1 saturation correction",
+        "MRSI branch: quality masking",
+    ],
+    "Registration": ["Shared: registration"],
     "Parcellation": ["parcellation"],
-    "Connectivity": ["connectivity"],
-    "Quality": ["quality thresholds", "T1 saturation correction"],
-    "Workflow": ["Options for performing only a subset of the workflow", "Workflow configuration"],
+    "Connectivity": ["Outputs: regional profiles and connectivity"],
+    "Workflow": ["Shared: tissue probability maps and PVC", "Outputs: resampling", "Workflow configuration"],
     "Overwrite / runtime": ["overwrite/recompute", "Other options"],
 }
 
@@ -1561,7 +1578,7 @@ def _render_custom_pipeline_tab(
         st.info("No steps added yet. Use the controls above to build your sequence.")
     # Seed with every flag the required-args section above already rendered
     # (e.g. --ref-met is globally required, so it's rendered there once;
-    # without this seed, mrsi_load/mrsi_finish -- which also list --ref-met
+    # without this seed, mrsi_load/mrsi_reference -- which also list --ref-met
     # -- would try to render it a second time under the same widget key).
     rendered_flags: set[str] = set(values)
     for i, step_name in enumerate(custom_steps):

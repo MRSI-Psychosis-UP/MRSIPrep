@@ -38,7 +38,13 @@ from mrsiprep.tissue.synthseg_fast import (
 )
 from mrsiprep.workflows.anatomical import prepare_anatomical
 from mrsiprep.workflows.connectivity import run_connectivity_workflow
-from mrsiprep.workflows.mrsi import run_mrsi_finish_workflow, run_mrsi_load_workflow, run_spike_filter_workflow, run_t1_water_correction_workflow
+from mrsiprep.workflows.mrsi import (
+    run_mrsi_load_workflow,
+    run_mrsi_quality_workflow,
+    run_mrsi_reference_workflow,
+    run_spike_filter_workflow,
+    run_t1_water_correction_workflow,
+)
 from mrsiprep.workflows.parcellation import run_parcellation_workflow
 from mrsiprep.workflows.registration import run_registration_workflow
 from mrsiprep.workflows.reports import run_reports_workflow
@@ -109,14 +115,19 @@ def _step_t1_water_correction(config, subject, session, load, filtered, debug):
     return water, qc_sections_t1_correction
 
 
-def _step_mrsi_finish(config, subject, session, load, filtered, water, inputs, debug):
-    with debug.step("MRSI finishing"):
+def _step_mrsi_reference(config, subject, session, load, filtered, water, inputs, debug):
+    with debug.step("MRSI reference image"):
         # The ventricle section is appended at the reports step
         # (_step_ventricle_qc), once the MRSI->T1w transform exists to score it.
-        return run_mrsi_finish_workflow(config, subject, session, load, filtered, water, inputs)
+        return run_mrsi_reference_workflow(config, subject, session, load, filtered, water, inputs)
 
 
-def _step_ventricle_qc(config, subject, session, raw_t1, mrsi, registration):
+def _step_mrsi_quality(config, subject, session, water, inputs, brainmask, debug):
+    with debug.step("MRSI voxel-quality masks"):
+        return run_mrsi_quality_workflow(config, subject, session, water, inputs, brainmask)
+
+
+def _step_ventricle_qc(config, subject, session, raw_t1, mrsi_reference, registration):
     """Ventricle visibility section for the MRSI Raw tab.
 
     Detection itself uses no coregistration; it runs here, after
@@ -128,27 +139,27 @@ def _step_ventricle_qc(config, subject, session, raw_t1, mrsi, registration):
     reference = None
     mrsi_to_t1 = getattr(registration, "mrsi_to_t1", None)
     if mrsi_to_t1 is not None:
-        reference = ventricle_reference_mask(config, subject, session, raw_t1, mrsi.reference, mrsi_to_t1.inverse)
-    return build_ventricle_qc_sections(config, subject, session, mrsi.raw_maps, reference_ventricles=reference)
+        reference = ventricle_reference_mask(config, subject, session, raw_t1, mrsi_reference.reference, mrsi_to_t1.inverse)
+    return build_ventricle_qc_sections(config, subject, session, mrsi_reference.raw_maps, reference_ventricles=reference)
 
 
-def _step_registration(config, subject, session, mrsi, anat, debug, subject_template=None):
+def _step_registration(config, subject, session, mrsi_reference, anat, debug, subject_template=None):
     # No debug.step() here: the workflow reports its two registrations
     # separately, since they are independent and very differently priced.
     return run_registration_workflow(
         config,
         subject,
         session,
-        mrsi.reference,
+        mrsi_reference.reference,
         anat.registration_t1w,
         anat.registration_mask,
-        mrsi_mask=mrsi.brainmask,
+        mrsi_mask=mrsi_reference.brainmask,
         subject_template=subject_template,
         debug=debug,
     )
 
 
-def _step_tissue_probmaps(config, subject, session, anat, mrsi, registration, precomputed_tissue_t1, debug):
+def _step_tissue_probmaps(config, subject, session, anat, mrsi_reference, registration, precomputed_tissue_t1, debug):
     with debug.step("Tissue probability maps in MRSI space"):
         return run_tissue_workflow(
             config,
@@ -156,28 +167,29 @@ def _step_tissue_probmaps(config, subject, session, anat, mrsi, registration, pr
             session,
             anat.registration_t1w,
             anat.registration_mask,
-            mrsi.reference,
+            mrsi_reference.reference,
             registration.mrsi_to_t1.inverse,
             precomputed_tissue_t1=precomputed_tissue_t1,
         )
 
 
-def _step_pvc(config, subject, session, mrsi, tissue, debug):
+def _step_pvc(config, subject, session, mrsi_reference, tissue, debug):
     """Returns (corrected_maps, tissue_4d). corrected_maps defaults to
-    mrsi.preproc_maps unchanged when --no-pvc is set."""
-    corrected_maps = mrsi.preproc_maps
+    mrsi_reference.preproc_maps unchanged when --no-pvc is set."""
+    corrected_maps = mrsi_reference.preproc_maps
     tissue_4d = None
     if not config.no_pvc:
         if tissue is None:
             raise ValueError("PVC requires tissue segmentation, but none was provided")
         with debug.step("Partial volume correction"):
-            tissue_4d = create_tissue_4d(config, subject, session, tissue.mrsi, mrsi.reference)
-            corrected_maps = run_pvc(config, subject, session, mrsi.preproc_maps, tissue_4d, mrsi.brainmask, mrsi.reference)
-            mrsi.corrected_maps = corrected_maps
+            tissue_4d = create_tissue_4d(config, subject, session, tissue.mrsi, mrsi_reference.reference)
+            corrected_maps = run_pvc(
+                config, subject, session, mrsi_reference.preproc_maps, tissue_4d, mrsi_reference.brainmask, mrsi_reference.reference
+            )
     return corrected_maps, tissue_4d
 
 
-def _step_resampling(config, subject, session, anat, mrsi, registration, corrected_maps, raw_t1, debug):
+def _step_resampling(config, subject, session, anat, mrsi_reference, registration, corrected_maps, raw_t1, debug):
     with debug.step("Resampling MRSI maps to T1w/MNI space"):
         transformed = transform_mrsi_maps(
             config,
@@ -187,13 +199,13 @@ def _step_resampling(config, subject, session, anat, mrsi, registration, correct
             registration.mrsi_to_t1.forward,
             registration.t1_to_mni.forward if registration.t1_to_mni else None,
             anat.registration_t1w,
-            mrsi_reference=mrsi.reference,
-            crlb_maps=mrsi.crlb_maps,
-            snr_map=mrsi.snr_map,
-            linewidth_map=mrsi.linewidth_map,
+            mrsi_reference=mrsi_reference.reference,
+            crlb_maps=mrsi_reference.crlb_maps,
+            snr_map=mrsi_reference.snr_map,
+            linewidth_map=mrsi_reference.linewidth_map,
         )
         mni_resolution = (
-            config.resolution_for("MNI152NLin2009cAsym", anat.registration_t1w, mrsi.reference)
+            config.resolution_for("MNI152NLin2009cAsym", anat.registration_t1w, mrsi_reference.reference)
             if registration.t1_to_mni
             else None
         )
@@ -228,14 +240,14 @@ def _step_leakage_qc(config, subject, session, anat, transformed, debug):
         return write_signal_leakage_qc(config, subject, session, transformed, anat.registration_mask)
 
 
-def _step_synthseg_parcellation_qc(config, subject, session, raw_t1, mrsi, registration, debug, transformed=None):
+def _step_synthseg_parcellation_qc(config, subject, session, raw_t1, mrsi_reference, mrsi_quality, registration, debug, transformed=None):
     with debug.step("SynthSeg parcellation and QC"):
         preliminary_parcels = run_synthseg_parcellation(
             config,
             subject,
             session,
             raw_t1,
-            mrsi.reference,
+            mrsi_reference.reference,
             registration.mrsi_to_t1.inverse,
         )
         parcel_qc = write_parcel_qc(
@@ -243,9 +255,9 @@ def _step_synthseg_parcellation_qc(config, subject, session, raw_t1, mrsi, regis
             subject,
             session,
             preliminary_parcels,
-            mrsi.brainmask,
-            mrsi.crlb_maps,
-            mrsi.qcmasks,
+            mrsi_reference.brainmask,
+            mrsi_reference.crlb_maps,
+            mrsi_quality.qcmasks,
         )
         # MNI152NLin2009cAsym-space CRLB maps, already written by the
         # resampling step that ran earlier in STEP_SEQUENCE -- reused rather
@@ -255,7 +267,7 @@ def _step_synthseg_parcellation_qc(config, subject, session, raw_t1, mrsi, regis
         mni_crlb_maps = {
             met: path
             for key, path in mni_outputs.items()
-            if key.startswith("crlb-") and (met := key[len("crlb-") :]) in mrsi.crlb_maps
+            if key.startswith("crlb-") and (met := key[len("crlb-") :]) in mrsi_reference.crlb_maps
         }
         write_parcel_qc_figures(
             config,
@@ -265,13 +277,13 @@ def _step_synthseg_parcellation_qc(config, subject, session, raw_t1, mrsi, regis
             parcel_qc,
             atlas_mrsi=preliminary_parcels.atlas_mrsi,
             t1_to_mni=registration.t1_to_mni.forward if registration.t1_to_mni else None,
-            mrsi_reference=mrsi.reference,
+            mrsi_reference=mrsi_reference.reference,
             crlb_maps=mni_crlb_maps or None,
         )
     return preliminary_parcels, parcel_qc
 
 
-def _step_parcellation(config, subject, session, raw_t1, mrsi, anat, registration, preliminary_parcels, debug):
+def _step_parcellation(config, subject, session, raw_t1, mrsi_reference, anat, registration, preliminary_parcels, debug):
     """Returns (parcels_list, qc_sections_parcellation).
 
     Always a list: synthseg mode contributes the preliminary SynthSeg
@@ -287,7 +299,7 @@ def _step_parcellation(config, subject, session, raw_t1, mrsi, anat, registratio
             config,
             subject,
             session,
-            mrsi.reference,
+            mrsi_reference.reference,
             registration,
             raw_t1=raw_t1,
             t1_reference=anat.registration_t1w,
@@ -302,7 +314,7 @@ def _step_parcellation(config, subject, session, raw_t1, mrsi, anat, registratio
     return parcels_list, qc_sections_parcellation
 
 
-def _step_regional_extraction(config, subject, session, corrected_maps, parcels_list, mrsi, tissue, debug):
+def _step_regional_extraction(config, subject, session, corrected_maps, parcels_list, mrsi_reference, mrsi_quality, tissue, debug):
     """Returns {parcellation_id: regional_table_path}, one entry per parcellation."""
     regional = {}
     for parcels in parcels_list:
@@ -316,16 +328,16 @@ def _step_regional_extraction(config, subject, session, corrected_maps, parcels_
                 session,
                 corrected_maps,
                 parcels,
-                mrsi.qcmasks,
-                mrsi.snr_map,
-                mrsi.linewidth_map,
-                mrsi.crlb_maps,
+                mrsi_quality.qcmasks,
+                mrsi_reference.snr_map,
+                mrsi_reference.linewidth_map,
+                mrsi_reference.crlb_maps,
                 tissue.mrsi if tissue is not None else {},
             )
     return regional
 
 
-def _step_connectivity(config, subject, session, regional, parcels_list, corrected_maps, mrsi, tissue, debug):
+def _step_connectivity(config, subject, session, regional, parcels_list, corrected_maps, mrsi_reference, tissue, debug):
     """Regional metabolic profile estimation (CRLB-scaled Monte Carlo
     uncertainty propagation) always runs, for every recording; the metabolic
     connectivity matrix is the optional add-on gated on
@@ -357,8 +369,8 @@ def _step_connectivity(config, subject, session, regional, parcels_list, correct
                 regional[pid],
                 parcels,
                 corrected_maps,
-                mrsi.crlb_maps,
-                mrsi.brainmask,
+                mrsi_reference.crlb_maps,
+                mrsi_reference.brainmask,
                 gm_fraction_path=tissue.mrsi.get("GM") if tissue is not None else None,
             )
             sections = build_connectivity_qc_sections(config, subject, session, connectivity[pid].get("matrix_tsv"))
@@ -369,7 +381,7 @@ def _step_connectivity(config, subject, session, regional, parcels_list, correct
     return connectivity, (qc_sections_connectivity or None)
 
 
-def _step_metprofiles(config, subject, session, corrected_maps, mrsi, parcels_list, regional, anat):
+def _step_metprofiles(config, subject, session, corrected_maps, mrsi_reference, parcels_list, regional, anat):
     """Returns {parcellation_id: metprofile_npz_path}, one entry per parcellation."""
     return {
         parcels.parcellation_id: export_metprofile_npz(
@@ -377,7 +389,7 @@ def _step_metprofiles(config, subject, session, corrected_maps, mrsi, parcels_li
             subject,
             session,
             corrected_maps,
-            mrsi.water_map,
+            mrsi_reference.water_map,
             parcels,
             regional[parcels.parcellation_id],
             anat.registration_mask,

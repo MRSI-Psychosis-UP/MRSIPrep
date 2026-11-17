@@ -19,8 +19,8 @@ from mrsiprep.mrsi.t1_correction import apply_t1_correction, apply_t1_correction
 
 
 @dataclass
-class MRSIResult:
-    """Native-space MRSI derivatives produced by :func:`run_mrsi_finish_workflow`.
+class MRSIReferenceResult:
+    """Native-space MRSI derivatives produced by :func:`run_mrsi_reference_workflow`.
 
     All paths are in MRSI-native space; per-metabolite maps are keyed by
     metabolite name (e.g. ``"CrPCr"``, matching ``--metabolites``/``--ref-met``).
@@ -58,10 +58,6 @@ class MRSIResult:
         or derived when missing (see :func:`mrsiprep.mrsi.masks.ensure_brainmask`).
     :ivar reference: The reference-metabolite image used to drive
         MRSI→T1w registration (``config.ref_met``, default ``CrPCr``).
-    :ivar qcmasks: Per-metabolite voxel-quality masks (SNR/CRLB/FWHM
-        thresholds applied), keyed the same way as ``preproc_maps``.
-    :ivar qc_summary: Path to the per-recording QC summary table
-        produced alongside ``qcmasks``.
     """
 
     raw_maps: dict[str, Path]
@@ -73,10 +69,24 @@ class MRSIResult:
     water_map: Path | None
     brainmask: Path
     reference: Path
-    qcmasks: dict[str, Path]
-    qc_summary: Path
     t1_correction_provenance: list[dict] | None = None
     flip_angle_map: Path | None = None
+
+
+@dataclass
+class MRSIQualityResult:
+    """Per-recording voxel-quality derivatives produced by
+    :func:`run_mrsi_quality_workflow`.
+
+    :ivar qcmasks: Per-metabolite voxel-quality masks (SNR/CRLB/FWHM
+        thresholds applied), keyed the same way as
+        :attr:`MRSIReferenceResult.preproc_maps`.
+    :ivar qc_summary: Path to the per-recording QC summary table
+        produced alongside ``qcmasks``.
+    """
+
+    qcmasks: dict[str, Path]
+    qc_summary: Path
 
 
 @dataclass
@@ -110,7 +120,7 @@ class MRSILoadResult:
 @dataclass
 class SpikeFilterResult:
     """Biharmonic spike-filtered metabolite maps -- the ``spike_filter``
-    step's output, consumed by ``t1_saturation_correction`` and ``mrsi_finish``.
+    step's output, consumed by ``t1_saturation_correction`` and ``mrsi_reference``.
 
     :ivar preproc_maps: Metabolite maps after spike detection and
         biharmonic repair (see :func:`mrsiprep.mrsi.filtering.filter_metabolite_maps`),
@@ -124,7 +134,8 @@ class SpikeFilterResult:
 @dataclass
 class WaterCorrectionResult:
     """T1-saturation ("water") correction output -- the
-    ``t1_saturation_correction`` step's output, consumed by ``mrsi_finish``.
+    ``t1_saturation_correction`` step's output, consumed by ``mrsi_reference``
+    and ``mrsi_quality``.
 
     When ``config.t1_correction == "none"`` (the default), this is a
     no-op: ``corrected_maps`` is ``load.preproc_maps`` itself (same
@@ -266,7 +277,7 @@ def run_mrsi_load_workflow(config, subject: str, session: str | None, inputs: MR
     provide one). Spike filtering, T1-saturation correction, and reference-
     image/quality-mask generation are separate steps (see
     :func:`run_spike_filter_workflow`/:func:`run_t1_water_correction_workflow`/
-    :func:`run_mrsi_finish_workflow`).
+    :func:`run_mrsi_reference_workflow`/:func:`run_mrsi_quality_workflow`).
 
     :param config: Run-wide :class:`mrsiprep.config.settings.MRSIPrepConfig`.
     :param subject: BIDS subject label, without the ``sub-`` prefix.
@@ -392,12 +403,11 @@ def run_t1_water_correction_workflow(
     return WaterCorrectionResult(corrected_maps=filtered.preproc_maps, provenance=None)
 
 
-def run_mrsi_finish_workflow(
+def run_mrsi_reference_workflow(
     config, subject: str, session: str | None, load: MRSILoadResult, filtered: SpikeFilterResult, water: WaterCorrectionResult, inputs: MRSIInputs
-) -> MRSIResult:
-    """Build the reference-metabolite image and voxel-quality masks from
-    ``water``'s (possibly T1-corrected) maps, assembling the final
-    :class:`MRSIResult`.
+) -> MRSIReferenceResult:
+    """Build the reference-metabolite image from ``water``'s (possibly
+    T1-corrected) maps, assembling the final :class:`MRSIReferenceResult`.
 
     :param config: Run-wide :class:`mrsiprep.config.settings.MRSIPrepConfig`.
     :param subject: BIDS subject label, without the ``sub-`` prefix.
@@ -410,21 +420,11 @@ def run_mrsi_finish_workflow(
         :func:`run_mrsi_load_workflow` (``crlb_maps``/``snr_map``/
         ``linewidth_map`` may have been rebound there by orientation
         correction, so this must be the same, possibly-mutated object).
-    :returns: :class:`MRSIResult` with all derivatives written to
+    :returns: :class:`MRSIReferenceResult` with all derivatives written to
         ``config.derivative_dir`` and referenced by path.
     """
     reference = generate_reference(config, subject, session, water.corrected_maps, preferred_met=config.ref_met)
-    qcmasks, qc_summary = make_quality_masks(
-        config,
-        subject,
-        session,
-        water.corrected_maps,
-        inputs.crlb_maps,
-        inputs.snr_map,
-        inputs.linewidth_map,
-        load.brainmask,
-    )
-    return MRSIResult(
+    return MRSIReferenceResult(
         raw_maps=load.raw_maps,
         preproc_maps=filtered.preproc_maps,
         corrected_maps=water.corrected_maps,
@@ -434,8 +434,39 @@ def run_mrsi_finish_workflow(
         water_map=inputs.water_map,
         brainmask=load.brainmask,
         reference=reference,
-        qcmasks=qcmasks,
-        qc_summary=qc_summary,
         t1_correction_provenance=water.provenance,
         flip_angle_map=inputs.flip_angle_map,
     )
+
+
+def run_mrsi_quality_workflow(
+    config, subject: str, session: str | None, water: WaterCorrectionResult, inputs: MRSIInputs, brainmask: Path
+) -> MRSIQualityResult:
+    """Normalize the upstream tool's CRLB/SNR/linewidth units and build
+    per-metabolite voxel-quality masks from ``water``'s (possibly
+    T1-corrected) maps.
+
+    :param config: Run-wide :class:`mrsiprep.config.settings.MRSIPrepConfig`.
+    :param subject: BIDS subject label, without the ``sub-`` prefix.
+    :param session: BIDS session label without the ``ses-`` prefix, or
+        ``None`` for session-less datasets.
+    :param water: This recording's :func:`run_t1_water_correction_workflow` output.
+    :param inputs: The same :class:`MRSIInputs` passed to
+        :func:`run_mrsi_load_workflow` (``crlb_maps``/``snr_map``/
+        ``linewidth_map`` may have been rebound there by orientation
+        correction, so this must be the same, possibly-mutated object).
+    :param brainmask: This recording's :func:`run_mrsi_load_workflow` brainmask.
+    :returns: :class:`MRSIQualityResult` with all derivatives written to
+        ``config.derivative_dir`` and referenced by path.
+    """
+    qcmasks, qc_summary = make_quality_masks(
+        config,
+        subject,
+        session,
+        water.corrected_maps,
+        inputs.crlb_maps,
+        inputs.snr_map,
+        inputs.linewidth_map,
+        brainmask,
+    )
+    return MRSIQualityResult(qcmasks=qcmasks, qc_summary=qc_summary)
