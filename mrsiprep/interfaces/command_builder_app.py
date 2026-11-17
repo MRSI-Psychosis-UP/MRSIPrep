@@ -38,6 +38,7 @@ from mrsiprep.config.chimera_schemes import (
     build_scheme_code,
     valid_letters,
 )
+from mrsiprep.config.nuclei import DEFAULT_NUCLEUS, NucleusError, metabolite_aliases
 from mrsiprep.workflows.nipype_engine.steps_registry import STEP_DEPENDENCIES, validate_step_order
 
 # Debug/internal flags not useful in a user-facing form.
@@ -48,26 +49,20 @@ EXCLUDED_FLAGS = {"--hello-world", "--help", "-h"}
 # flag is inferred by omission, matching how the two actually interact.
 NEGATIVE_FLAG_PAIRS = {"--no-fsl-deformable"}
 
-# Human-readable URL fragment for the Preflight Results page (st.Page's
-# url_path=, set in main()'s st.navigation() setup) -- st.switch_page()
-# itself needs the actual Page object, not this string (see
-# st.session_state["_preflight_page"], stashed by main()), but this still
-# gives the page a stable, shareable URL.
-PREFLIGHT_PAGE_URL_PATH = "preflight-results"
-
 POSITIONAL_HELP = {
     "bids_dir": "Path to the BIDS dataset root.",
     "output_dir": "Path to write derivatives to.",
 }
 
-# Which CLI flags are relevant to each pipeline step, for the "Custom
-# Pipeline" tab's per-step expanders. Hand-maintained against the real
-# per-step `config.*` reads traced in mrsiprep/workflows/steps.py (and its
-# callees). parser.py's own argparse groups now mirror this same per-step
-# structure (one group per STEP_SEQUENCE step; see TAB_GROUPS below), but
-# this dict is kept independently hand-maintained rather than derived from
-# it, since a handful of flags are read by more than one step and an
-# argparse group can only pick one primary home for each. In particular:
+# Which CLI flags are relevant to each pipeline step, for the Custom
+# Pipeline tab's and the guided wizard's Processing step's per-step
+# expanders. Hand-maintained against the real per-step `config.*` reads
+# traced in mrsiprep/workflows/steps.py (and its callees). parser.py's own
+# argparse groups now mirror this same per-step structure (one group per
+# STEP_SEQUENCE step), but this dict is kept independently hand-maintained
+# rather than derived from it, since a handful of flags are read by more
+# than one step and an argparse group can only pick one primary home for
+# each. In particular:
 # --regional-summary affects metprofiles, not regional; the quality-
 # threshold flags (--snr-min/--linewidth-max/--crlb-max/--quantification-tool/
 # --linewidth-unit/--nucleus/--quality-metrics) belong to mrsi_quality (where
@@ -145,6 +140,67 @@ ANAT_BRANCH_STEPS = ["prepare", "tissue_seg", "anatprep"]
 MRSI_BRANCH_STEPS = ["mrsi_load", "spike_filter", "t1_saturation_correction", "mrsi_reference", "mrsi_quality"]
 DOWNSTREAM_STEPS = [
     name for name in CUSTOM_STEP_FLAGS if name not in ANAT_BRANCH_STEPS and name not in MRSI_BRANCH_STEPS
+]
+
+# Human-readable (label, help) overrides for the guided wizard, keyed by
+# `action.dest` (not the raw "--flag" spelling, since that's what every
+# argparse.Action already carries as its own stable identity regardless of
+# option-string spelling). Consulted by _widget_for's label_override/
+# help_override kwargs -- the raw CLI flag name is always appended as
+# secondary text by the wizard's own rendering (see _render_wizard_data_step/
+# _render_wizard_processing_step), never hidden, satisfying "CLI names
+# secondary, not removed." A dest not listed here just falls back to
+# _widget_for's own defaults (today's _dest_label(action)/action.help).
+WIZARD_FIELD_LABELS: dict[str, tuple[str, str]] = {
+    "bids_dir": ("Dataset folder", "Paste the path to your BIDS dataset root."),
+    "output_dir": ("Output folder", "Where MRSIPrep derivatives and reports will be written."),
+    "t1_pattern": (
+        "T1w image pattern",
+        "BIDS entity/suffix pattern used to locate the skull-stripped T1w image for each recording.",
+    ),
+    "mrsinmrs_file": ("Acquisition metadata file", "The mrsinmrs.json file describing your MRSI acquisition."),
+    "mrsi_input_dir": ("Raw MRSI data folder", "Root folder containing the raw MRSI derivatives."),
+    "participant_label": ("Subjects", "Subject labels to process, without the 'sub-' prefix."),
+    "session_label": ("Sessions", "Session labels to process, without the 'ses-' prefix."),
+    "participants": ("Participant list file", "A TSV/CSV file listing which subject/session pairs to process."),
+    "metabolites": ("Metabolites", "Which metabolite maps to process."),
+    "ref_met": ("Reference metabolite", "The metabolite map used to register MRSI to the T1w anatomical."),
+    "parcellation_mode": (
+        "Parcellation method",
+        "How brain regions are labeled for per-region metabolite and connectivity output.",
+    ),
+    "write_connectivity": (
+        "Compute connectivity matrix",
+        "Build a regional metabolic connectivity (similarity) matrix on top of the regional profiles.",
+    ),
+    "fs_license": ("FreeSurfer license file", "Required only when the parcellation method is 'chimera'."),
+    "atlas": ("Atlas", "Which standardized atlas to warp into subject space."),
+    "nthreads": ("Threads per recording", "ANTs/ITK thread count per subject/session process."),
+    "nproc": ("Parallel recordings", "Number of subject/session recordings to process in parallel."),
+    "work_dir": ("Work folder", "Scratch/intermediate files folder; safe to delete between runs."),
+}
+
+# Per-step flag groups shown as the Processing step's four expanders (plan
+# §3, Step 3). Each entry's flags are looked up from CUSTOM_STEP_FLAGS
+# (the per-step, hand-maintained flag-ownership dict above) -- unioned across
+# every step name listed, in CUSTOM_STEP_FLAGS iteration order, with
+# duplicates (a flag legitimately owned by more than one step, e.g.
+# --ref-met) collapsed to their first occurrence. "Runtime and existing
+# outputs" has no step of its own in CUSTOM_STEP_FLAGS (nthreads/nproc/
+# work-dir/overwrite* have no per-step home -- see steps_registry.py's own
+# notes) so it's listed as a fixed flag list instead of step names.
+PROCESSING_EXPANDER_STEP_GROUPS: dict[str, list[str]] = {
+    "Registration": ["registration", "anatprep"],
+    "Tissue and relaxation corrections": [
+        "tissue_seg", "spike_filter", "t1_saturation_correction", "pvc", "tissue_probmaps",
+    ],
+    "Parcellation and connectivity": ["mrsi_parcellation", "regional", "connectivity", "metprofiles"],
+}
+
+RUNTIME_EXPANDER_FLAGS: list[str] = [
+    "--nthreads", "--nproc", "--work-dir", "--overwrite",
+    "--overwrite-seg", "--overwrite-t1-reg", "--overwrite-template-reg", "--overwrite-filt",
+    "--overwrite-t1corr", "--overwrite-pve", "--overwrite-transform", "--overwrite-chimera",
 ]
 
 # Branch colors for the flowchart (see _render_step_flowchart) -- matches
@@ -566,7 +622,9 @@ def _render_check(ok: bool, missing_hint: str = "") -> None:
         )
 
 
-def _render_participants_widget(action: argparse.Action, bids_dir: str, key_prefix: str = "field_"):
+def _render_participants_widget(
+    action: argparse.Action, bids_dir: str, key_prefix: str = "field_", label: str | None = None
+):
     """Text input for --participants plus a "View" button that previews the
     TSV/CSV's first rows, since a bad/mistyped subject-session list here
     silently filters out every subject rather than erroring loudly.
@@ -579,8 +637,10 @@ def _render_participants_widget(action: argparse.Action, bids_dir: str, key_pref
     `key_prefix` isolates this widget's session-state keys from another
     caller rendering the same flag elsewhere (the Custom Pipeline tab uses
     "custom_field_" so its own --participants widget never collides with
-    the Standardized tab's)."""
-    label = _dest_label(action)
+    the Standardized tab's). `label` optionally overrides the displayed
+    label (defaults to `_dest_label(action)`, preserving every existing
+    call site's behavior)."""
+    label = label if label is not None else _dest_label(action)
     help_text = (action.help or "").strip()
     key = f"{key_prefix}{action.dest}"
     default_path = f"{bids_dir.rstrip('/')}/participants_allsessions.tsv" if bids_dir else ""
@@ -705,54 +765,88 @@ def _render_chimera_scheme_picker(
     return code, scale_value, grow_value
 
 
-def _render_atlas_widget(action: argparse.Action, key_prefix: str = "field_"):
+def _render_atlas_widget(action: argparse.Action, key_prefix: str = "field_", label: str | None = None):
     """Dropdown of every bundled atlas actually found under mrsiprep/data/atlas/
     (instead of a free-text field defaulting to one hardcoded name), plus the
     parameterized synthetic choices --atlas also accepts (custom/schaefer<N>/
     mist197/cubic<N>mm).
 
     `key_prefix` isolates this widget's session-state keys from another
-    caller rendering the same flag elsewhere (see _render_participants_widget)."""
+    caller rendering the same flag elsewhere (see _render_participants_widget).
+    `label` optionally overrides the displayed label (defaults to
+    `_dest_label(action)`, preserving every existing call site's behavior)."""
     from mrsiprep.parcellation.atlas_registry import available_bundled_atlases
 
+    label = label if label is not None else _dest_label(action)
     bundled = available_bundled_atlases()
     synthetic = ["custom", "schaefer100", "schaefer400", "schaefer1000", "mist197", "cubic10mm"]
     options = bundled + synthetic + ["(custom value...)"]
     default = action.default if action.default in options else options[0]
     key = f"{key_prefix}{action.dest}"
     selected = st.selectbox(
-        _dest_label(action), options, index=options.index(default),
+        label, options, index=options.index(default),
         help=(action.help or "").strip(), key=key,
     )
     if selected == "(custom value...)":
         return st.text_input(
-            f"{_dest_label(action)} (custom value)",
+            f"{label} (custom value)",
             help="e.g. 'schaefer200', 'cubic15mm', or another bundled/registered atlas name not listed above.",
             key=f"{key}_custom",
         ) or None
     return selected
 
 
-def _widget_for(action: argparse.Action, key_prefix: str = "field_"):
+def _widget_for(
+    action: argparse.Action,
+    key_prefix: str = "field_",
+    label_override: str | None = None,
+    help_override: str | None = None,
+):
     """`key_prefix` isolates this widget's session-state key from another
     caller rendering the same flag elsewhere -- the Custom Pipeline tab
     passes "custom_field_" so its per-step widgets never collide with the
-    Standardized tab's widgets for the same flag."""
-    label = _dest_label(action)
-    help_text = (action.help or "").strip()
+    Standardized tab's widgets for the same flag.
+
+    `label_override`/`help_override` let a caller (the wizard) substitute a
+    human-readable label/help string while keeping every other dispatch rule
+    (choices, defaults, widget kind) identical -- both default to today's
+    `_dest_label(action)`/`action.help` when omitted, so every pre-existing
+    call site (which never passes them) behaves exactly as before.
+
+    When `key_prefix` is the wizard's own WIZARD_KEY_PREFIX, this also
+    participates in the shadow-state mechanism (see WIZARD_SHADOW_PREFIX's
+    module-level comment): Streamlit deletes a widget-backed session_state
+    entry the moment that widget isn't instantiated on a rerun, which would
+    otherwise reset every field to its CLI default each time the wizard
+    revisits a step after leaving it. Seeding `value=`/`index=`/`default=`
+    from the shadow key (falling back to `action.default` only the first
+    time a field is ever seen) and writing the widget's result back to the
+    shadow key after makes a field's value durable across step changes --
+    exactly like a plain (non-widget) session_state entry would be."""
+    label = label_override if label_override is not None else _dest_label(action)
+    help_text = help_override if help_override is not None else (action.help or "").strip()
     key = f"{key_prefix}{action.dest}"
+    is_wizard = key_prefix == WIZARD_KEY_PREFIX
+    shadow_default = _wizard_shadow_get(action.dest) if is_wizard else None
+
+    def _finish(result):
+        if is_wizard:
+            _wizard_shadow_set(action.dest, result)
+        return result
 
     if _is_flag(action):
-        return st.checkbox(label, value=bool(action.default), help=help_text, key=key)
+        value = shadow_default if (is_wizard and shadow_default is not None) else bool(action.default)
+        return _finish(st.checkbox(label, value=value, help=help_text, key=key))
 
     if action.choices:
         choices = list(action.choices)
-        if label == "--registration-backend":
+        flag_name = _dest_label(action)
+        if flag_name == "--registration-backend":
             # The parser also accepts 'flirt-fnirt'/'flirt_fnirt'/'flirt/fnirt' as
             # deprecated spellings of 'fsl' (FNIRT is FSL's own deformable stage,
             # not a separate backend) -- the form only ever needs to offer 'fsl'.
             choices = ["ants", "fsl"]
-        if label == "--normalization":
+        if flag_name == "--normalization":
             # 'simple' and 'ants-syn' are behaviorally identical (both just
             # recompute using --registration-backend); 'ants-syn' only exists
             # for backward compatibility with older configs -- don't offer it
@@ -760,29 +854,41 @@ def _widget_for(action: argparse.Action, key_prefix: str = "field_"):
             choices = ["simple", "existing"]
         if action.nargs in ("+", "*"):
             default = action.default if isinstance(action.default, list) else []
-            return st.multiselect(label, choices, default=default, help=help_text, key=key)
+            if is_wizard and shadow_default is not None:
+                default = [v for v in shadow_default if v in choices]
+            return _finish(st.multiselect(label, choices, default=default, help=help_text, key=key))
         options = ["(unset)"] + choices if not action.required else choices
         default = action.default if action.default in options else options[0]
+        if is_wizard and shadow_default in options:
+            default = shadow_default
         index = options.index(default)
         selected = st.selectbox(label, options, index=index, help=help_text, key=key)
-        return None if selected == "(unset)" else selected
+        return _finish(None if selected == "(unset)" else selected)
 
     if action.type is int:
         default = action.default if isinstance(action.default, int) else 0
-        return st.number_input(label, value=default, step=1, help=help_text, key=key, format="%d")
+        if is_wizard and isinstance(shadow_default, int):
+            default = shadow_default
+        return _finish(st.number_input(label, value=default, step=1, help=help_text, key=key, format="%d"))
 
     if action.type is float:
         default = action.default if isinstance(action.default, float) else 0.0
-        return st.number_input(label, value=default, help=help_text, key=key)
+        if is_wizard and isinstance(shadow_default, (int, float)):
+            default = shadow_default
+        return _finish(st.number_input(label, value=default, help=help_text, key=key))
 
     if action.nargs in ("+", "*"):
-        default = ",".join(action.default) if isinstance(action.default, list) else ""
+        if is_wizard and isinstance(shadow_default, list):
+            default = ",".join(shadow_default)
+        else:
+            default = ",".join(action.default) if isinstance(action.default, list) else ""
         raw = st.text_input(label, value=default, help=f"{help_text} (comma-separated)", key=key)
-        return [v.strip() for v in raw.split(",") if v.strip()] or None
+        return _finish([v.strip() for v in raw.split(",") if v.strip()] or None)
 
-    default = "" if action.default in (None, argparse.SUPPRESS) else str(action.default)
+    cli_default = "" if action.default in (None, argparse.SUPPRESS) else str(action.default)
+    default = shadow_default if (is_wizard and isinstance(shadow_default, str)) else cli_default
     raw = st.text_input(label, value=default, help=help_text, key=key)
-    return raw or None
+    return _finish(raw or None)
 
 
 # Registration-backend-specific flags: only shown once a backend is picked,
@@ -857,36 +963,6 @@ def _build_command(positional_values: dict, optionals: list[argparse.Action], va
     return " \\\n    ".join(" ".join(group) for group in groups)
 
 
-# Argparse group titles combined under one tab each, in display order. A
-# title not listed here falls into "Other" (see _tab_for_title). Each title
-# here must match a parser.py add_argument_group(...) title exactly -- that
-# parser now declares one group per pipeline step (mirroring STEP_SEQUENCE/
-# the flowchart's branches), so this dict collapses the finer step groups
-# back into the same coarser topic tabs this GUI has always shown.
-TAB_GROUPS: dict[str, list[str]] = {
-    "BIDS input": ["Prepare: input selection", "Workflow: step selection"],
-    "Anatomical": ["Anatomical branch: tissue segmentation", "Anatomical branch: anatomical preparation"],
-    "MRSI": [
-        "MRSI branch: loading",
-        "MRSI branch: spike filtering",
-        "MRSI branch: T1 saturation correction",
-        "MRSI branch: quality masking",
-    ],
-    "Registration": ["Shared: registration"],
-    "Parcellation": ["parcellation"],
-    "Connectivity": ["Outputs: regional profiles and connectivity"],
-    "Workflow": ["Shared: tissue probability maps and PVC", "Outputs: resampling", "Workflow configuration"],
-    "Overwrite / runtime": ["overwrite/recompute", "Other options"],
-}
-
-
-def _tab_for_title(title: str) -> str:
-    for tab, titles in TAB_GROUPS.items():
-        if title in titles:
-            return tab
-    return "Other"
-
-
 def _mrsiprep_docker_version() -> str:
     """The installed `mrsiprep-docker` wrapper's version, or a hint to install
     it -- it's a separate pip package from `mrsiprep` itself (see
@@ -905,7 +981,891 @@ def _flag_action_lookup(optionals: list[argparse.Action]) -> dict[str, argparse.
     return {_dest_label(a): a for a in optionals}
 
 
-def _render_command_builder_page() -> None:
+# ---------------------------------------------------------------------------
+# Guided wizard: Analysis -> Data -> Processing -> Review
+# ---------------------------------------------------------------------------
+#
+# One shared state prefix for every flag's own widget key, used by every
+# wizard step (not per-step prefixes) -- a field's value must survive
+# regardless of which step is currently being rendered, since each step
+# function is only called on the rerun where it's the active step.
+WIZARD_KEY_PREFIX = "wizard_field_"
+
+# IMPORTANT: Streamlit deletes a widget-backed session_state entry from
+# st.session_state the moment that widget is no longer instantiated on a
+# rerun (confirmed directly against this Streamlit version with a minimal
+# repro -- not something any code in this file does). Since each wizard
+# step function only calls the widgets for *its own* fields, a value typed
+# on Data would otherwise vanish from st.session_state the instant the user
+# moves to Processing or Review, exactly the "lost on step change" bug the
+# wizard must not have. The fix: every wizard widget's value is mirrored
+# into a second, non-widget-backed "shadow" key under this prefix
+# immediately after the widget call (_wizard_shadow_set), and every
+# consumer that is not the widget's own render call (Review, the sidebar
+# summary, _collect_wizard_values, and every widget's own pre-seeding of
+# its displayed value) reads the shadow key instead of the live widget key,
+# which may not exist on steps where that widget isn't rendered.
+WIZARD_SHADOW_PREFIX = "wizard_value_"
+
+WIZARD_STEP_TITLES = ["Analysis", "Data", "Processing", "Review"]
+
+
+def _wizard_shadow_set(dest: str, value) -> None:
+    st.session_state[f"{WIZARD_SHADOW_PREFIX}{dest}"] = value
+
+
+def _wizard_shadow_get(dest: str, default=None):
+    return st.session_state.get(f"{WIZARD_SHADOW_PREFIX}{dest}", default)
+
+
+def _wizard_label_help(dest: str, fallback_label: str, fallback_help: str) -> tuple[str, str]:
+    """Looks up a human label/help pair from WIZARD_FIELD_LABELS, falling
+    back to the given defaults (normally `_dest_label(action)`/`action.help`)
+    when `dest` isn't in that table."""
+    if dest in WIZARD_FIELD_LABELS:
+        return WIZARD_FIELD_LABELS[dest]
+    return fallback_label, fallback_help
+
+
+def _render_participant_selection(
+    participant_label_action: argparse.Action,
+    session_label_action: argparse.Action,
+    participants_action: argparse.Action,
+    bids_dir: str,
+) -> None:
+    """Explicit 3-way choice replacing the old ambiguous combination of
+    --participant-label/--session-label/--participants: "All participants"
+    (emits nothing -- the literal collect_recordings() directory-scan
+    fallback, mrsiprep/workflows/participant.py's own default path when
+    neither --participants nor --participant-label is given), "Select
+    participants" (reveals --participant-label/--session-label text inputs),
+    or "Use a participant file" (reveals the existing
+    _render_participants_widget, relabeled). Writes directly into
+    st.session_state under the wizard's own shared key prefix; does not
+    return a value -- _collect_wizard_values reads the same keys back out,
+    same convention as every other wizard field."""
+    mode_key = f"{WIZARD_KEY_PREFIX}participant_mode"
+    # participant_mode is read by Review/the sidebar/_collect_wizard_values
+    # even on reruns where this radio isn't rendered at all -- shadow it
+    # like every other field (see WIZARD_SHADOW_PREFIX's module comment),
+    # since a plain `key=` alone would be deleted by Streamlit the instant
+    # the user leaves the Data step.
+    if mode_key not in st.session_state:
+        st.session_state[mode_key] = _wizard_shadow_get("participant_mode", "All participants")
+    mode = st.radio(
+        "Which participants should be processed?",
+        ["All participants", "Select participants", "Use a participant file"],
+        key=mode_key,
+        help="All participants scans the dataset folder and processes everyone found there. "
+        "Select participants lets you type specific subject/session labels. Use a participant "
+        "file points at a TSV/CSV listing subject/session pairs.",
+    )
+    _wizard_shadow_set("participant_mode", mode)
+    if mode == "Select participants":
+        col1, col2 = st.columns(2)
+        with col1:
+            label, help_text = _wizard_label_help_args("participant_label", participant_label_action)
+            _widget_for(
+                participant_label_action, key_prefix=WIZARD_KEY_PREFIX,
+                label_override=label, help_override=help_text,
+            )
+        with col2:
+            label, help_text = _wizard_label_help_args("session_label", session_label_action)
+            _widget_for(
+                session_label_action, key_prefix=WIZARD_KEY_PREFIX,
+                label_override=label, help_override=help_text,
+            )
+    elif mode == "Use a participant file":
+        label, _help = _wizard_label_help("participants", _dest_label(participants_action), "")
+        participants_key = f"{WIZARD_KEY_PREFIX}participants"
+        if participants_key not in st.session_state:
+            shadow_participants = _wizard_shadow_get("participants")
+            if shadow_participants:
+                st.session_state[f"{participants_key}_custom"] = True
+                st.session_state[participants_key] = shadow_participants
+        participants_value = _render_participants_widget(
+            participants_action, bids_dir, key_prefix=WIZARD_KEY_PREFIX, label=label
+        )
+        _wizard_shadow_set("participants", participants_value)
+    else:
+        st.caption("Every subject/session found under the dataset folder will be processed.")
+
+
+def _wizard_label_help_args(dest: str, action: argparse.Action) -> tuple[str, str]:
+    """Convenience: resolves (label_override, help_override) positional-ish
+    values for a `_widget_for(..., label_override=..., help_override=...)`
+    call from WIZARD_FIELD_LABELS, falling back to the action's own label/
+    help text (never None) so the two kwargs are always real strings."""
+    label, help_text = _wizard_label_help(dest, _dest_label(action), (action.help or "").strip())
+    return label, help_text
+
+
+def _render_metabolites_widget(metabolites_action: argparse.Action, nucleus: str = DEFAULT_NUCLEUS) -> list[str]:
+    """Multiselect "chip" widget (Streamlit's native multi-select) populated
+    from the real nucleus-aware alias table (mrsiprep.config.nuclei.
+    metabolite_aliases), replacing the old bare comma-separated text input.
+    Streamlit 1.67's st.multiselect supports `accept_new_options=True`,
+    letting the user type a metabolite name not in the curated list (e.g. a
+    custom/unlisted metabolite) directly into the same widget -- no separate
+    text-input fallback needed.
+
+    `nucleus` selects which curated alias table to offer as options; callers
+    pass whatever --nucleus value is currently chosen (falling back to
+    DEFAULT_NUCLEUS, "1H", when none is set yet -- matching the CLI's own
+    documented fallback order)."""
+    try:
+        aliases = metabolite_aliases(nucleus)
+    except NucleusError:
+        aliases = metabolite_aliases(DEFAULT_NUCLEUS)
+    options = sorted(aliases)
+    key = f"{WIZARD_KEY_PREFIX}metabolites"
+    label, help_text = _wizard_label_help(
+        "metabolites", _dest_label(metabolites_action), (metabolites_action.help or "").strip()
+    )
+    # Streamlit deletes this widget's session_state entry once this step
+    # stops being rendered (see WIZARD_SHADOW_PREFIX's module comment) --
+    # reseed from the shadow copy (which custom entries typed via
+    # accept_new_options may not be in `options`, so no further filtering)
+    # whenever the live key doesn't exist yet this run, rather than
+    # resetting to empty.
+    if key not in st.session_state:
+        st.session_state[key] = _wizard_shadow_get("metabolites", [])
+    selected = st.multiselect(
+        f"{label} (--metabolites)",
+        options,
+        help=f"{help_text} Type a name and press Enter to add one not in this list.",
+        key=key,
+        accept_new_options=True,
+        placeholder="Choose one or more metabolites...",
+    )
+    _wizard_shadow_set("metabolites", list(selected))
+    return list(selected)
+
+
+def _render_ref_met_widget(ref_met_action: argparse.Action, metabolites: list[str]) -> str | None:
+    """Dropdown for --ref-met populated from exactly the metabolites chosen
+    in the Data step, instead of an unpopulated free-text box (today's form
+    offers a plain text_input with no hint of which spellings are valid).
+    Shows a warning caption instead of an empty dropdown when no metabolites
+    have been chosen yet -- there is nothing valid to offer, and a dropdown
+    with zero real options would look broken rather than merely premature."""
+    label, help_text = _wizard_label_help(
+        "ref_met", _dest_label(ref_met_action), (ref_met_action.help or "").strip()
+    )
+    key = f"{WIZARD_KEY_PREFIX}ref_met"
+    if not metabolites:
+        st.warning(
+            f"Choose at least one metabolite in the Data step before picking a {label.lower()} "
+            f"(--ref-met)."
+        )
+        _wizard_shadow_set("ref_met", None)
+        return None
+    # Reseed from the shadow copy when this widget's own key was deleted by
+    # Streamlit on a rerun that didn't render it (see WIZARD_SHADOW_PREFIX's
+    # module comment) -- without this, returning to Processing after
+    # visiting another step would silently reset --ref-met to whichever
+    # metabolite happens to be first alphabetically.
+    if key not in st.session_state:
+        shadow_ref_met = _wizard_shadow_get("ref_met")
+        if shadow_ref_met in metabolites:
+            st.session_state[key] = shadow_ref_met
+    current = st.session_state.get(key)
+    index = metabolites.index(current) if current in metabolites else 0
+    selected = st.selectbox(f"{label} (--ref-met)", metabolites, index=index, help=help_text, key=key)
+    _wizard_shadow_set("ref_met", selected)
+    return selected
+
+
+# --- "Standard location / Specify a path" radio, replacing the old "Custom
+# path" checkbox for --mrsi-input-dir/--mrsinmrs-file (plan §3, Step 2) ----
+#
+# Session-state keys used, for a given `field` ("mrsi_input_dir" or
+# "mrsinmrs_file"):
+#   wizard_field_{field}_mode  -- "Standard location" / "Specify a path"
+#   wizard_field_{field}       -- the text_input's own value (only editable
+#                                  in "Specify a path" mode; force-synced to
+#                                  `default_value` every rerun while in
+#                                  "Standard location" mode, same idiom as
+#                                  the pre-wizard required-args section).
+
+
+def _render_path_mode_field(field: str, cli_flag: str, default_value: str, help_text: str) -> tuple[str, bool]:
+    """Returns (effective_path, is_custom) -- `is_custom` tells the caller
+    whether to actually emit `cli_flag` (the "Standard location" mode emits
+    nothing, relying on mrsiprep's own default-path convention, exactly like
+    today's unchecked "Custom path" checkbox)."""
+    mode_key = f"{WIZARD_KEY_PREFIX}{field}_mode"
+    # Both this radio's own key and the text_input's key below are read
+    # elsewhere (Review/the sidebar/_collect_wizard_values) on reruns where
+    # this function isn't called at all -- Streamlit deletes a widget's
+    # session_state entry when its widget isn't instantiated (see
+    # WIZARD_SHADOW_PREFIX's module comment), so both are shadow-backed.
+    if mode_key not in st.session_state:
+        st.session_state[mode_key] = _wizard_shadow_get(f"{field}_mode", "Standard location")
+    mode = st.radio(
+        f"{cli_flag} location", ["Standard location", "Specify a path"], key=mode_key, horizontal=True,
+        help=help_text,
+    )
+    _wizard_shadow_set(f"{field}_mode", mode)
+    is_custom = mode == "Specify a path"
+    text_key = f"{WIZARD_KEY_PREFIX}{field}"
+    if not is_custom:
+        # Disabled (auto-filled) mode: force-sync to the computed default
+        # every rerun, mirroring the pre-wizard form's identical mrsi_input_dir/
+        # --mrsinmrs-file handling -- once "Specify a path" is
+        # chosen, the widget's own session-state takes over and must NOT be
+        # overwritten here, or a typed path would be reverted on every rerun.
+        st.session_state[text_key] = default_value
+    elif text_key not in st.session_state:
+        st.session_state[text_key] = _wizard_shadow_get(field, default_value)
+    path_value = st.text_input(
+        cli_flag, key=text_key, disabled=not is_custom,
+        help="Leave on 'Standard location' to use mrsiprep's own default path convention.",
+    )
+    if is_custom:
+        _wizard_shadow_set(field, path_value)
+    effective = path_value if (is_custom and path_value) else default_value
+    return effective, is_custom
+
+
+def _compute_field_statuses(values: dict, positional_values: dict) -> dict[str, tuple[str, str]]:
+    """Tier 1 validation (plan §4): instant, cheap, recomputed every rerun --
+    no file contents are read, only Path.exists()/simple truthiness checks
+    (matching what _render_check already did unconditionally, pre-wizard).
+    Returns {dest: (level, message)}, level one of "ok"/"warn"/"block".
+
+    Blocking checks (gate the Review step's "Ready to copy" state and the
+    per-step Next button): bids_dir/output_dir empty or missing on disk,
+    --metabolites empty, --ref-met empty once metabolites is non-empty,
+    chimera mode without --fs-license, atlas mode missing --custom-atlas/
+    --custom-atlas-lut. Everything else present here warns without
+    blocking -- a dest with no entry at all is implicitly "ok" (nothing to
+    say about it)."""
+    statuses: dict[str, tuple[str, str]] = {}
+
+    bids_dir = positional_values.get("bids_dir") or ""
+    if not bids_dir:
+        statuses["bids_dir"] = ("block", "Required: choose your BIDS dataset folder.")
+    elif not Path(bids_dir).exists():
+        statuses["bids_dir"] = ("block", f"Folder not found: {bids_dir}")
+    else:
+        statuses["bids_dir"] = ("ok", "Found.")
+
+    output_dir = positional_values.get("output_dir") or ""
+    if not output_dir:
+        statuses["output_dir"] = ("block", "Required: choose where derivatives should be written.")
+    else:
+        statuses["output_dir"] = ("ok", f"Will create `{output_dir.rstrip('/')}/mrsiprep`.")
+
+    metabolites = values.get("--metabolites") or []
+    if not metabolites:
+        statuses["metabolites"] = ("block", "Required: choose at least one metabolite.")
+    else:
+        statuses["metabolites"] = ("ok", f"{len(metabolites)} metabolite(s) selected.")
+
+    ref_met = values.get("--ref-met")
+    if metabolites and not ref_met:
+        statuses["ref_met"] = ("block", "Required once metabolites are chosen: pick a reference metabolite.")
+    elif ref_met:
+        statuses["ref_met"] = ("ok", f"Using {ref_met}.")
+
+    parcellation_mode = values.get("--parcellation-mode")
+    if parcellation_mode == "chimera" and not values.get("--fs-license"):
+        statuses["fs_license"] = ("block", "Required for the 'chimera' parcellation method: a FreeSurfer license.txt.")
+    elif parcellation_mode == "atlas" and values.get("--atlas") == "custom" and (
+        not values.get("--custom-atlas") or not values.get("--custom-atlas-lut")
+    ):
+        statuses["custom_atlas"] = ("block", "Required for a custom atlas: both --custom-atlas and --custom-atlas-lut.")
+
+    mrsinmrs_file = values.get("--mrsinmrs-file")
+    if mrsinmrs_file and not Path(mrsinmrs_file).exists():
+        statuses["mrsinmrs_file"] = ("warn", f"File not found yet: {mrsinmrs_file}")
+
+    mrsi_input_dir = values.get("--mrsi-input-dir")
+    if mrsi_input_dir and not Path(mrsi_input_dir).exists():
+        statuses["mrsi_input_dir"] = ("warn", f"Folder not found yet: {mrsi_input_dir}")
+
+    return statuses
+
+
+def _wizard_blocking_messages(statuses: dict[str, tuple[str, str]]) -> list[str]:
+    return [message for level, message in statuses.values() if level == "block"]
+
+
+def _collect_wizard_values(
+    optionals: list[argparse.Action], positionals: list[argparse.Action]
+) -> tuple[dict, dict]:
+    """Reads every wizard field back out of its WIZARD_SHADOW_PREFIX shadow
+    copy in st.session_state (written by the four step-render functions
+    below and by _widget_for itself -- see WIZARD_SHADOW_PREFIX's module
+    comment for why the *shadow* key, not the live widget key, is the only
+    one guaranteed to still exist once a step is no longer being rendered)
+    into the same `(positional_values, values)` shape _build_command/
+    _compute_preflight already expect -- Review uses this instead of
+    re-rendering live widgets, per plan §2."""
+    bids_dir = _wizard_shadow_get("bids_dir", "") or ""
+    output_dir = _wizard_shadow_get("output_dir", "") or ""
+    analysis_level_action = next(a for a in positionals if a.dest == "analysis_level")
+    assert len(analysis_level_action.choices) == 1, (
+        f"analysis_level now has more than one choice ({list(analysis_level_action.choices)}) -- "
+        "the wizard's Data step silently assumed exactly one and never rendered a widget for it; "
+        "give the user a real choice there instead."
+    )
+    positional_values = {
+        "bids_dir": bids_dir,
+        "output_dir": output_dir,
+        "analysis_level": analysis_level_action.choices[0],
+    }
+
+    values: dict[str, object] = {}
+
+    participant_mode = _wizard_shadow_get("participant_mode")
+    if participant_mode == "Select participants":
+        participant_label = _wizard_shadow_get("participant_label") or []
+        session_label = _wizard_shadow_get("session_label") or []
+        if participant_label:
+            values["--participant-label"] = participant_label
+        if session_label:
+            values["--session-label"] = session_label
+    elif participant_mode == "Use a participant file":
+        participants = _wizard_shadow_get("participants")
+        if participants:
+            values["--participants"] = participants
+
+    t1_pattern = _wizard_shadow_get("t1_pattern")
+    if t1_pattern:
+        values["--t1"] = t1_pattern
+
+    mrsi_input_dir_mode = _wizard_shadow_get("mrsi_input_dir_mode")
+    if mrsi_input_dir_mode == "Specify a path":
+        mrsi_input_dir = _wizard_shadow_get("mrsi_input_dir")
+        if mrsi_input_dir:
+            values["--mrsi-input-dir"] = mrsi_input_dir
+
+    mrsinmrs_file_mode = _wizard_shadow_get("mrsinmrs_file_mode")
+    if mrsinmrs_file_mode == "Specify a path":
+        mrsinmrs_file = _wizard_shadow_get("mrsinmrs_file")
+        if mrsinmrs_file:
+            values["--mrsinmrs-file"] = mrsinmrs_file
+
+    metabolites = _wizard_shadow_get("metabolites") or []
+    if metabolites:
+        values["--metabolites"] = list(metabolites)
+
+    ref_met = _wizard_shadow_get("ref_met")
+    if ref_met:
+        values["--ref-met"] = ref_met
+
+    # Every other optional flag: _widget_for mirrors its result into
+    # wizard_value_{action.dest} (the shadow key) whenever it's called with
+    # key_prefix=WIZARD_KEY_PREFIX, regardless of which step rendered it --
+    # a flag not special-cased above (participants/metabolites/ref-met/t1/
+    # mrsi-input-dir/mrsinmrs-file, all handled above because they have
+    # bespoke wizard widgets rather than a plain _widget_for call) is read
+    # back the same generic way here.
+    _already_handled = {
+        "participant_label", "session_label", "participants", "t1_pattern",
+        "mrsi_input_dir", "mrsinmrs_file", "metabolites", "ref_met",
+    }
+    _unset = object()
+    for action in optionals:
+        if action.dest in _already_handled:
+            continue
+        flag = _dest_label(action)
+        value = _wizard_shadow_get(action.dest, _unset)
+        if value is _unset:
+            continue
+        if isinstance(value, str):
+            value = value or None
+        if value is False and action.default is True:
+            # False is a meaningful, non-default value for a store_true flag
+            # whose default is True (e.g. --fsl-deformable's "on by default"
+            # checkbox being unchecked) -- always keep it, even though it
+            # would otherwise look like one of the "empty" sentinels below.
+            values[flag] = value
+            continue
+        if value in (None, "", [], False):
+            continue
+        values[flag] = value
+
+    return positional_values, values
+
+
+def _render_wizard_analysis_step() -> None:
+    """Step 1: two outcome cards, replacing the old Standardized/Custom top-
+    level tab choice as the first thing a user sees. Both outcomes emit
+    the exact same --steps value -- none at all, i.e. the full 20-step
+    pipeline always runs -- confirmed against STEP_DEPENDENCIES/
+    validate_step_order (see this file's module docstring context and the
+    plan). "wizard_outcome" only governs whether Processing's parcellation/
+    connectivity expander opens collapsed-light or expanded-foregrounded by
+    default; it is never read by _build_command."""
+    st.header("What would you like to do?")
+    st.caption(
+        "Both options run the same full MRSIPrep pipeline end-to-end (loading, spike filtering, "
+        "T1 correction, registration, tissue correction, and the final QC report) -- the choice "
+        "below only decides which processing options are highlighted on the next screens."
+    )
+
+    outcome_key = "wizard_outcome"
+    st.session_state.setdefault(outcome_key, None)
+
+    col1, col2 = st.columns(2)
+    with col1:
+        with st.container(border=True):
+            st.subheader("Normalize metabolite maps")
+            st.write(
+                "Prepare and register metabolite maps into standard space, with the full quality "
+                "control report. A lightweight parcellation (SynthSeg) runs automatically, but no "
+                "FreeSurfer and no connectivity analysis unless you ask for it later."
+            )
+            if st.button("Choose this", key="wizard_outcome_normalize", type=(
+                "primary" if st.session_state[outcome_key] == "normalize" else "secondary"
+            )):
+                st.session_state[outcome_key] = "normalize"
+                st.session_state["wizard_step"] = 1
+                st.rerun()
+    with col2:
+        with st.container(border=True):
+            st.subheader("Parcellation and connectivity")
+            st.write(
+                "Same underlying pipeline, plus a guided choice of parcellation method (including "
+                "the heavier FreeSurfer-based Chimera parcellation) and metabolic connectivity "
+                "output, foregrounded as an active decision in Processing."
+            )
+            if st.button("Choose this", key="wizard_outcome_parcellation", type=(
+                "primary" if st.session_state[outcome_key] == "parcellation" else "secondary"
+            )):
+                st.session_state[outcome_key] = "parcellation"
+                st.session_state["wizard_step"] = 1
+                st.rerun()
+
+    if st.session_state[outcome_key]:
+        st.success(
+            f"Selected: **{'Normalize metabolite maps' if st.session_state[outcome_key] == 'normalize' else 'Parcellation and connectivity'}**. "
+            "Click Next below, or choose the other card to switch."
+        )
+
+    st.divider()
+    st.caption(
+        "Already know exactly which steps you want? "
+        "Use the checkbox below to build a fully custom pipeline instead of the guided wizard."
+    )
+    # This checkbox's own widget is only ever rendered here, on the
+    # Analysis step -- once checked, _render_wizard_page renders the Custom
+    # Pipeline tab instead of any wizard step, so this widget (and
+    # therefore its session_state entry, per WIZARD_SHADOW_PREFIX's module
+    # comment) stops existing on the very next rerun. "wizard_advanced_steps"
+    # itself (read by _render_wizard_page, not this widget's own key) is
+    # therefore a plain state flag, never a widget key -- set directly by
+    # this checkbox's on_change, not via `key=`.
+    advanced_checked = st.checkbox(
+        "Build a fully custom pipeline (advanced)",
+        value=st.session_state.get("wizard_advanced_steps", False),
+        key="wizard_advanced_steps_checkbox",
+        help="Switches to the existing Custom Pipeline tool, where you compose your own ordered "
+        "subset of pipeline steps directly (backs the --steps flag). This is the only place this "
+        "tool ever emits --steps.",
+    )
+    if advanced_checked != st.session_state.get("wizard_advanced_steps", False):
+        # _render_wizard_page's own advanced-mode check runs *before* this
+        # checkbox is ever instantiated (reaching this checkbox at all means
+        # we're not yet in advanced mode) -- so the new value must be
+        # committed and an explicit rerun fired now, or the switch to the
+        # Custom Pipeline tab would only take effect on a *second*
+        # interaction (the next widget change), one rerun late. Mirrors
+        # this file's existing _add_custom_step/_move_custom_step idiom.
+        st.session_state["wizard_advanced_steps"] = advanced_checked
+        st.rerun()
+
+
+def _render_wizard_data_step(optionals: list[argparse.Action], positionals: list[argparse.Action]) -> None:
+    """Step 2: bids_dir/output_dir/mrsi_input_dir/--t1/--mrsinmrs-file,
+    participant selection, --metabolites. Drops analysis_level from being
+    rendered at all (its choices is always exactly ["participant"] today --
+    _collect_wizard_values's own assertion catches a future CLI change that
+    gives it more than one choice). --ref-met and --parcellation-mode live
+    in Processing instead (the reference metabolite depends on which
+    metabolites are picked here; parcellation mode is a processing
+    decision, not a data-selection one)."""
+    action_lookup = {_dest_label(a): a for a in optionals}
+    bids_dir_help = POSITIONAL_HELP.get("bids_dir", "")
+    output_dir_help = POSITIONAL_HELP.get("output_dir", "")
+    bids_label, bids_help = _wizard_label_help("bids_dir", "bids_dir", bids_dir_help)
+    output_label, output_help = _wizard_label_help("output_dir", "output_dir", output_dir_help)
+
+    # bids_dir/output_dir/t1_pattern are read by Review/the sidebar/
+    # _collect_wizard_values on reruns where this step isn't rendered at
+    # all -- shadow-seed/sync each one (see WIZARD_SHADOW_PREFIX's module
+    # comment), since Streamlit deletes a widget's session_state entry
+    # once its widget stops being instantiated.
+    bids_dir_key = f"{WIZARD_KEY_PREFIX}bids_dir"
+    if bids_dir_key not in st.session_state:
+        st.session_state[bids_dir_key] = _wizard_shadow_get("bids_dir", "")
+    output_dir_key = f"{WIZARD_KEY_PREFIX}output_dir"
+    if output_dir_key not in st.session_state:
+        st.session_state[output_dir_key] = _wizard_shadow_get("output_dir", "")
+
+    st.header("Where is your data?")
+    col1, col2 = st.columns(2)
+    with col1:
+        bids_dir = st.text_input(f"{bids_label} (bids_dir)", help=bids_help, key=bids_dir_key)
+        _wizard_shadow_set("bids_dir", bids_dir)
+        if bids_dir and not Path(bids_dir).exists():
+            st.caption(f":red[Folder not found: {bids_dir}]")
+        elif bids_dir:
+            st.caption(":green[Found.]")
+    with col2:
+        output_dir = st.text_input(f"{output_label} (output_dir)", help=output_help, key=output_dir_key)
+        _wizard_shadow_set("output_dir", output_dir)
+        if output_dir:
+            st.caption(f"Will create `{output_dir.rstrip('/')}/mrsiprep`.")
+
+    t1_action = action_lookup["--t1"]
+    t1_label, t1_help = _wizard_label_help("t1_pattern", "--t1", (t1_action.help or "").strip())
+    t1_key = f"{WIZARD_KEY_PREFIX}t1_pattern"
+    if t1_key not in st.session_state:
+        st.session_state[t1_key] = _wizard_shadow_get("t1_pattern", t1_action.default)
+    t1_pattern = st.text_input(f"{t1_label} (--t1)", help=t1_help, key=t1_key)
+    _wizard_shadow_set("t1_pattern", t1_pattern)
+
+    normalized_mrsi_root = str(_normalize_mrsi_input_dir(bids_dir)) if bids_dir else ""
+    st.subheader("Raw MRSI data location")
+    mrsi_input_label, mrsi_input_help = _wizard_label_help(
+        "mrsi_input_dir", "--mrsi-input-dir", (action_lookup["--mrsi-input-dir"].help or "").strip()
+    )
+    effective_mrsi_input_dir, mrsi_input_custom = _render_path_mode_field(
+        "mrsi_input_dir", "--mrsi-input-dir", bids_dir, f"{mrsi_input_label}. {mrsi_input_help}"
+    )
+    normalized_effective_root = (
+        str(_normalize_mrsi_input_dir(effective_mrsi_input_dir)) if effective_mrsi_input_dir else normalized_mrsi_root
+    )
+    default_mrsinmrs_file = f"{normalized_effective_root}/derivatives/mrsi-orig/mrsinmrs.json" if normalized_effective_root else ""
+
+    mrsinmrs_label, mrsinmrs_help = _wizard_label_help(
+        "mrsinmrs_file", "--mrsinmrs-file", (action_lookup["--mrsinmrs-file"].help or "").strip()
+    )
+    effective_mrsinmrs_file, _mrsinmrs_custom = _render_path_mode_field(
+        "mrsinmrs_file", "--mrsinmrs-file", default_mrsinmrs_file, f"{mrsinmrs_label}. {mrsinmrs_help}"
+    )
+    if effective_mrsinmrs_file:
+        st.caption(f"Acquisition metadata: `{effective_mrsinmrs_file}`")
+
+    st.subheader("Which participants?")
+    _render_participant_selection(
+        action_lookup["--participant-label"], action_lookup["--session-label"],
+        action_lookup["--participants"], bids_dir,
+    )
+
+    st.subheader("Metabolites")
+    nucleus = _wizard_shadow_get("nucleus") or DEFAULT_NUCLEUS
+    metabolites = _render_metabolites_widget(action_lookup["--metabolites"], nucleus=nucleus)
+    if not metabolites:
+        st.warning("Choose at least one metabolite to continue.")
+
+
+def _render_wizard_flag_group(
+    flags: list[str], action_lookup: dict[str, argparse.Action], rendered_flags: set[str]
+) -> None:
+    """Renders exactly `flags`' widgets under WIZARD_KEY_PREFIX, reusing the
+    same per-flag conditional-visibility rules _render_custom_step_widgets
+    already applies (backend-specific flags shown only once a backend is
+    picked, chimera-scheme-picker-when-chimera, atlas-only-when-atlas-mode)
+    -- copied rather than reimplemented, per the plan. `rendered_flags` is
+    shared across every call in one Processing-step render (flags owned by
+    more than one CUSTOM_STEP_FLAGS step, e.g. --ref-met/--tissue-backend,
+    must still get exactly one widget)."""
+    backend_choice = None
+    for flag in flags:
+        if flag in rendered_flags:
+            continue
+        action = action_lookup.get(flag)
+        if action is None:
+            continue
+
+        # Re-read on every iteration (rather than once before the loop):
+        # when --parcellation-mode is itself one of `flags` (it always is,
+        # for the "Parcellation and connectivity" expander, which lists
+        # --parcellation-mode first in CUSTOM_STEP_FLAGS["mrsi_parcellation"]),
+        # the very first time the user switches it to "chimera"/"atlas" this
+        # loop must see the *new* value for the chimera-scheme/atlas flags
+        # later in the same pass, not a value captured before that widget
+        # ran this call.
+        parcellation_mode_value = _wizard_shadow_get("parcellation_mode")
+
+        if flag == "--ref-met":
+            # Already rendered once at the top of the Processing step (its
+            # own dropdown, populated from Data's chosen metabolites) --
+            # never re-rendered generically here.
+            rendered_flags.add(flag)
+            continue
+        if flag == "--registration-backend":
+            backend_choice = _widget_for(action, key_prefix=WIZARD_KEY_PREFIX)
+            rendered_flags.add(flag)
+            continue
+        if flag in BACKEND_SPECIFIC_FLAGS:
+            continue  # rendered below, once backend_choice is known
+        if flag in ("--chimera-scheme", "--chimera-scale", "--chimera-grow"):
+            continue  # rendered together below, once --parcellation-mode is known
+        if flag == "--fs-subjects-dir" and parcellation_mode_value != "chimera":
+            continue
+        if flag in ("--atlas", "--custom-atlas", "--custom-atlas-lut") and parcellation_mode_value != "atlas":
+            continue
+        if flag == "--atlas":
+            # _render_atlas_widget doesn't go through _widget_for, so it
+            # never shadow-syncs on its own (see WIZARD_SHADOW_PREFIX's
+            # module comment) -- do it explicitly here, or --atlas would
+            # silently never reach Review/_collect_wizard_values.
+            if f"{WIZARD_KEY_PREFIX}atlas" not in st.session_state:
+                shadow_atlas = _wizard_shadow_get("atlas")
+                if shadow_atlas is not None:
+                    st.session_state[f"{WIZARD_KEY_PREFIX}atlas"] = shadow_atlas
+            atlas_value = _render_atlas_widget(action, key_prefix=WIZARD_KEY_PREFIX)
+            _wizard_shadow_set("atlas", atlas_value)
+            rendered_flags.add(flag)
+            continue
+
+        _widget_for(action, key_prefix=WIZARD_KEY_PREFIX)
+        rendered_flags.add(flag)
+
+    if backend_choice is not None:
+        wanted = ANTS_ONLY_FLAGS if backend_choice == "ants" else FSL_ONLY_FLAGS
+        for flag in flags:
+            if flag in wanted and flag not in rendered_flags:
+                st.caption(f"Shown because registration backend is set to {backend_choice}.")
+                _widget_for(action_lookup[flag], key_prefix=WIZARD_KEY_PREFIX)
+                rendered_flags.add(flag)
+
+    if (
+        "--chimera-scheme" in flags
+        and _wizard_shadow_get("parcellation_mode") == "chimera"
+        and "--chimera-scheme" not in rendered_flags
+    ):
+        st.caption("Shown because the parcellation method is set to 'chimera'.")
+        st.markdown("**Chimera scheme** -- one atlas per supra-region, guided:")
+        # _render_chimera_scheme_picker doesn't go through _widget_for
+        # either -- shadow-sync its three return values explicitly (see
+        # the --atlas handling above and WIZARD_SHADOW_PREFIX's module
+        # comment), or they'd silently never reach Review.
+        code, scale, grow = _render_chimera_scheme_picker(
+            action_lookup["--chimera-scheme"], action_lookup["--chimera-scale"], action_lookup["--chimera-grow"],
+            key_prefix=WIZARD_KEY_PREFIX,
+        )
+        _wizard_shadow_set("chimera_scheme", code)
+        _wizard_shadow_set("chimera_scale", scale)
+        _wizard_shadow_set("chimera_grow", grow)
+        rendered_flags.update({"--chimera-scheme", "--chimera-scale", "--chimera-grow"})
+
+
+def _render_wizard_processing_step(optionals: list[argparse.Action]) -> None:
+    """Step 3: a one-line plain-language summary, --ref-met (populated from
+    Data's chosen metabolites), then four collapsed-by-default expanders
+    grouping CUSTOM_STEP_FLAGS per plan §3. The "Parcellation and
+    connectivity" expander is the one place wizard_outcome changes
+    rendering: expanded by default for the "parcellation" outcome,
+    collapsed (never hidden -- parcellation always runs) otherwise."""
+    action_lookup = {_dest_label(a): a for a in optionals}
+
+    st.header("Processing options")
+    st.caption(
+        "MRSIPrep always runs the full pipeline: load and quality-mask the MRSI data, correct and "
+        "register it to your T1w anatomical and standard space, segment tissue for partial-volume "
+        "correction, parcellate the brain into regions, and build the final QC report. The options "
+        "below fine-tune how each stage runs; sensible defaults are already filled in."
+    )
+
+    metabolites = list(_wizard_shadow_get("metabolites") or [])
+    ref_met_action = action_lookup["--ref-met"]
+    _render_ref_met_widget(ref_met_action, metabolites)
+
+    outcome = st.session_state.get("wizard_outcome")
+    rendered_flags: set[str] = {"--metabolites"}
+
+    with st.expander("Registration", expanded=False):
+        flags = []
+        for step in PROCESSING_EXPANDER_STEP_GROUPS["Registration"]:
+            flags.extend(CUSTOM_STEP_FLAGS[step])
+        _render_wizard_flag_group(flags, action_lookup, rendered_flags)
+
+    with st.expander("Tissue and relaxation corrections", expanded=False):
+        flags = []
+        for step in PROCESSING_EXPANDER_STEP_GROUPS["Tissue and relaxation corrections"]:
+            flags.extend(CUSTOM_STEP_FLAGS[step])
+        _render_wizard_flag_group(flags, action_lookup, rendered_flags)
+
+    with st.expander("Parcellation and connectivity", expanded=(outcome == "parcellation")):
+        st.caption("Parcellation always runs (lightweight SynthSeg by default); these options are optional.")
+        flags = []
+        for step in PROCESSING_EXPANDER_STEP_GROUPS["Parcellation and connectivity"]:
+            flags.extend(CUSTOM_STEP_FLAGS[step])
+        _render_wizard_flag_group(flags, action_lookup, rendered_flags)
+
+    with st.expander("Runtime and existing outputs", expanded=False):
+        _render_wizard_flag_group(list(RUNTIME_EXPANDER_FLAGS), action_lookup, rendered_flags)
+
+
+def _render_wizard_review_step(optionals: list[argparse.Action], positionals: list[argparse.Action]) -> None:
+    """Step 4: plain-language summary, inline validation split into "Ready
+    to copy" vs. "Incomplete configuration" (never both -- the command is
+    withheld entirely, not shown with placeholder tokens, when anything
+    blocks), the generated command in a copyable st.code block once valid,
+    a short "where to run this" note, the existing preflight button/
+    _compute_preflight/_render_preflight_result moved here (rendered
+    inline, not via st.switch_page), and the existing pipeline flowchart in
+    a collapsed-by-default expander."""
+    positional_values, values = _collect_wizard_values(optionals, positionals)
+    statuses = _compute_field_statuses(values, positional_values)
+    blocking = _wizard_blocking_messages(statuses)
+
+    st.header("Review and copy")
+
+    metabolites = values.get("--metabolites") or []
+    participant_mode = _wizard_shadow_get("participant_mode") or "All participants"
+    outcome = st.session_state.get("wizard_outcome")
+    outcome_label = {
+        "normalize": "Normalize metabolite maps", "parcellation": "Parcellation and connectivity",
+    }.get(outcome, "(not chosen)")
+
+    st.markdown(
+        f"- **Analysis:** {outcome_label}\n"
+        f"- **Dataset folder:** `{positional_values.get('bids_dir') or '(not set)'}`\n"
+        f"- **Output folder:** `{positional_values.get('output_dir') or '(not set)'}`\n"
+        f"- **Participants:** {participant_mode}\n"
+        f"- **Metabolites:** {len(metabolites)} selected"
+        + (f" ({', '.join(metabolites)})" if metabolites else "")
+    )
+
+    if blocking:
+        st.error("**Incomplete configuration** -- fix the following before copying a command:")
+        for message in blocking:
+            st.markdown(f"- {message}")
+    else:
+        st.success("**Ready to copy.**")
+        command = _build_command(positional_values, optionals, values)
+        with st.expander("Generated command", expanded=True):
+            st.code(command, language="bash")
+            st.caption(
+                "Run this on the machine with Docker installed and your dataset mounted -- see "
+                "`mrsiprep-docker` in docs/usage_basic.md. This tool never executes it for you."
+            )
+
+    for dest, (level, message) in statuses.items():
+        if level == "warn":
+            st.warning(message)
+
+    st.divider()
+    st.subheader("Preflight check")
+    st.caption(
+        "Checks the existence and validity of the input files (T1w, raw MRSI maps, mrsinmrs.json) "
+        "for every recording matched above -- no Docker, no processing, nothing written to disk."
+    )
+    preflight_ready = not blocking
+    if st.button(
+        "Run preflight check", key="wizard_run_preflight_btn", disabled=not preflight_ready,
+        help="Fill in every required field above to enable this." if not preflight_ready else None,
+    ):
+        progress_bar = st.progress(0.0, text="Checking inputs...")
+
+        def _update_progress(done, total, recording_id):
+            progress_bar.progress(
+                done / total if total else 1.0, text=f"Checking inputs... ({done}/{total}) {recording_id}",
+            )
+
+        st.session_state["preflight_result"] = _compute_preflight(
+            positional_values, optionals, values, progress=_update_progress
+        )
+        progress_bar.empty()
+
+    if st.session_state.get("preflight_result") is not None:
+        _render_preflight_result(st.session_state["preflight_result"])
+
+    with st.expander("Pipeline diagram", expanded=False):
+        _render_step_flowchart(list(CUSTOM_STEP_FLAGS), values)
+
+
+def _render_step_nav(num_steps: int, statuses: dict[str, tuple[str, str]]) -> None:
+    """Manual button row (st.columns), not st.tabs/st.radio -- neither
+    supports programmatic "jump to step N" / "Next disabled until valid"
+    cleanly (plan §5.1). Each step also gets its own Back/Next pair; Next is
+    disabled while the *current* step has a blocking (tier 1) issue. Moving
+    wizard_step is a direct session_state assignment + st.rerun(), mirroring
+    this file's existing _move_custom_step idiom."""
+    step = st.session_state["wizard_step"]
+    # Each step only gates Next on the blocking checks that are actually
+    # *its own* fields -- Data's Next must not stay disabled over a
+    # Processing-only issue (e.g. --ref-met/--fs-license, neither of which
+    # Data even renders), or the user could never leave Data until they'd
+    # also finished Processing, defeating the step-by-step design.
+    _DATA_STEP_STATUS_DESTS = {"bids_dir", "output_dir", "metabolites"}
+    data_blocking = [
+        message for dest, (level, message) in statuses.items()
+        if level == "block" and dest in _DATA_STEP_STATUS_DESTS
+    ]
+
+    cols = st.columns(num_steps)
+    for i, title in enumerate(WIZARD_STEP_TITLES):
+        with cols[i]:
+            marker = "●" if i == step else ("✔" if i < step else "○")
+            if st.button(f"{marker} {i + 1}. {title}", key=f"wizard_nav_{i}", disabled=(i == step)):
+                st.session_state["wizard_step"] = i
+                st.rerun()
+
+    st.markdown("---")
+    col_back, col_spacer, col_next = st.columns([1, 4, 1])
+    with col_back:
+        if st.button("Back", key="wizard_back_btn", disabled=(step == 0)):
+            st.session_state["wizard_step"] = step - 1
+            st.rerun()
+    with col_next:
+        # Review (the last step) has no Next -- "Run preflight check" and
+        # the copyable command are its own terminal actions.
+        if step < num_steps - 1:
+            next_disabled = step == 1 and bool(data_blocking)  # Data step: gate on bids_dir/output_dir/metabolites
+            if st.button("Next", key="wizard_next_btn", disabled=next_disabled, type="primary"):
+                st.session_state["wizard_step"] = step + 1
+                st.rerun()
+            if next_disabled:
+                st.caption(":red[Finish the required fields above to continue.]")
+
+
+def _render_wizard_sidebar_summary(statuses: dict[str, tuple[str, str]]) -> None:
+    """Persistent summary in st.sidebar (this file used no sidebar before),
+    populated every rerun: outcome chosen, participant mode, metabolite
+    count, output folder status, and one "Next: <thing>" nudge computed
+    from the same blocking-check dict, in a fixed priority order (plan
+    §5.2)."""
+    with st.sidebar:
+        st.subheader("MRSIPrep Command Builder")
+        outcome = st.session_state.get("wizard_outcome")
+        outcome_label = {
+            "normalize": "Normalize metabolite maps", "parcellation": "Parcellation and connectivity",
+        }.get(outcome, "Not chosen yet")
+        st.caption(f"**Analysis:** {outcome_label}")
+
+        participant_mode = _wizard_shadow_get("participant_mode") or "All participants"
+        st.caption(f"**Participants:** {participant_mode}")
+
+        metabolites = _wizard_shadow_get("metabolites") or []
+        st.caption(f"**Metabolites:** {len(metabolites)} selected")
+
+        output_dir = _wizard_shadow_get("output_dir") or ""
+        output_status = "not set" if not output_dir else ("found" if Path(output_dir).exists() else "will be created")
+        st.caption(f"**Output folder:** {output_status}")
+
+        priority = ["bids_dir", "output_dir", "metabolites", "ref_met", "fs_license"]
+        next_thing = None
+        for dest in priority:
+            level_message = statuses.get(dest)
+            if level_message and level_message[0] == "block":
+                next_thing = level_message[1]
+                break
+        if next_thing:
+            st.info(f"**Next:** {next_thing}")
+        else:
+            st.success("Ready for Review.")
+
+
+def _render_wizard_page() -> None:
     st.title("MRSIPrep Command Builder")
     st.caption(
         "Builds a runnable `mrsiprep-docker` command from the actual CLI definition. "
@@ -925,452 +1885,53 @@ def _render_command_builder_page() -> None:
         and _dest_label(a) not in EXCLUDED_FLAGS
         and _dest_label(a) not in NEGATIVE_FLAG_PAIRS
     ]
-    # Flags marked required=True (e.g. --metabolites, --ref-met) belong in the
-    # "Required arguments" section, not buried in a tab.
-    required_optionals = [a for a in optionals if a.required]
-    other_optionals = [a for a in optionals if not a.required]
-
-    # --parcellation-mode and --fs-license need to be known/rendered before
-    # the rest of "Required arguments", since --fs-license is only mandatory
-    # when chimera is selected -- pull both out of the normal options flow.
-    parcellation_mode_action = next(a for a in other_optionals if _dest_label(a) == "--parcellation-mode")
-    fs_license_action = next(a for a in other_optionals if _dest_label(a) == "--fs-license")
-    chimera_scheme_action = next(a for a in other_optionals if _dest_label(a) == "--chimera-scheme")
-    chimera_scale_action = next(a for a in other_optionals if _dest_label(a) == "--chimera-scale")
-    chimera_grow_action = next(a for a in other_optionals if _dest_label(a) == "--chimera-grow")
-    t1_pattern_action = next(a for a in other_optionals if _dest_label(a) == "--t1")
-    participants_action = next(a for a in other_optionals if _dest_label(a) == "--participants")
-    other_optionals = [
-        a for a in other_optionals
-        if _dest_label(a) not in (
-            "--parcellation-mode", "--fs-license", "--mrsi-input-dir", "--t1", "--mrsinmrs-file", "--participants",
-        )
-    ]
     action_lookup = _flag_action_lookup(optionals)
 
-    # Required arguments are shared by both modes below -- rendered once,
-    # here, with a single set of widget keys, so filling them out doesn't
-    # depend on (or get cleared by) which mode tab is active.
-    positional_values, values, parcellation_mode = _render_required_args_section(
-        positionals, required_optionals, optionals, parcellation_mode_action, fs_license_action,
-        t1_pattern_action, participants_action,
-        key_prefix="field_", show_preflight=True,
-    )
+    st.session_state.setdefault("wizard_step", 0)
+    st.session_state.setdefault("wizard_outcome", None)
+    st.session_state.setdefault("wizard_advanced_steps", False)
 
-    st.markdown("---")
-    # One shared "Generated command" box above the mode switch, instead of
-    # each tab rendering its own -- whichever mode is active fills this same
-    # slot. Relies on the tabs below having state tracking enabled
-    # (key=... + on_change="rerun"), which also makes only the active tab's
-    # body run each time (lazy execution) -- otherwise both tabs would
-    # execute every rerun and race to overwrite this one placeholder.
-    st.header("Generated command")
-    st.caption("Updates live as you fill in the form below. Copy and run it yourself -- this page never executes it.")
-    command_slot = st.empty()
-
-    st.markdown(
-        "<style>"
-        # Scoped to the .st-key-mode_select_tabs wrapper only (see the
-        # st.container(key=...) below), so the Standardized tab's own
-        # nested topic tabs (Registration/Parcellation/...) keep their
-        # normal size -- only this top-level Standardized/Custom choice
-        # is enlarged.
-        ".st-key-mode_select_tabs div[data-testid='stTabs'] button[data-baseweb='tab'] p "
-        "{font-size: 1.9rem; font-weight: 800;}"
-        ".st-key-mode_select_tabs div[data-testid='stTabs'] button[data-baseweb='tab'] "
-        "{padding: 1.1rem 2.2rem;}"
-        "</style>",
-        unsafe_allow_html=True,
-    )
-    with st.container(key="mode_select_tabs"):
-        top_tabs = st.tabs(
-            ["Standardized Pipeline", "Custom Pipeline"], key="mode_tabs", on_change="rerun",
+    if st.session_state["wizard_advanced_steps"]:
+        st.info(
+            "Advanced mode: composing a custom --steps subset directly. Uncheck the box in Analysis "
+            "to return to the guided wizard."
         )
-        with top_tabs[0]:
-            if top_tabs[0].open:
-                command = _render_standardized_pipeline_tab(
-                    optionals, other_optionals, positional_values, dict(values), parcellation_mode,
-                    chimera_scheme_action, chimera_scale_action, chimera_grow_action,
-                )
-                command_slot.code(command, language="bash")
-        with top_tabs[1]:
-            if top_tabs[1].open:
-                command = _render_custom_pipeline_tab(
-                    optionals, action_lookup, positional_values, dict(values),
-                )
-                command_slot.code(command, language="bash")
+        if st.button("← Back to guided wizard"):
+            st.session_state["wizard_advanced_steps"] = False
+            st.rerun()
+        positional_values, values = _collect_wizard_values(optionals, positionals)
+        command = _render_custom_pipeline_tab(optionals, action_lookup, positional_values, values)
+        st.header("Generated command")
+        st.code(command, language="bash")
+        return
 
+    # The nav row's Next-button gate and the sidebar summary both need this
+    # run's freshest statuses -- but those depend on shadow state that the
+    # step body below is what actually updates (e.g. the very first rerun
+    # where Data's three fields all become valid: _collect_wizard_values
+    # called here, before _render_wizard_data_step runs, would still see
+    # last run's stale values, leaving Next looking disabled one extra
+    # interaction longer than necessary). Reserve the nav's slot with
+    # st.empty() now (so it still renders at the top, above the step body,
+    # matching the plan's layout) but fill it only after the step body has
+    # run and updated this run's shadow state.
+    nav_slot = st.empty()
 
-def _render_required_args_section(
-    positionals: list[argparse.Action],
-    required_optionals: list[argparse.Action],
-    optionals: list[argparse.Action],
-    parcellation_mode_action: argparse.Action,
-    fs_license_action: argparse.Action,
-    t1_pattern_action: argparse.Action,
-    participants_action: argparse.Action,
-    key_prefix: str = "field_",
-    show_preflight: bool = True,
-) -> tuple[dict, dict, str | None]:
-    """Renders the "Required arguments" section (bids_dir/output_dir/
-    mrsi_input_dir/--t1/--mrsinmrs-file/--participants/--metabolites/
-    --ref-met/etc., plus the --parcellation-mode/--fs-license pair) shared
-    by both the Standardized and Custom Pipeline tabs. `key_prefix` isolates
-    each tab's copy's session-state keys (see _widget_for); `show_preflight`
-    is off for the Custom tab, where the same file-presence checks would be
-    redundant with the Standardized tab's own button.
+    step = st.session_state["wizard_step"]
+    if step == 0:
+        _render_wizard_analysis_step()
+    elif step == 1:
+        _render_wizard_data_step(optionals, positionals)
+    elif step == 2:
+        _render_wizard_processing_step(optionals)
+    elif step == 3:
+        _render_wizard_review_step(optionals, positionals)
 
-    Returns (positional_values, values, parcellation_mode) -- the two dicts
-    the caller keeps populating, plus the resolved --parcellation-mode value
-    (needed by callers to gate mode-specific widgets further down)."""
-    st.header("Required arguments")
-    col1, chk1, col2, col3 = st.columns([4, 1, 4, 5])
-    with col1:
-        bids_dir = st.text_input("bids_dir", help=POSITIONAL_HELP.get("bids_dir", ""), key=f"{key_prefix}bids_dir_text")
-    with chk1:
-        _render_check(_path_check(bids_dir), "bids_dir must point to an existing folder")
-    with col2:
-        output_dir = st.text_input("output_dir", help=POSITIONAL_HELP.get("output_dir", ""), key=f"{key_prefix}output_dir_text")
-    # --mrsi-input-dir accepts either a bids_dir-equivalent root or the
-    # mrsi-<space> data folder itself (e.g. ".../derivatives/mrsi-orig") --
-    # BIDSLayout normalizes either spelling to the same root
-    # (mrsiprep/io/bids.py:_normalize_mrsi_input_dir), so the caption below
-    # mirrors that same normalization rather than blindly appending
-    # "derivatives/mrsi-orig" onto whatever was typed.
-    with col3:
-        mrsi_input_dir_custom_before = st.session_state.get(f"{key_prefix}mrsi_input_dir_custom", False)
-        if not mrsi_input_dir_custom_before:
-            # Disabled (auto-filled) mode: force-sync to bids_dir every rerun,
-            # since the field is read-only here. Once custom mode is on, the
-            # widget's own session-state (keyed below) takes over and must
-            # NOT be overwritten by a `value=` on every rerun, or the user's
-            # typed path would be reverted to bids_dir on every interaction.
-            st.session_state[f"{key_prefix}mrsi_input_dir"] = bids_dir
-        # Input, its "Custom path" checkbox, and a status check share one
-        # sub-row instead of stacking, so this column's height matches
-        # bids_dir/output_dir's single-line columns rather than making the
-        # whole row taller.
-        sub_input, sub_check, sub_mark = st.columns([3, 1, 1])
-        with sub_input:
-            mrsi_input_dir = st.text_input(
-                "mrsi_input_dir",
-                disabled=not mrsi_input_dir_custom_before,
-                key=f"{key_prefix}mrsi_input_dir",
-                help="Root folder with the raw MRSI derivatives. Either bids_dir's own kind of root, "
-                "or the data folder itself (e.g. ending in 'derivatives/mrsi-orig') -- both are "
-                "accepted. Leave unchecked to use bids_dir itself.",
-            )
-        with sub_check:
-            st.markdown(
-                "<div style='font-size:.72rem;font-weight:700;color:#58667d'>Custom Path</div>",
-                unsafe_allow_html=True,
-            )
-            mrsi_input_dir_custom = st.checkbox(
-                "Custom",
-                value=mrsi_input_dir_custom_before,
-                key=f"{key_prefix}mrsi_input_dir_custom",
-                label_visibility="collapsed",
-                help="Off by default, which keeps mrsi_input_dir the same as bids_dir -- the usual "
-                "MRSIPrep convention. Check this only if the MRSI acquisition tree lives in a "
-                "separate folder from bids_dir.",
-            )
-        effective_mrsi_input_dir = mrsi_input_dir if (mrsi_input_dir_custom and mrsi_input_dir) else bids_dir
-        with sub_mark:
-            _render_check(_path_check(effective_mrsi_input_dir), "The MRSI input root must exist")
-    normalized_mrsi_root = str(_normalize_mrsi_input_dir(effective_mrsi_input_dir)) if effective_mrsi_input_dir else ""
-    default_mrsi_data_dir = f"{normalized_mrsi_root}/derivatives/mrsi-orig" if normalized_mrsi_root else ""
-    default_mrsinmrs_file = f"{default_mrsi_data_dir}/mrsinmrs.json" if default_mrsi_data_dir else ""
-    if output_dir:
-        st.caption(f"This will create a folder `{output_dir.rstrip('/')}/mrsiprep`.")
-    if default_mrsi_data_dir:
-        st.caption(f"This will load raw MRSI images from `{default_mrsi_data_dir}`.")
-
-    analysis_level_action = next(a for a in positionals if a.dest == "analysis_level")
-    col_analysis, col4, col5 = st.columns([1, 2, 2])
-    with col_analysis:
-        analysis_level = _widget_for(analysis_level_action, key_prefix=key_prefix)
-    with col4:
-        t1_pattern = st.text_input(
-            "--t1",
-            value=t1_pattern_action.default,
-            help=t1_pattern_action.help,
-            key=f"{key_prefix}t1_pattern_text",
-        )
-    with col5:
-        mrsinmrs_file_custom_before = st.session_state.get(f"{key_prefix}mrsinmrs_file_custom", False)
-        if not mrsinmrs_file_custom_before:
-            st.session_state[f"{key_prefix}mrsinmrs_file"] = default_mrsinmrs_file
-        sub_input2, sub_check2, sub_mark2 = st.columns([3, 1, 1])
-        with sub_input2:
-            mrsinmrs_file = st.text_input(
-                "--mrsinmrs-file",
-                disabled=not mrsinmrs_file_custom_before,
-                key=f"{key_prefix}mrsinmrs_file",
-            )
-        with sub_check2:
-            st.markdown(
-                "<div style='font-size:.72rem;font-weight:700;color:#58667d'>Custom Path</div>",
-                unsafe_allow_html=True,
-            )
-            mrsinmrs_file_custom = st.checkbox(
-                "Custom",
-                value=mrsinmrs_file_custom_before,
-                key=f"{key_prefix}mrsinmrs_file_custom",
-                label_visibility="collapsed",
-                help="Off by default, which keeps --mrsinmrs-file at <mrsi_input_dir>/derivatives/"
-                "mrsi-orig/mrsinmrs.json -- the usual MRSIPrep convention. Check this only if the "
-                "acquisition metadata file lives somewhere else.",
-            )
-        with sub_mark2:
-            effective_mrsinmrs_file = mrsinmrs_file if (mrsinmrs_file_custom and mrsinmrs_file) else default_mrsinmrs_file
-            _render_check(_path_check(effective_mrsinmrs_file), "mrsinmrs.json must exist")
-    # Fold the two path captions into one compact line instead of two,
-    # and skip it entirely once neither path is known yet (nothing to show).
-    path_notes = []
-    if output_dir:
-        path_notes.append(f"creates `{output_dir.rstrip('/')}/mrsiprep`")
-    if default_mrsi_data_dir:
-        path_notes.append(f"loads raw MRSI from `{default_mrsi_data_dir}`")
-    if mrsinmrs_file_custom and mrsinmrs_file:
-        path_notes.append(f"metadata from `{mrsinmrs_file}`")
-    elif default_mrsinmrs_file:
-        path_notes.append(f"metadata from `{default_mrsinmrs_file}`")
-    if path_notes:
-        st.caption(" &middot; ".join(path_notes), unsafe_allow_html=False)
-
-    positional_values = {
-        "bids_dir": bids_dir, "output_dir": output_dir, "analysis_level": analysis_level,
-    }
-    values_input_paths = {}
-    if mrsi_input_dir_custom and mrsi_input_dir:
-        values_input_paths["--mrsi-input-dir"] = mrsi_input_dir
-    if mrsinmrs_file_custom and mrsinmrs_file:
-        values_input_paths["--mrsinmrs-file"] = mrsinmrs_file
-    for action in positionals:
-        if action.dest in positional_values:
-            continue
-        positional_values[action.dest] = _widget_for(action, key_prefix=key_prefix)
-
-    # --participants keeps its own row (it already packs input/checkbox/View
-    # into one line internally -- see _render_participants_widget); nesting
-    # it into a column here would leave too little width for its own
-    # sub-columns. --metabolites/--ref-met/--parcellation-mode (and any
-    # other required flag) instead share one packed row below it, rather
-    # than each taking a full-width line of its own -- the single biggest
-    # height saving in this section.
-    participants_value = _render_participants_widget(participants_action, bids_dir, key_prefix=key_prefix)
-
-    metabolites_action = next(a for a in required_optionals if _dest_label(a) == "--metabolites")
-    other_required = [a for a in required_optionals if _dest_label(a) != "--metabolites"]
-    # Each required selectbox/input gets a slightly wider column than its
-    # checkmark, which only needs enough room for one glyph.
-    col_widths = [3, 1] * (1 + len(other_required)) + [3]
-    cols = st.columns(col_widths)
-    col_m, chk_m, *rest_cols = cols
-    with col_m:
-        metabolites_value = _widget_for(metabolites_action, key_prefix=key_prefix)
-    with chk_m:
-        _render_check(bool(metabolites_value), "At least one metabolite is required")
-    required_values = {}
-    other_required_ok = True
-    for i, action in enumerate(other_required):
-        col, chk = rest_cols[2 * i], rest_cols[2 * i + 1]
-        with col:
-            value = _widget_for(action, key_prefix=key_prefix)
-        required_values[_dest_label(action)] = value
-        ok = bool(value)
-        other_required_ok = other_required_ok and ok
-        with chk:
-            _render_check(ok, f"{_dest_label(action)} is required")
-    with rest_cols[-1]:
-        parcellation_mode = _widget_for(parcellation_mode_action, key_prefix=key_prefix)
-
-    values: dict[str, object] = dict(values_input_paths)
-    if participants_value:
-        values[_dest_label(participants_action)] = participants_value
-    values[_dest_label(t1_pattern_action)] = t1_pattern
-    values[_dest_label(metabolites_action)] = metabolites_value
-    values.update(required_values)
-    values[_dest_label(parcellation_mode_action)] = parcellation_mode
-
-    # Everything the Preflight button actually needs to run meaningfully:
-    # the three path fields resolve to something that exists, plus both
-    # required flags are filled in. --participants is excluded -- it has a
-    # directory-scan fallback, so it's shown with a check but never gates
-    # readiness.
-    preflight_ready = (
-        _path_check(bids_dir)
-        and _path_check(effective_mrsi_input_dir)
-        and _path_check(effective_mrsinmrs_file)
-        and bool(metabolites_value)
-        and other_required_ok
-    )
-
-    if show_preflight:
-        # st.container(key=...) stamps a `.st-key-<key>` class on the
-        # container's own wrapping div, giving the CSS below a stable
-        # selector to center/enlarge the button in, and (when ready) to
-        # color and pulse it -- without touching any other button on the
-        # page (the Standardized/Custom tabs each render their own copy
-        # with a distinct key_prefix, so the two containers never collide).
-        wrap_key = f"{key_prefix}preflight_btn_wrap"
-        css = (
-            # Center by shrinking every wrapper div down to the button's own
-            # width and auto-margining it, rather than relying on a flex
-            # parent -- robust regardless of how many intermediate
-            # Streamlit-internal wrapper divs sit between the keyed
-            # container and the <button> itself.
-            f".st-key-{wrap_key}, .st-key-{wrap_key} > div, .st-key-{wrap_key} [data-testid='stButton'] "
-            f"{{width:fit-content !important;margin-left:auto !important;margin-right:auto !important;}}"
-            f".st-key-{wrap_key} {{margin-top:14px;margin-bottom:4px;}}"
-            f".st-key-{wrap_key} button {{min-width:300px;height:3.2rem;font-size:1.15rem;font-weight:800;}}"
-        )
-        if preflight_ready:
-            css += (
-                f".st-key-{wrap_key} button {{background:#1a7f37;border-color:#166e2e;color:white;"
-                "animation:preflightPulse 1.8s ease-in-out infinite;}"
-                f".st-key-{wrap_key} button:hover {{background:#176b2f;border-color:#166e2e;color:white;}}"
-                "@keyframes preflightPulse{0%{box-shadow:0 0 0 0 rgba(26,127,55,.55);}"
-                "70%{box-shadow:0 0 0 14px rgba(26,127,55,0);}100%{box-shadow:0 0 0 0 rgba(26,127,55,0);}}"
-            )
-        st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
-        with st.container(key=wrap_key):
-            run_preflight = st.button(
-                "▶  Run preflight check" if preflight_ready else "Run preflight check",
-                help="Checks the existence and validity of the input files (T1w, raw MRSI "
-                "maps, mrsinmrs.json) for every recording matched above -- no Docker, no "
-                "processing, nothing written to disk."
-                + ("" if preflight_ready else " Fill in the checked fields above to enable this."),
-                key=f"{key_prefix}run_preflight_btn",
-            )
-        if run_preflight:
-            progress_bar = st.progress(0.0, text="Checking inputs...")
-
-            def _update_progress(done, total, recording_id):
-                progress_bar.progress(
-                    done / total if total else 1.0,
-                    text=f"Checking inputs... ({done}/{total}) {recording_id}",
-                )
-
-            st.session_state["preflight_result"] = _compute_preflight(
-                positional_values, optionals, values, progress=_update_progress
-            )
-            progress_bar.empty()
-            # Results live on their own navigable page (see main()'s
-            # st.navigation/st.Page setup) rather than inline below the
-            # form -- switch there now instead of scrolling down to them.
-            st.switch_page(st.session_state["_preflight_page"])
-
-    if parcellation_mode == "chimera":
-        fs_license_action.required = True
-        st.caption(
-            "⚠️ `chimera` runs real FreeSurfer `recon-all` and needs a license -- fill in `--fs-license` below."
-        )
-        values[_dest_label(fs_license_action)] = _widget_for(fs_license_action, key_prefix=key_prefix)
-
-    return positional_values, values, parcellation_mode
-
-
-def _render_standardized_pipeline_tab(
-    optionals: list[argparse.Action],
-    other_optionals: list[argparse.Action],
-    positional_values: dict,
-    values: dict,
-    parcellation_mode: str | None,
-    chimera_scheme_action: argparse.Action,
-    chimera_scale_action: argparse.Action,
-    chimera_grow_action: argparse.Action,
-) -> str:
-    """Today's full-pipeline form: every flag grouped into topic tabs
-    (Registration/Parcellation/Connectivity/Quality/Workflow/...), unchanged
-    from before the Custom Pipeline tab was added. Required arguments
-    (`positional_values`/`values`/`parcellation_mode`, including
-    --participants) are rendered once in main() and shared with the Custom
-    Pipeline tab, not re-rendered here. Returns the generated command string
-    (the caller owns the shared "Generated command" box above the mode
-    tabs and writes it there) rather than rendering its own copy."""
-    # Preserve the parser's own argument_group order and titles, grouped into tabs.
-    groups: dict[str, list[argparse.Action]] = {}
-    for action in other_optionals:
-        title = getattr(action.container, "title", None) or "Other options"
-        groups.setdefault(title, []).append(action)
-
-    tab_titles = list(TAB_GROUPS) + (["Other"] if any(_tab_for_title(t) == "Other" for t in groups) else [])
-    tabs = st.tabs(tab_titles)
-
-    for tab_name, tab in zip(tab_titles, tabs):
-        with tab:
-            group_titles = [t for t in groups if _tab_for_title(t) == tab_name]
-            for title in group_titles:
-                actions = groups[title]
-                st.subheader(title)
-                backend_choice = None
-                for action in actions:
-                    flag = _dest_label(action)
-
-                    if flag == "--registration-backend":
-                        backend_choice = _widget_for(action)
-                        values[flag] = backend_choice
-                        continue
-
-                    if flag in BACKEND_SPECIFIC_FLAGS:
-                        # Rendered right after the backend selectbox is known,
-                        # further down this same tab -- skip here.
-                        continue
-
-                    if flag in ("--chimera-scheme", "--chimera-scale", "--chimera-grow"):
-                        # Rendered together as the guided per-position picker,
-                        # right after --parcellation-mode is known to be chimera
-                        # -- skip the generic widgets here.
-                        continue
-
-                    if flag == "--fs-subjects-dir" and parcellation_mode != "chimera":
-                        # Only relevant with --parcellation-mode chimera (reuses
-                        # existing recon-all output instead of running it).
-                        continue
-
-                    if flag in ("--atlas", "--custom-atlas", "--custom-atlas-lut") and parcellation_mode != "atlas":
-                        # Only relevant with --parcellation-mode atlas -- hidden
-                        # under synthseg/chimera to keep the paths from blurring
-                        # together (chimera has its own guided scheme picker below).
-                        continue
-
-                    if flag == "--atlas":
-                        values[flag] = _render_atlas_widget(action)
-                        continue
-
-                    values[flag] = _widget_for(action)
-
-                if backend_choice is not None:
-                    # choices are "ants" or one of the fsl spellings
-                    # ("fsl"/"flirt-fnirt"/"flirt_fnirt"/"flirt/fnirt").
-                    wanted = ANTS_ONLY_FLAGS if backend_choice == "ants" else FSL_ONLY_FLAGS
-                    for action in actions:
-                        flag = _dest_label(action)
-                        if flag in wanted:
-                            values[flag] = _widget_for(action)
-
-                if title == "parcellation" and parcellation_mode == "chimera":
-                    st.markdown("**Chimera scheme** -- one atlas per supra-region, guided:")
-                    code, scale, grow = _render_chimera_scheme_picker(
-                        chimera_scheme_action, chimera_scale_action, chimera_grow_action
-                    )
-                    values["--chimera-scheme"] = code
-                    values["--chimera-scale"] = scale
-                    values["--chimera-grow"] = grow
-
-    # Rendered after every topic-tab widget above so --no-filter/
-    # --t1-correction are already resolved into `values` -- the flowchart
-    # must reflect the form's actual current settings, not just the
-    # required-args defaults it would see if rendered earlier.
-    with st.expander("Pipeline flowchart (fixed 19-step order)", expanded=False):
-        # CUSTOM_STEP_FLAGS' key order matches STEP_SEQUENCE's exactly (the
-        # module-level assertion near its definition guarantees this stays
-        # true) -- reused here rather than importing nodes.STEP_SEQUENCE,
-        # which would pull in nipype just to list step names.
-        _render_step_flowchart(list(CUSTOM_STEP_FLAGS), values)
-
-    return _build_command(positional_values, optionals, values)
+    positional_values, values = _collect_wizard_values(optionals, positionals)
+    statuses = _compute_field_statuses(values, positional_values)
+    _render_wizard_sidebar_summary(statuses)
+    with nav_slot.container():
+        _render_step_nav(len(WIZARD_STEP_TITLES), statuses)
 
 
 def _branch_badge(step_name: str) -> str:
@@ -1748,22 +2309,6 @@ def _render_preflight_result(result: dict) -> None:
     st.dataframe(table.style.apply(_style_row, axis=1), use_container_width=True, hide_index=True)
 
 
-def _render_preflight_results_page() -> None:
-    """Its own navigable page (st.navigation, see main()) rather than a
-    block rendered inline at the bottom of the command-builder form --
-    running the preflight check now switches here directly instead of
-    scrolling the form page down to reveal the results."""
-    st.title("Preflight Results")
-    result = st.session_state.get("preflight_result")
-    if result is None:
-        st.info(
-            "No preflight check has been run yet. Go to the Command Builder page, fill in the "
-            "required arguments, and click **Run preflight check** once it lights up green."
-        )
-        return
-    _render_preflight_result(result)
-
-
 def launch() -> None:
     """Entry point for `mrsiprep-build-command` (see pyproject.toml): launches
     this script under `streamlit run` rather than calling main() directly,
@@ -1779,19 +2324,7 @@ def launch() -> None:
 
 def main() -> None:
     st.set_page_config(page_title="MRSIPrep Command Builder", layout="wide")
-    builder_page = st.Page(_render_command_builder_page, title="Command Builder", icon=":material/terminal:", default=True)
-    preflight_page = st.Page(
-        _render_preflight_results_page, title="Preflight Results", icon=":material/fact_check:",
-        url_path=PREFLIGHT_PAGE_URL_PATH,
-    )
-    # st.switch_page() needs the actual Page object, not its url_path string
-    # (confirmed: passing a bare string raises StreamlitPageNotFoundError) --
-    # stashed here since st.Page(...) is called with no arguments by
-    # st.navigation's own dispatch, so _render_command_builder_page has no
-    # other way to reach this run's Page instance.
-    st.session_state["_preflight_page"] = preflight_page
-    nav = st.navigation([builder_page, preflight_page])
-    nav.run()
+    _render_wizard_page()
 
 
 if __name__ == "__main__":
