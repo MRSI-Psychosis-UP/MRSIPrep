@@ -10,6 +10,7 @@ import pandas as pd
 from mrsiprep.config.settings import MRSIPrepConfig
 from mrsiprep.io.naming import coverage_report_dir
 from mrsiprep.reports.connectivity_overview import build_connectivity_qc_sections
+from mrsiprep.reports.mrsi_alignment_overview import build_mrsi_t1w_sections, build_mrsi_template_sections
 from mrsiprep.reports.mrsi_preproc import _render_value_histogram, build_mrsi_preproc_qc_sections
 from mrsiprep.reports.parcellation_overview import build_parcellation_qc_sections
 from mrsiprep.reports.registration_overview import build_mni_alignment_sections, build_t1w_alignment_sections, leakage_table_html
@@ -218,7 +219,7 @@ class RegistrationAlignmentSectionsTests(unittest.TestCase):
             sections = build_mni_alignment_sections(config, "S001", "V1", None)
             self.assertIn("not available for this configuration", _sections_text(sections))
 
-    def test_mni_alignment_adds_a_montage_section_per_metabolite_when_mni_maps_given(self):
+    def test_mrsi_template_tab_has_a_montage_section_per_metabolite(self):
         with tempfile.TemporaryDirectory() as td:
             tmp_path = Path(td)
             config = _make_config(tmp_path)
@@ -232,13 +233,17 @@ class RegistrationAlignmentSectionsTests(unittest.TestCase):
             with mock.patch.object(reg_module, "_load_mni152_head_template", return_value=fake_template), mock.patch.object(
                 reg_module, "render_multi_slice_triplanar_svg_flicker"
             ):
-                sections = build_mni_alignment_sections(
-                    config, "S001", "V1", mni_ref, mni_resolution=5, mni_maps={"CrPCr": mni_ref, "NAANAAG": naa_map}
+                alignment = build_mni_alignment_sections(config, "S001", "V1", mni_ref, mni_resolution=5)
+                sections = build_mrsi_template_sections(
+                    config, "S001", "V1", 5, {"CrPCr": mni_ref, "NAANAAG": naa_map}
                 )
 
             text = _sections_text(sections)
             self.assertIn("Metabolite: CrPCr", text)
             self.assertIn("Metabolite: NAANAAG", text)
+            # The per-metabolite montages moved out of the alignment tab.
+            self.assertNotIn("Metabolite:", _sections_text(alignment))
+            self.assertIsNone(build_mrsi_template_sections(config, "S001", "V1", 5, {}))
 
     def test_mni_alignment_uses_the_multi_slice_renderer(self):
         """The figure is a multi-slice-per-plane montage, not the single
@@ -299,15 +304,15 @@ class RegistrationAlignmentSectionsTests(unittest.TestCase):
             from mrsiprep.reports import registration_overview as reg_module
 
             with mock.patch.object(reg_module, "render_multi_slice_triplanar_svg_flicker"):
-                sections = build_t1w_alignment_sections(
-                    config, "S001", "V1", raw_t1, t1_ref, t1_maps={"CrPCr": t1_ref, "NAANAAG": naa_map}
-                )
+                alignment = build_t1w_alignment_sections(config, "S001", "V1", raw_t1, t1_ref)
+            sections = build_mrsi_t1w_sections(config, "S001", "V1", raw_t1, {"CrPCr": t1_ref, "NAANAAG": naa_map})
 
             text = _sections_text(sections)
             self.assertIn("Metabolite: CrPCr", text)
             self.assertIn("Metabolite: NAANAAG", text)
+            self.assertNotIn("Metabolite:", _sections_text(alignment))
 
-    def test_t1w_alignment_omits_metabolite_montages_without_t1_maps(self):
+    def test_mrsi_t1w_tab_omitted_without_t1_maps(self):
         with tempfile.TemporaryDirectory() as td:
             tmp_path = Path(td)
             config = _make_config(tmp_path)
@@ -317,9 +322,10 @@ class RegistrationAlignmentSectionsTests(unittest.TestCase):
             from mrsiprep.reports import registration_overview as reg_module
 
             with mock.patch.object(reg_module, "render_multi_slice_triplanar_svg_flicker"):
-                sections = build_t1w_alignment_sections(config, "S001", "V1", raw_t1, t1_ref)
+                build_t1w_alignment_sections(config, "S001", "V1", raw_t1, t1_ref)
 
-            self.assertNotIn("Metabolite:", _sections_text(sections))
+            self.assertIsNone(build_mrsi_t1w_sections(config, "S001", "V1", raw_t1, None))
+            self.assertIsNone(build_mrsi_t1w_sections(config, "S001", "V1", raw_t1, {}))
 
     def test_t1w_alignment_uses_the_multi_slice_renderer(self):
         """Same montage style as the Template-space tab, not a single

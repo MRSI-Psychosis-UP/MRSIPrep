@@ -15,7 +15,6 @@ import pandas as pd
 
 from mrsiprep.io.naming import anat_derivative, coverage_report_dir, qc_report_derivative, resampling_work_path
 from mrsiprep.mrsi.resampling import resample_ref_met_to_t1w
-from mrsiprep.reports.mrsi_alignment_overview import build_alignment_metabolite_sections
 from mrsiprep.reports.slices import (
     load_canonical_data,
     load_canonical_data_with_affine,
@@ -56,14 +55,12 @@ def build_t1w_alignment_sections(
     t1_ref_map_path: Path | None,
     orig_ref_map_path: Path | None = None,
     mrsi_to_t1_transforms: list[Path] | None = None,
-    t1_maps: dict[str, Path] | None = None,
 ) -> list[tuple[str, str]]:
     """Returns the T1w-space alignment tab's (heading, body_html) sections.
 
-    ``t1_maps``, when given (the full ``transformed["T1w"]`` dict -- every
-    metabolite, not just ``config.ref_met``), appends one per-metabolite
-    axial alignment montage after the main figure (see
-    :mod:`mrsiprep.reports.mrsi_alignment_overview`).
+    Only the reference metabolite is shown here; every metabolite's
+    T1w-space map gets its own MRSI Space-T1 tab
+    (:mod:`mrsiprep.reports.mrsi_alignment_overview`).
     """
     out = qc_report_derivative(config.derivative_dir, subject, session, "registration")
     figures_dir = coverage_report_dir(config.derivative_dir, subject, session) / "figures"
@@ -106,9 +103,7 @@ def build_t1w_alignment_sections(
             f"{', with the white-matter boundary outlined in light blue' if wm_mask is not None else ''}.{cycle_note}</p>"
             f"{_svg_object_html(t1_svg)}"
         )
-        sections = [("T1w-space alignment", body)]
-        sections.extend(build_alignment_metabolite_sections(config, subject, session, "T1w", t1_data, t1_maps or {}))
-        return sections
+        return [("T1w-space alignment", body)]
 
     body = "<p>No T1w-space reference metabolite map available.</p>"
     return [("T1w-space alignment", body)]
@@ -121,7 +116,6 @@ def build_mni_alignment_sections(
     mni_ref_map_path: Path | None = None,
     mni_resolution: int | None = None,
     t1_to_mni_transforms: list[Path] | None = None,
-    mni_maps: dict[str, Path] | None = None,
 ) -> list[tuple[str, str]]:
     """Returns the MNI-space alignment tab's (heading, body_html) sections.
 
@@ -130,10 +124,9 @@ def build_mni_alignment_sections(
     under --work-dir -- same pattern as :func:`resample_ref_met_to_t1w`) so
     its contour can be drawn on the alignment figure too.
 
-    ``mni_maps``, when given (the full ``transformed["MNI152NLin2009cAsym"]``
-    dict -- every metabolite, not just ``config.ref_met``), appends one
-    per-metabolite axial alignment montage after the main figure (see
-    :mod:`mrsiprep.reports.mrsi_alignment_overview`).
+    Only the reference metabolite is shown here; every metabolite's
+    MNI-space map gets its own MRSI Space-Template tab
+    (:mod:`mrsiprep.reports.mrsi_alignment_overview`).
     """
     import nibabel as nib
     import numpy as np
@@ -184,11 +177,7 @@ def build_mni_alignment_sections(
             f"{template_label}{', with the white-matter boundary outlined in light blue' if wm_mask is not None else ''}.{cycle_note}</p>"
             f"{_svg_object_html(mni_svg)}"
         )
-        sections = [("Template-space alignment", body)]
-        sections.extend(
-            build_alignment_metabolite_sections(config, subject, session, "MNI152NLin2009cAsym", template_data, mni_maps or {})
-        )
-        return sections
+        return [("Template-space alignment", body)]
 
     body = "<p>MNI-space registration not available for this configuration.</p>"
     return [("Template-space alignment", body)]

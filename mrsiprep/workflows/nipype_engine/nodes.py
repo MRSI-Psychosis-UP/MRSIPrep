@@ -194,11 +194,17 @@ def step_resampling(config, subject, session, ctx):
     from mrsiprep.workflows.participant import _step_resampling
 
     debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""))
-    transformed, qc_sections_t1w_alignment, qc_sections_mni_alignment = _step_resampling(
+    transformed, qc_sections_t1w_alignment, qc_sections_mni_alignment, qc_sections_mrsi_t1w, qc_sections_mrsi_template = _step_resampling(
         config, subject, session, ctx["anatprep"], ctx["mrsi_reference"], ctx["registration"], ctx["corrected_maps"], ctx["raw_t1"], debug
     )
     ctx = dict(ctx)
-    ctx.update(transformed=transformed, qc_sections_t1w_alignment=qc_sections_t1w_alignment, qc_sections_mni_alignment=qc_sections_mni_alignment)
+    ctx.update(
+        transformed=transformed,
+        qc_sections_t1w_alignment=qc_sections_t1w_alignment,
+        qc_sections_mni_alignment=qc_sections_mni_alignment,
+        qc_sections_mrsi_t1w=qc_sections_mrsi_t1w,
+        qc_sections_mrsi_template=qc_sections_mrsi_template,
+    )
     return ctx
 
 
@@ -349,6 +355,8 @@ def step_reports(config, subject, session, ctx):
         "t1_correction": ctx["qc_sections_t1_correction"],
         "t1w_alignment": ctx["qc_sections_t1w_alignment"],
         "mni_alignment": ctx["qc_sections_mni_alignment"],
+        "mrsi_t1w": ctx.get("qc_sections_mrsi_t1w"),
+        "mrsi_template": ctx.get("qc_sections_mrsi_template"),
         "parcellation": ctx["qc_sections_parcellation"],
         "connectivity": ctx["qc_sections_connectivity"],
         "runtime": build_runtime_qc_sections(config, collect_timings()),

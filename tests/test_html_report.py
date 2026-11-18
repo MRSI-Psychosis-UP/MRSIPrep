@@ -30,6 +30,8 @@ def _config(tmp_path: Path, **overrides) -> types.SimpleNamespace:
         nproc=1,
         nthreads=4,
         preset_citation=None,
+        # The citations section calls this MRSIPrepConfig method.
+        chimera_schemes=lambda: [],
     )
     base.update(overrides)
     return types.SimpleNamespace(**base)
@@ -146,6 +148,22 @@ class GenerateSubjectReportTabsTests(unittest.TestCase):
             self.assertNotIn("5.000", t1_panel)
             self.assertIn("5.000", mni_panel)
             self.assertNotIn("1.000", mni_panel)
+
+    def test_mrsi_space_tabs_follow_their_alignment_tabs_only_when_present(self):
+        with tempfile.TemporaryDirectory() as td:
+            config = _config(Path(td))
+            html = generate_subject_report(config, "S001", "V1", {}, _EMPTY_QC_SECTIONS).read_text()
+            self.assertNotIn("data-tab='mrsi-space-t1'", html)
+            self.assertNotIn("data-tab='mrsi-space-template'", html)
+
+            qc = dict(_EMPTY_QC_SECTIONS, mrsi_t1w=[("Metabolite: NAA", "<p>t1w-naa</p>")],
+                      mrsi_template=[("Metabolite: NAA", "<p>mni-naa</p>")])
+            html = generate_subject_report(config, "S001", "V1", {}, qc).read_text()
+            order = [html.index(f"data-tab='{t}'") for t in ("t1w-alignment", "mrsi-space-t1", "mni-alignment", "mrsi-space-template")]
+            self.assertEqual(order, sorted(order))
+            self.assertIn("MRSI Space-T1", html)
+            self.assertIn("MRSI Space-Template", html)
+            self.assertIn("t1w-naa", html[html.index("id='mrsi-space-t1'"):])
 
     def test_no_regional_metabolites_tab(self):
         with tempfile.TemporaryDirectory() as td:

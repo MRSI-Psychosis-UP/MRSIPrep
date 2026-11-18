@@ -85,7 +85,10 @@ STEP_DEPENDENCIES: dict[str, StepDeps] = {
     ),
     "resampling": StepDeps(
         requires=frozenset({"anatprep", "mrsi_reference", "registration", "corrected_maps", "raw_t1"}),
-        produces=frozenset({"transformed", "qc_sections_t1w_alignment", "qc_sections_mni_alignment"}),
+        produces=frozenset({
+            "transformed", "qc_sections_t1w_alignment", "qc_sections_mni_alignment",
+            "qc_sections_mrsi_t1w", "qc_sections_mrsi_template",
+        }),
     ),
     "leakage_qc": StepDeps(
         requires=frozenset({"anatprep", "transformed"}),
@@ -120,7 +123,7 @@ STEP_DEPENDENCIES: dict[str, StepDeps] = {
             "qc_sections_t1_correction", "qc_sections_t1w_alignment", "qc_sections_mni_alignment",
             "qc_sections_parcellation", "qc_sections_connectivity",
         }),
-        optional=frozenset({"qc_sections_mrsi_pvc"}),
+        optional=frozenset({"qc_sections_mrsi_pvc", "qc_sections_mrsi_t1w", "qc_sections_mrsi_template"}),
         produces=frozenset({"outputs"}),
     ),
 }

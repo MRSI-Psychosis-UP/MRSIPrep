@@ -328,7 +328,11 @@ class StepResamplingTests(unittest.TestCase):
             "mrsiprep.workflows.steps.build_t1w_alignment_sections", return_value=["t1w-qc"]
         ) as t1w_qc, patch(
             "mrsiprep.workflows.steps.build_mni_alignment_sections", return_value=["mni-qc"]
-        ) as mni_qc:
+        ) as mni_qc, patch(
+            "mrsiprep.workflows.steps.build_mrsi_t1w_sections", return_value=["mrsi-t1w"]
+        ) as mrsi_t1w, patch(
+            "mrsiprep.workflows.steps.build_mrsi_template_sections", return_value=["mrsi-template"]
+        ) as mrsi_template:
             result = P._step_resampling(config, "01", "01", anat, mrsi, registration, {"CrPCr": Path("orig")}, Path("raw_t1"), _debug())
         config.resolution_for.assert_called_once_with("MNI152NLin2009cAsym", Path("t1"), Path("ref"))
         self.assertEqual(tmm.call_args.args[5], "mni_fwd")
@@ -340,7 +344,6 @@ class StepResamplingTests(unittest.TestCase):
             Path("t1w_map"),
             orig_ref_map_path=Path("orig"),
             mrsi_to_t1_transforms="fwd",
-            t1_maps={"CrPCr": Path("t1w_map")},
         )
         mni_qc.assert_called_once_with(
             config,
@@ -349,9 +352,10 @@ class StepResamplingTests(unittest.TestCase):
             Path("mni_map"),
             mni_resolution=2.0,
             t1_to_mni_transforms="mni_fwd",
-            mni_maps={"CrPCr": Path("mni_map")},
         )
-        self.assertEqual(result, (transformed, ["t1w-qc"], ["mni-qc"]))
+        mrsi_t1w.assert_called_once_with(config, "01", "01", Path("raw_t1"), {"CrPCr": Path("t1w_map")})
+        mrsi_template.assert_called_once_with(config, "01", "01", 2.0, {"CrPCr": Path("mni_map")})
+        self.assertEqual(result, (transformed, ["t1w-qc"], ["mni-qc"], ["mrsi-t1w"], ["mrsi-template"]))
 
     def test_without_mni_registration_skips_resolution_lookup(self):
         anat, mrsi, registration = self._args(None)
@@ -362,7 +366,9 @@ class StepResamplingTests(unittest.TestCase):
         with patch("mrsiprep.workflows.steps.transform_mrsi_maps", return_value=transformed) as tmm, patch(
             "mrsiprep.workflows.steps.build_t1w_alignment_sections"), patch(
             "mrsiprep.workflows.steps.build_mni_alignment_sections"
-        ) as mni_qc:
+        ) as mni_qc, patch("mrsiprep.workflows.steps.build_mrsi_t1w_sections"), patch(
+            "mrsiprep.workflows.steps.build_mrsi_template_sections"
+        ):
             P._step_resampling(config, "01", "01", anat, mrsi, registration, {}, Path("raw_t1"), _debug())
         config.resolution_for.assert_not_called()
         self.assertIsNone(tmm.call_args.args[5])  # no t1_to_mni forward transform

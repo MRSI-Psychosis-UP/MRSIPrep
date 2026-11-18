@@ -26,6 +26,7 @@ from mrsiprep.reports.mrsi_raw_overview import build_mrsi_raw_qc_sections
 from mrsiprep.reports.parcel_figures import write_parcel_qc_figures
 from mrsiprep.reports.parcel_qc import write_parcel_qc
 from mrsiprep.reports.parcellation_overview import build_parcellation_qc_sections
+from mrsiprep.reports.mrsi_alignment_overview import build_mrsi_t1w_sections, build_mrsi_template_sections
 from mrsiprep.reports.registration_overview import build_mni_alignment_sections, build_t1w_alignment_sections
 from mrsiprep.reports.t1_correction import build_t1_correction_qc_sections
 from mrsiprep.qc.ventricles import ventricle_reference_mask
@@ -217,7 +218,6 @@ def _step_resampling(config, subject, session, anat, mrsi_reference, registratio
             transformed.get("T1w", {}).get(config.ref_met),
             orig_ref_map_path=corrected_maps.get(config.ref_met),
             mrsi_to_t1_transforms=registration.mrsi_to_t1.forward,
-            t1_maps=transformed.get("T1w"),
         )
         qc_sections_mni_alignment = build_mni_alignment_sections(
             config,
@@ -226,9 +226,14 @@ def _step_resampling(config, subject, session, anat, mrsi_reference, registratio
             transformed.get("MNI152NLin2009cAsym", {}).get(config.ref_met),
             mni_resolution=mni_resolution,
             t1_to_mni_transforms=registration.t1_to_mni.forward if registration.t1_to_mni else None,
-            mni_maps=transformed.get("MNI152NLin2009cAsym"),
         )
-    return transformed, qc_sections_t1w_alignment, qc_sections_mni_alignment
+        # Every metabolite's resampled map, in its own tab per space (the
+        # alignment tabs above only show the reference metabolite).
+        qc_sections_mrsi_t1w = build_mrsi_t1w_sections(config, subject, session, raw_t1, transformed.get("T1w"))
+        qc_sections_mrsi_template = build_mrsi_template_sections(
+            config, subject, session, mni_resolution, transformed.get("MNI152NLin2009cAsym")
+        )
+    return transformed, qc_sections_t1w_alignment, qc_sections_mni_alignment, qc_sections_mrsi_t1w, qc_sections_mrsi_template
 
 
 def _step_leakage_qc(config, subject, session, anat, transformed, debug):

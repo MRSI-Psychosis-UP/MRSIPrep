@@ -53,6 +53,16 @@
   blank by default ("same as bids_dir"). With `mrsiprep-docker`, pass a
   host path; the wrapper mounts it read-only.
 
+### Reports
+
+- Moved the per-metabolite montages out of the T1-space and
+  Template-space alignment tabs into two new tabs, **MRSI Space-T1** and
+  **MRSI Space-Template**, laid out like MRSI Raw and MRSI PVC (one
+  equally-spaced axial montage per metabolite). Each sits right after
+  its alignment tab, which now shows only the reference metabolite. Like
+  MRSI PVC, a tab is left out when that space's maps weren't produced
+  (MRSI Space-T1 needs `--output-mrsi-t1w`).
+
 ## 2.2.1
 
 ### Reports

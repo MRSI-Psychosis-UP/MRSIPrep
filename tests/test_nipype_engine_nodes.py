@@ -264,7 +264,7 @@ class StepPvcTests(unittest.TestCase):
 class StepResamplingTests(unittest.TestCase):
     def test_wires_ctx_in_and_out(self):
         ctx = {"anatprep": "anat_obj", "mrsi_reference": "mrsi_reference_obj", "registration": "reg_obj", "corrected_maps": "corrected", "raw_t1": "raw"}
-        with patch("mrsiprep.workflows.participant._step_resampling", return_value=("transformed", "t1w_qc", "mni_qc")) as step:
+        with patch("mrsiprep.workflows.participant._step_resampling", return_value=("transformed", "t1w_qc", "mni_qc", "mrsi_t1w_qc", "mrsi_template_qc")) as step:
             result = N.step_resampling(_fake_config(), _SUBJECT, _SESSION, ctx)
 
         step.assert_called_once_with(
@@ -273,6 +273,8 @@ class StepResamplingTests(unittest.TestCase):
         self.assertEqual(result["transformed"], "transformed")
         self.assertEqual(result["qc_sections_t1w_alignment"], "t1w_qc")
         self.assertEqual(result["qc_sections_mni_alignment"], "mni_qc")
+        self.assertEqual(result["qc_sections_mrsi_t1w"], "mrsi_t1w_qc")
+        self.assertEqual(result["qc_sections_mrsi_template"], "mrsi_template_qc")
 
 
 class StepLeakageQcTests(unittest.TestCase):
