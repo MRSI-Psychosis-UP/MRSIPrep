@@ -1,4 +1,4 @@
-"""Ventricle visibility section (MRSI Raw QC tab, after the QC summary
+"""Ventricle visibility section (MRSI QC tab, after the QC summary
 table).
 
 Rendering only: detection and Dice scoring live in

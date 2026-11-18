@@ -346,7 +346,7 @@ def step_reports(config, subject, session, ctx):
     qc_sections = {
         "tissue": ctx["qc_sections_tissue"],
         "mrsi_raw": ctx["qc_sections_mrsi_raw"],
-        # The ventricle section lives in the MRSI Raw QC tab, not MRSI Raw; it
+        # The ventricle section lives in the MRSI QC tab, not MRSI Raw; it
         # is built here (not earlier, with mrsi_raw) so it can be scored
         # against the subject's ventricles via the registration.
         "mrsi_raw_qc": _step_ventricle_qc(config, subject, session, ctx.get("raw_t1"), mrsi_reference, ctx.get("registration")),

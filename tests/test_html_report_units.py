@@ -72,7 +72,9 @@ class GenerateSubjectReportMinimalTests(GenerateSubjectReportFixture):
         html = out.read_text()
         self.assertIn("Raw metabolite maps (pre-pipeline)", html)
         self.assertIn("raw body", html)
-        mrsi_raw_panel = html[html.index("id='mrsi-raw'") : html.index("id='mrsi-raw-qc'")]
+        start = html.index("id='mrsi-raw'")
+        end = html.find("<div class='tab-panel'", start)
+        mrsi_raw_panel = html[start : end if end != -1 else len(html)]
         self.assertIn("raw body", mrsi_raw_panel)
 
 

@@ -98,18 +98,24 @@ def _build_tabs(config, subject, session, out, outputs, qc_sections, mrsi_raw_bo
     mrsi_t1w_sections = qc_sections.get("mrsi_t1w")
     mrsi_template_sections = qc_sections.get("mrsi_template")
 
-    # Order is deliberate and follows the pipeline: raw signal, then what was
-    # done to it, then where it was put, then what was measured from it.
-    # "MRSI Raw" holds only the per-metabolite raw slice montages -- no
-    # tables or other QC info -- so it's a quick-look image gallery; every
-    # QC metric computed from the raw maps (the summary table, ventricle
-    # visibility) lives in "MRSI Raw QC" instead, right after it.
+    # Order is deliberate, per explicit request: QC overview and raw maps
+    # first, then the per-metabolite resampled-space galleries, then the
+    # pipeline-order sections (spike filter onward). "MRSI QC" (formerly
+    # "MRSI Raw QC") holds every QC metric computed from the raw maps (the
+    # summary table, ventricle visibility); "MRSI Raw" is a quick-look image
+    # gallery of just the per-metabolite raw slice montages.
     tabs: list[tuple[str, str, str]] = [
+        ("mrsi-raw-qc", "MRSI QC", mrsi_raw_qc_body),
         ("mrsi-raw", "MRSI Raw", mrsi_raw_body),
-        ("mrsi-raw-qc", "MRSI Raw QC", mrsi_raw_qc_body),
     ]
     if pvc_sections is not None:
         tabs.append(("mrsi-pvc", "MRSI PVC", _sections_html(pvc_sections)))
+    # Every metabolite's resampled map in each space. Omitted when that
+    # space's maps weren't produced.
+    if mrsi_t1w_sections:
+        tabs.append(("mrsi-space-t1", "MRSI Space-T1", _sections_html(mrsi_t1w_sections)))
+    if mrsi_template_sections:
+        tabs.append(("mrsi-space-template", "MRSI Space-Template", _sections_html(mrsi_template_sections)))
     tabs.append(("spike-filter", "Spike Filter", _sections_html(qc_sections.get("mrsi_preproc"))))
     if t1_correction_sections is not None:
         tabs.append(("t1-correction", "T1 correction", _sections_html(t1_correction_sections)))
@@ -119,18 +125,11 @@ def _build_tabs(config, subject, session, out, outputs, qc_sections, mrsi_raw_bo
         "T1-space alignment",
         _sections_html(qc_sections.get("t1w_alignment")) + leakage_table_html(leakage_df, "T1w"),
     ))
-    # Every metabolite's resampled map, right after the alignment tab that
-    # shows only the reference metabolite in that space. Omitted (like MRSI
-    # PVC) when that space's maps weren't produced.
-    if mrsi_t1w_sections:
-        tabs.append(("mrsi-space-t1", "MRSI Space-T1", _sections_html(mrsi_t1w_sections)))
     tabs.append((
         "mni-alignment",
         "Template-space alignment",
         _sections_html(qc_sections.get("mni_alignment")) + leakage_table_html(leakage_df, "MNI152NLin2009cAsym"),
     ))
-    if mrsi_template_sections:
-        tabs.append(("mrsi-space-template", "MRSI Space-Template", _sections_html(mrsi_template_sections)))
     tabs.append((
         "coverage",
         "Coverage",

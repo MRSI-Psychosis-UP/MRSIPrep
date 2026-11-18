@@ -80,8 +80,17 @@ class GenerateSubjectReportTabsTests(unittest.TestCase):
             out = generate_subject_report(config, "S001", "V1", {}, sections)
             html = out.read_text()
             self.assertIn("data-tab='mrsi-raw'", html)
-            mrsi_raw_panel = html[html.index("id='mrsi-raw'") : html.index("id='mrsi-raw-qc'")]
-            mrsi_raw_qc_panel = html[html.index("id='mrsi-raw-qc'") : html.index("id='preproc'")]
+
+            # Bounded by the next panel div rather than by a named tab: the tab
+            # order is not this test's subject, and hard-coding a neighbour makes
+            # it fail on any reordering.
+            def _panel(tab_id):
+                start = html.index(f"id='{tab_id}'")
+                nxt = html.find("<div class='tab-panel'", start)
+                return html[start:nxt if nxt != -1 else len(html)]
+
+            mrsi_raw_panel = _panel("mrsi-raw")
+            mrsi_raw_qc_panel = _panel("mrsi-raw-qc")
             self.assertIn("raw-slices.png", mrsi_raw_panel)
             self.assertIn("Raw metabolite maps", mrsi_raw_panel)
             self.assertNotIn("raw-slices.png", mrsi_raw_qc_panel)
@@ -92,8 +101,14 @@ class GenerateSubjectReportTabsTests(unittest.TestCase):
             sections = dict(_EMPTY_QC_SECTIONS, mrsi_raw_qc=[("Ventricle visibility", "<p>dice chart</p>")])
             out = generate_subject_report(config, "S001", "V1", {}, sections)
             html = out.read_text()
-            mrsi_raw_panel = html[html.index("id='mrsi-raw'") : html.index("id='mrsi-raw-qc'")]
-            mrsi_raw_qc_panel = html[html.index("id='mrsi-raw-qc'") : html.index("id='preproc'")]
+
+            def _panel(tab_id):
+                start = html.index(f"id='{tab_id}'")
+                nxt = html.find("<div class='tab-panel'", start)
+                return html[start:nxt if nxt != -1 else len(html)]
+
+            mrsi_raw_panel = _panel("mrsi-raw")
+            mrsi_raw_qc_panel = _panel("mrsi-raw-qc")
             self.assertNotIn("dice chart", mrsi_raw_panel)
             self.assertIn("dice chart", mrsi_raw_qc_panel)
 
@@ -149,7 +164,7 @@ class GenerateSubjectReportTabsTests(unittest.TestCase):
             self.assertIn("5.000", mni_panel)
             self.assertNotIn("1.000", mni_panel)
 
-    def test_mrsi_space_tabs_follow_their_alignment_tabs_only_when_present(self):
+    def test_mrsi_space_tabs_present_only_when_sections_given(self):
         with tempfile.TemporaryDirectory() as td:
             config = _config(Path(td))
             html = generate_subject_report(config, "S001", "V1", {}, _EMPTY_QC_SECTIONS).read_text()
@@ -159,7 +174,10 @@ class GenerateSubjectReportTabsTests(unittest.TestCase):
             qc = dict(_EMPTY_QC_SECTIONS, mrsi_t1w=[("Metabolite: NAA", "<p>t1w-naa</p>")],
                       mrsi_template=[("Metabolite: NAA", "<p>mni-naa</p>")])
             html = generate_subject_report(config, "S001", "V1", {}, qc).read_text()
-            order = [html.index(f"data-tab='{t}'") for t in ("t1w-alignment", "mrsi-space-t1", "mni-alignment", "mrsi-space-template")]
+            # Both sit between "MRSI PVC" and "Spike Filter", ahead of the
+            # alignment tabs -- order is not this test's subject beyond that
+            # mrsi-space-t1 precedes mrsi-space-template.
+            order = [html.index(f"data-tab='{t}'") for t in ("mrsi-space-t1", "mrsi-space-template")]
             self.assertEqual(order, sorted(order))
             self.assertIn("MRSI Space-T1", html)
             self.assertIn("MRSI Space-Template", html)
