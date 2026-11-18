@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-18T11:17:04.278574+00:00",
+  "generated_at": "2026-11-18T14:28:26.522132+00:00",
   "mrsiprep_version": "2.2.2",
   "python": "3.11.15 (main, Mar  3 2026, 09:26:23) [GCC 11.4.0]",
   "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.35",
@@ -93,7 +93,7 @@
     "overwrite_t1corr": false,
     "longitudinal": false,
     "transform_spikemask": false,
-    "overwrite": true,
+    "overwrite": false,
     "overwrite_filt": false,
     "overwrite_seg": false,
     "overwrite_pve": false,
