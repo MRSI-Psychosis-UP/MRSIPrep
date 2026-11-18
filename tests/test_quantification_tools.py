@@ -7,6 +7,7 @@ from mrsiprep.mrsi.quantification_tools import (
     QuantificationToolError,
     get_tool,
     normalize_linewidth_to_hz,
+    normalize_crlb_to_percent,
     resolve_crlb_unit,
     resolve_linewidth_unit,
     resolve_quantification_tool,
@@ -73,6 +74,21 @@ class QuantificationToolsTests(unittest.TestCase):
     def test_resolve_crlb_unit_accepts_percent(self):
         self.assertEqual(resolve_crlb_unit(None, {"CommonMetadata": {"CRLBUnit": "percent"}}), "percent")
         self.assertEqual(resolve_crlb_unit("percent", None), "percent")
+
+    def test_resolve_crlb_unit_accepts_permille(self):
+        self.assertEqual(resolve_crlb_unit(None, {"CommonMetadata": {"CRLBUnit": "permille"}}), "permille")
+        self.assertEqual(resolve_crlb_unit("permille", None), "permille")
+
+    def test_normalize_crlb_percent_is_unchanged(self):
+        values = np.array([5.0, 20.0])
+        self.assertIs(normalize_crlb_to_percent(values, "percent"), values)
+
+    def test_normalize_crlb_permille_divides_by_ten(self):
+        np.testing.assert_allclose(normalize_crlb_to_percent(np.array([99.0, 9999.0]), "permille"), [9.9, 999.9])
+
+    def test_normalize_crlb_rejects_unsupported_unit(self):
+        with self.assertRaisesRegex(QuantificationToolError, "Unsupported CRLB unit"):
+            normalize_crlb_to_percent(np.array([1.0]), "fraction")
 
     def test_normalize_linewidth_hz_is_unchanged(self):
         values = np.array([5.0, 10.0])

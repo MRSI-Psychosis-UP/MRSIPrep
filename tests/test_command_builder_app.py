@@ -98,6 +98,43 @@ class WizardNavigationTests(unittest.TestCase):
         ref_met_boxes = [sb for sb in at.selectbox if sb.key == "wizard_field_ref_met"]
         self.assertEqual(sorted(ref_met_boxes[0].options), ["CrPCr", "NAANAAG"])
 
+    def test_back_button_still_renders_after_step_body_raises(self):
+        """A step body can raise (e.g. Review's preflight button calling
+        into real pipeline code that hits an import error from a stale
+        environment) -- this must not take the nav row down with it and
+        strand the user with no way back. Patches _compute_preflight to
+        raise, deterministically reproducing the failure mode reported
+        against the real app, and asserts Back/the step buttons are still
+        present and enabled afterward."""
+        import mrsiprep.interfaces.command_builder_app as app_module
+
+        original = app_module._compute_preflight
+
+        def _boom(*args, **kwargs):
+            raise ImportError("simulated stale-environment import error")
+
+        app_module._compute_preflight = _boom
+        try:
+            at = _new_app()
+            _choose_outcome(at, "normalize")
+            _fill_data_step(at, bids_dir="/tmp", output_dir="/tmp/wizard_nav_survives_out")
+            _goto_step(at, 2)
+            at.selectbox(key="wizard_field_ref_met").set_value("CrPCr").run()
+            _goto_step(at, 3)
+
+            preflight_buttons = [b for b in at.button if b.key == "wizard_run_preflight_btn"]
+            self.assertEqual(len(preflight_buttons), 1)
+            preflight_buttons[0].click().run()
+
+            back_buttons = [b for b in at.button if b.key == "wizard_back_btn"]
+            self.assertEqual(len(back_buttons), 1)
+            self.assertFalse(back_buttons[0].disabled)
+
+            back_buttons[0].click().run()
+            self.assertEqual(at.session_state["wizard_step"], 2)
+        finally:
+            app_module._compute_preflight = original
+
 
 class WizardNoStepsInvariantTests(unittest.TestCase):
     """The design's most important invariant: neither Analysis outcome ever
@@ -264,6 +301,28 @@ class WizardCommandMatchesBuildCommandTests(unittest.TestCase):
         values = {"--metabolites": ["CrPCr", "NAANAAG"], "--ref-met": "CrPCr"}
         expected_command = _build_command(positional_values, optionals, values)
         self.assertEqual(wizard_command, expected_command)
+
+    def test_metabolites_are_comma_joined_not_space_separated(self):
+        """--metabolites takes a single comma-separated token
+        (type=_parse_comma_list in the parser), unlike real nargs="+" flags
+        -- a space-separated '--metabolites Cho CrPCr GPCPCh' would be
+        parsed by argparse as --metabolites=Cho plus two stray unrecognized
+        positionals. Picking 3+ metabolites in Data must produce one
+        '--metabolites Cho,CrPCr,GPCPCh' token in the generated command."""
+        at = _new_app()
+        _choose_outcome(at, "normalize")
+        _fill_data_step(
+            at, bids_dir="/tmp", output_dir="/tmp/wizard_metabolites_comma_test_out",
+            metabolites=["Cho", "CrPCr", "GPCPCh"],
+        )
+        _goto_step(at, 2)
+        at.selectbox(key="wizard_field_ref_met").set_value("CrPCr").run()
+        _goto_step(at, 3)
+        codes = list(at.code)
+        self.assertEqual(len(codes), 1)
+        command = codes[0].value
+        self.assertIn("--metabolites Cho,CrPCr,GPCPCh", command)
+        self.assertNotIn("--metabolites Cho CrPCr", command)
 
 
 class WizardPreflightTests(unittest.TestCase):

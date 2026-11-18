@@ -262,7 +262,8 @@ def build_parser() -> argparse.ArgumentParser:
         choices=list(SUPPORTED_CRLB_UNITS),
         default=None,
         help="Unit the upstream tool's CRLB map is stored in. Required: pass this explicitly, or add "
-        "\"CRLBUnit\" to CommonMetadata in mrsinmrs.json. --crlb-max is defined as a percentage.",
+        "\"CRLBUnit\" to CommonMetadata in mrsinmrs.json. --crlb-max is defined as a percentage; 'permille' "
+        "maps are divided by 10 before thresholding.",
     )
     mrsi_quality.add_argument(
         "--nucleus",

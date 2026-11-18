@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import html
 import shlex
+import sys
 from pathlib import Path
 
 import pandas as pd
@@ -891,6 +892,16 @@ def _widget_for(
     return _finish(raw or None)
 
 
+# Flags that take a single comma-separated token (type=_parse_comma_list in
+# the parser), not argparse nargs="+" -- a space-separated argv list would be
+# parsed by argparse as one flag value plus stray positionals. Values for
+# these flags are still stored as Python lists in `values` (Review and the
+# status checks read them that way), so _build_argv_groups must join them
+# with commas into a single token itself, rather than spreading them like
+# every other list-valued flag.
+COMMA_JOINED_FLAGS = {"--metabolites", "--steps"}
+
+
 # Registration-backend-specific flags: only shown once a backend is picked,
 # and only the flags relevant to that specific backend (keyed by the dest
 # this app renders its own --registration-backend selectbox under).
@@ -932,7 +943,10 @@ def _build_argv_groups(positional_values: dict, optionals: list[argparse.Action]
         elif isinstance(value, list):
             if isinstance(action.default, list) and sorted(value) == sorted(action.default):
                 continue
-            groups.append([flag, *(str(v) for v in value)])
+            if flag in COMMA_JOINED_FLAGS:
+                groups.append([flag, ",".join(str(v) for v in value)])
+            else:
+                groups.append([flag, *(str(v) for v in value)])
         else:
             if value == action.default:
                 continue
@@ -1918,14 +1932,22 @@ def _render_wizard_page() -> None:
     nav_slot = st.empty()
 
     step = st.session_state["wizard_step"]
-    if step == 0:
-        _render_wizard_analysis_step()
-    elif step == 1:
-        _render_wizard_data_step(optionals, positionals)
-    elif step == 2:
-        _render_wizard_processing_step(optionals)
-    elif step == 3:
-        _render_wizard_review_step(optionals, positionals)
+    try:
+        if step == 0:
+            _render_wizard_analysis_step()
+        elif step == 1:
+            _render_wizard_data_step(optionals, positionals)
+        elif step == 2:
+            _render_wizard_processing_step(optionals)
+        elif step == 3:
+            _render_wizard_review_step(optionals, positionals)
+    except Exception:
+        # A step body can raise (e.g. the Review step's preflight button
+        # calling into the real pipeline code) -- without this, Streamlit
+        # aborts the script right there and the nav row below never
+        # renders, stranding the user on a bare error page with no way to
+        # navigate back short of restarting the app.
+        st.exception(sys.exc_info()[1])
 
     positional_values, values = _collect_wizard_values(optionals, positionals)
     statuses = _compute_field_statuses(values, positional_values)

@@ -178,10 +178,10 @@ class StepT1WaterCorrectionTests(unittest.TestCase):
     def test_without_t1_correction_skips_that_qc_section(self):
         load = SimpleNamespace()
         filtered = SimpleNamespace(preproc_maps={"preproc": 1})
-        with patch("mrsiprep.workflows.steps.run_t1_water_correction_workflow", return_value=self._water()), patch(
+        with patch("mrsiprep.workflows.steps.run_t1_saturation_correction_workflow", return_value=self._water()), patch(
             "mrsiprep.workflows.steps.build_t1_correction_qc_sections"
         ) as t1_corr:
-            water, qc_t1corr = P._step_t1_water_correction(SimpleNamespace(), "01", "01", load, filtered, _debug())
+            water, qc_t1corr = P._step_t1_saturation_correction(SimpleNamespace(), "01", "01", load, filtered, _debug())
         t1_corr.assert_not_called()
         self.assertIsNone(qc_t1corr)
 
@@ -189,10 +189,10 @@ class StepT1WaterCorrectionTests(unittest.TestCase):
         load = SimpleNamespace()
         filtered = SimpleNamespace(preproc_maps={"preproc": 1})
         water_obj = self._water(provenance="prov")
-        with patch("mrsiprep.workflows.steps.run_t1_water_correction_workflow", return_value=water_obj), patch(
+        with patch("mrsiprep.workflows.steps.run_t1_saturation_correction_workflow", return_value=water_obj), patch(
             "mrsiprep.workflows.steps.build_t1_correction_qc_sections", return_value=["t1corr"]
         ) as t1_corr:
-            _water, qc_t1corr = P._step_t1_water_correction(SimpleNamespace(), "01", "01", load, filtered, _debug())
+            _water, qc_t1corr = P._step_t1_saturation_correction(SimpleNamespace(), "01", "01", load, filtered, _debug())
         t1_corr.assert_called_once()
         self.assertEqual(qc_t1corr, ["t1corr"])
 
@@ -333,9 +333,24 @@ class StepResamplingTests(unittest.TestCase):
         config.resolution_for.assert_called_once_with("MNI152NLin2009cAsym", Path("t1"), Path("ref"))
         self.assertEqual(tmm.call_args.args[5], "mni_fwd")
         t1w_qc.assert_called_once_with(
-            config, "01", "01", Path("raw_t1"), Path("t1w_map"), orig_ref_map_path=Path("orig"), mrsi_to_t1_transforms="fwd"
+            config,
+            "01",
+            "01",
+            Path("raw_t1"),
+            Path("t1w_map"),
+            orig_ref_map_path=Path("orig"),
+            mrsi_to_t1_transforms="fwd",
+            t1_maps={"CrPCr": Path("t1w_map")},
         )
-        mni_qc.assert_called_once_with(config, "01", "01", Path("mni_map"), mni_resolution=2.0, t1_to_mni_transforms="mni_fwd")
+        mni_qc.assert_called_once_with(
+            config,
+            "01",
+            "01",
+            Path("mni_map"),
+            mni_resolution=2.0,
+            t1_to_mni_transforms="mni_fwd",
+            mni_maps={"CrPCr": Path("mni_map")},
+        )
         self.assertEqual(result, (transformed, ["t1w-qc"], ["mni-qc"]))
 
     def test_without_mni_registration_skips_resolution_lookup(self):
