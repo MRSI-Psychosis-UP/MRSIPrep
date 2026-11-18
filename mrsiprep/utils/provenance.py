@@ -7,7 +7,6 @@ import platform
 import shutil
 import sys
 from datetime import datetime, timezone
-from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 import numpy as np
@@ -15,14 +14,9 @@ from rich import box
 from rich.table import Table
 
 from mrsiprep.utils.debug import Debug
+from mrsiprep.utils.version import mrsiprep_version
 
-try:
-    from mrsiprep import __version__
-except ImportError:
-    try:
-        __version__ = version("mrsiprep")
-    except PackageNotFoundError:
-        __version__ = "unknown"
+__version__ = mrsiprep_version()
 
 
 class NumpyEncoder(json.JSONEncoder):
@@ -40,13 +34,12 @@ def required_external_tools(config=None) -> list[str]:
     tools = ["antsRegistrationSyN.sh", "antsRegistration", "antsApplyTransforms", "N4BiasFieldCorrection", "mri_synthseg"]
     if config is not None and getattr(config, "registration_backend", "ants") == "fsl":
         tools.extend(["flirt", "convert_xfm"])
-    full = config is None or getattr(config, "processing_mode", "parc-con") == "parc-con"
     tissue_backend = getattr(config, "tissue_backend", "synthseg-fast") if config is not None else "synthseg-fast"
-    if full and tissue_backend == "synthseg-fast":
+    if tissue_backend == "synthseg-fast":
         tools.append("fast")
-    if full and (config is None or not getattr(config, "no_pvc", False)):
+    if config is None or not getattr(config, "no_pvc", False):
         tools.append("petpvc")
-    if full and (config is None or getattr(config, "parcellation_mode", "chimera") == "chimera"):
+    if config is None or getattr(config, "parcellation_mode", "chimera") == "chimera":
         tools.extend(["chimera", "recon-all"])
     if config is not None and getattr(config, "longitudinal", False):
         tools.extend([
@@ -93,6 +86,23 @@ def check_external_software(debug: Debug, config=None) -> bool:
     return all_available
 
 
+def _requested_parcellation_count(config) -> int:
+    """How many parcellations the config asks for.
+
+    The nominal cross product -- Chimera may yield fewer if a scheme isn't
+    multi-resolution -- so this describes the request, not the outcome.
+    Tolerates configs without the accessors (e.g. SimpleNamespace fixtures).
+    """
+    try:
+        if config.parcellation_mode == "chimera":
+            return max(1, len(config.chimera_schemes()) * len(config.chimera_scales()) * len(config.chimera_grows()))
+        if config.parcellation_mode == "atlas":
+            return max(1, len(config.atlases()))
+    except AttributeError:
+        return 1
+    return 1
+
+
 def pipeline_trace(config) -> list[dict]:
     """Which pipeline steps ran vs. were skipped for this config, and why.
 
@@ -100,25 +110,43 @@ def pipeline_trace(config) -> list[dict]:
     in sync with the gating logic in workflows/participant.py's _step_*
     functions -- no state needs to be threaded through them to build this.
     """
-    parc_con = config.processing_mode == "parc-con"
-    mode_reason = f"mode={config.processing_mode}, requires parc-con"
-    pvc_ran = parc_con and not config.no_pvc
-    pvc_reason = "" if pvc_ran else (mode_reason if not parc_con else "--no-pvc")
-    t1corr_ran = config.t1_correction == "literature"
+    full_parcellation = config.parcellation_mode != "synthseg"
+    parcellation_reason = f"parcellation_mode={config.parcellation_mode}, requires chimera or atlas"
+    parcellation_step = "Parcellation (chimera/atlas)"
+    if full_parcellation:
+        requested = _requested_parcellation_count(config)
+        if requested > 1:
+            parcellation_step += f" x{requested}"
+    # Same condition run_registration_workflow gates the stage on, so the
+    # trace cannot drift from what actually runs.
+    template_reg_ran = (
+        "MNI152NLin2009cAsym" in (getattr(config, "output_spaces", None) or [])
+        or config.parcellation_mode == "atlas"
+        or "mni" in (getattr(config, "transform", "") or "")
+    )
+    pvc_ran = not config.no_pvc
+    pvc_reason = "" if pvc_ran else "--no-pvc"
+    t1corr_ran = config.t1_correction in {"literature", "voxelwise"}
     trace = [
         {"step": "Tissue segmentation", "ran": True, "reason": ""},
         {"step": "Anatomical preparation", "ran": True, "reason": ""},
         {"step": "MRSI preprocessing", "ran": True, "reason": ""},
         {"step": "T1 saturation correction", "ran": t1corr_ran, "reason": "" if t1corr_ran else "--t1-correction none"},
-        {"step": "MRSI-T1w-MNI registration", "ran": True, "reason": ""},
-        {"step": "Tissue probability maps in MRSI space", "ran": parc_con, "reason": "" if parc_con else mode_reason},
+        {"step": "MRSI-to-T1w registration", "ran": True, "reason": ""},
+        {
+            "step": "T1w-to-template registration",
+            "ran": template_reg_ran,
+            "reason": "" if template_reg_ran else "no template output space, atlas parcellation, or template transform requested",
+        },
+        {"step": "Tissue probability maps in MRSI space", "ran": True, "reason": ""},
         {"step": "Partial volume correction", "ran": pvc_ran, "reason": pvc_reason},
         {"step": "Resampling MRSI maps to T1w/MNI space", "ran": True, "reason": ""},
         {"step": "SynthSeg parcellation and QC", "ran": True, "reason": ""},
-        {"step": "Parcellation (chimera/mni atlas)", "ran": parc_con, "reason": "" if parc_con else mode_reason},
+        {"step": parcellation_step, "ran": full_parcellation, "reason": "" if full_parcellation else parcellation_reason},
         {"step": "Regional metabolite extraction", "ran": True, "reason": ""},
-        {"step": "Connectivity", "ran": bool(config.write_connectivity), "reason": "" if config.write_connectivity else "--write-connectivity not set"},
-        {"step": "Metprofiles export", "ran": parc_con, "reason": "" if parc_con else mode_reason},
+        {"step": "Regional metabolic profile estimation", "ran": True, "reason": ""},
+        {"step": "Connectivity matrix", "ran": bool(config.write_connectivity), "reason": "" if config.write_connectivity else "--write-connectivity not set"},
+        {"step": "Metprofiles export", "ran": True, "reason": ""},
         {"step": "Reports", "ran": True, "reason": ""},
     ]
     for entry in trace:

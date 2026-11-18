@@ -1,12 +1,17 @@
+import tempfile
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 
+from mrsiprep.registration.transforms import ants_transform_prefix
 from mrsiprep.workflows.participant import (
     _build_preflight_table,
     _preflight_missing_items,
     _preflight_row_cells,
     _preflight_tissue_label,
     _preflight_transform_columns,
+    _preflight_transform_status,
+    _report_cpu_budget,
     _report_preflight_summary,
 )
 
@@ -102,9 +107,46 @@ class PreflightRowCellsTests(unittest.TestCase):
         self.assertEqual(cells[-2:], ["[green]✔[/green]", "[orange3]PROC[/orange3]"])
 
 
+class PreflightTransformStatusTests(unittest.TestCase):
+    """Regression guard for the bug where preflight checked transforms under
+    bids_dir/derivatives/mrsiprep (BIDSLayout.transform()) while the real
+    registration steps check config.derivative_dir -- disagreeing whenever
+    the two paths differ (e.g. mrsiprep-docker's fixed /out mount point)."""
+
+    def _config(self, derivative_dir, longitudinal=False):
+        return SimpleNamespace(
+            derivative_dir=derivative_dir,
+            registration_backend="ants",
+            longitudinal=longitudinal,
+        )
+
+    def test_reports_false_when_output_dir_transforms_are_missing(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            derivative_dir = Path(tmpdir) / "out" / "mrsiprep"
+            config = self._config(derivative_dir)
+            status = _preflight_transform_status("S001", "V1", config)
+        self.assertEqual(status, {"mrsi": False, "anat": False})
+
+    def test_reports_true_only_for_the_configured_derivative_dir(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            real_derivative_dir = Path(tmpdir) / "derivatives" / "mrsiprep"
+            other_derivative_dir = Path(tmpdir) / "out" / "mrsiprep"
+
+            prefix = ants_transform_prefix(real_derivative_dir, "S001", "V1", "mrsi", backend="ants")
+            prefix.parent.mkdir(parents=True)
+            for suffix in (".syn.nii.gz", ".affine.mat", ".affine_inv.mat", ".syn_inv.nii.gz"):
+                prefix.with_suffix(suffix).touch()
+
+            status_real = _preflight_transform_status("S001", "V1", self._config(real_derivative_dir))
+            status_other = _preflight_transform_status("S001", "V1", self._config(other_derivative_dir))
+
+        self.assertTrue(status_real["mrsi"])
+        self.assertFalse(status_other["mrsi"])
+
+
 class PreflightMissingItemsTests(unittest.TestCase):
     def _config(self, **overrides):
-        base = dict(quality_metrics=["snr", "linewidth", "crlb"], processing_mode="mni-norm", tissue_backend="synthseg-fast")
+        base = dict(quality_metrics=["snr", "linewidth", "crlb"], tissue_backend="synthseg-fast")
         base.update(overrides)
         return SimpleNamespace(**base)
 
@@ -123,13 +165,15 @@ class PreflightMissingItemsTests(unittest.TestCase):
         self.assertIn("CRLB 1/5", _preflight_missing_items(row, self._config(quality_metrics=["crlb"])))
         self.assertNotIn("CRLB 1/5", _preflight_missing_items(row, self._config(quality_metrics=["snr"])))
 
-    def test_tissue_flagged_only_for_parc_con_existing_with_red_marker(self):
+    def test_tissue_flagged_for_any_existing_backend_with_red_marker(self):
+        # No longer depends on parcellation_mode -- flagged for any config
+        # using --tissue-backend existing.
         row = _row(tissue="[red]p2[/red]")
-        config = self._config(processing_mode="parc-con", tissue_backend="existing")
+        config = self._config(tissue_backend="existing")
         self.assertIn("Tissue", _preflight_missing_items(row, config))
 
-        config_mni_norm = self._config(processing_mode="mni-norm", tissue_backend="existing")
-        self.assertNotIn("Tissue", _preflight_missing_items(row, config_mni_norm))
+        config_synthseg_fast = self._config(tissue_backend="synthseg-fast")
+        self.assertNotIn("Tissue", _preflight_missing_items(row, config_synthseg_fast))
 
     def test_corrupt_items_flagged(self):
         row = _row(corrupt_items=["SNR"])
@@ -169,6 +213,25 @@ class ReportPreflightSummaryTests(unittest.TestCase):
         self.assertEqual(kind, "error")
         self.assertIn("1/2 recordings", msg)
         self.assertIn("sub-S002", msg)
+
+
+class ReportCpuBudgetTests(unittest.TestCase):
+    def test_no_warning_reports_cpu_budget_line(self):
+        messages = []
+        debug = SimpleNamespace(always=lambda msg: messages.append(msg))
+        config = SimpleNamespace(resolve_cpu_budget=lambda: (2, 4, None))
+        _report_cpu_budget(debug, config)
+        self.assertEqual(len(messages), 1)
+        self.assertIn("CPU budget: --nproc 2 x --nthreads 4 = 8 threads", messages[0])
+
+    def test_warning_is_reported_instead_of_budget_line(self):
+        messages = []
+        debug = SimpleNamespace(always=lambda msg: messages.append(msg))
+        config = SimpleNamespace(resolve_cpu_budget=lambda: (8, 8, "coercing --nthreads"))
+        _report_cpu_budget(debug, config)
+        self.assertEqual(len(messages), 1)
+        self.assertIn("coercing --nthreads", messages[0])
+        self.assertNotIn("CPU budget", messages[0])
 
 
 if __name__ == "__main__":

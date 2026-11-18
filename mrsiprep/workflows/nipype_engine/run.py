@@ -25,6 +25,7 @@ see ``build_recording_workflow``'s docstring for why.
 
 from __future__ import annotations
 
+import multiprocessing
 import time
 import traceback
 from typing import TYPE_CHECKING
@@ -82,7 +83,6 @@ def execute_recordings_nipype(config, ready: "list[Recording]", subject_template
             for rec in ready
         ]
 
-    import multiprocessing
     from concurrent.futures import ProcessPoolExecutor, as_completed
 
     manager = multiprocessing.Manager()
@@ -92,7 +92,7 @@ def execute_recordings_nipype(config, ready: "list[Recording]", subject_template
 
     statuses: list = []
     try:
-        with ProcessPoolExecutor(max_workers=config.nproc) as executor:
+        with ProcessPoolExecutor(max_workers=config.nproc, mp_context=worker_context()) as executor:
             futures = {
                 executor.submit(
                     _run_one_recording_nipype, config, rec.subject, rec.session, subject_templates.get(rec.subject), status_queue
@@ -100,12 +100,48 @@ def execute_recordings_nipype(config, ready: "list[Recording]", subject_template
                 for rec in ready
             }
             for future in as_completed(futures):
-                statuses.append(future.result())
+                status = future.result()
+                statuses.append(status)
+                # The worker's own FINISHED goes through a manager queue, so it
+                # can still be in flight when the future resolves -- and if the
+                # worker died it was never sent at all. The parent knows the
+                # real outcome here, so state it directly rather than leaving
+                # the row stuck on RUNNING.
+                recording = futures[future]
+                tag = f"sub-{recording.subject}" + (f" ses-{recording.session}" if recording.session else "")
+                outcome = "FINISHED" if getattr(status, "status", "") == "success" else "FAILED"
+                try:
+                    status_queue.put((tag, "always", outcome))
+                except (OSError, EOFError, BrokenPipeError, ValueError):
+                    # The manager may already be tearing down. The table is a
+                    # progress display, not a result: statuses is what the
+                    # caller acts on, so a lost render update is not worth
+                    # failing an otherwise complete run over.
+                    continue
     finally:
         stop_listener.set()
         listener_thread.join(timeout=5)
         manager.shutdown()
     return statuses
+
+
+#: Start method for the worker pool. Deliberately not Linux's default "fork".
+#:
+#: Workers load numpy/scipy/nilearn/matplotlib, which initialise OpenMP
+#: (libgomp) and OpenBLAS thread pools in the parent. fork() copies those
+#: pools' mutexes in whatever state they happened to be in, while copying none
+#: of the threads holding them, so the first parallel region a child enters
+#: blocks on a futex nothing will ever release. Seen in the wild as a worker
+#: stuck with 32 threads in futex_do_wait during the resampling step's QC
+#: figure rendering: --nproc 2 hung on a recording that --nproc 1 processed in
+#: 40 seconds. spawn gives each worker a fresh interpreter with no inherited
+#: locks, at the cost of re-importing on startup (seconds, once per worker).
+WORKER_START_METHOD = "spawn"
+
+
+def worker_context():
+    """Multiprocessing context for the cross-recording worker pool."""
+    return multiprocessing.get_context(WORKER_START_METHOD)
 
 
 def _start_live_status_table(config, tags: "list[str]", status_queue):
@@ -163,38 +199,57 @@ def _start_live_status_table(config, tags: "list[str]", status_queue):
         return table
 
     def _listen():
+        def _apply(tag, kind, message):
+            row = rows.setdefault(tag, {"step": "", "state": "running", "elapsed": None})
+            if kind == "always" and "START" in message:
+                row["state"] = "running"
+                row["step"] = "starting"
+                start_times[tag] = time.monotonic()
+            elif kind == "always" and "FINISHED" in message:
+                row["state"] = "done"
+                row["step"] = "finished"
+                if tag in start_times and row["elapsed"] is None:
+                    row["elapsed"] = time.monotonic() - start_times[tag]
+            elif kind == "always" and "FAILED" in message:
+                row["state"] = "failed"
+                row["step"] = message
+                if tag in start_times and row["elapsed"] is None:
+                    row["elapsed"] = time.monotonic() - start_times[tag]
+            # A late step message must not resurrect a row the parent has
+            # already marked terminal.
+            elif row["state"] in ("done", "failed"):
+                return
+            elif kind == "step":
+                row["state"] = "running"
+                row["step"] = message
+            elif kind == "step_done":
+                row["step"] = f"{message} (done)"
+            elif kind == "step_failed":
+                row["state"] = "failed"
+                row["step"] = f"{message} (failed)"
+            if tag in start_times and row["state"] == "running":
+                row["elapsed"] = time.monotonic() - start_times[tag]
+
         with Live(_render(), console=console, refresh_per_second=4) as live:
             while not stop_event.is_set():
                 try:
                     tag, kind, message = status_queue.get(timeout=0.2)
-                except Exception:
+                except (queue.Empty, OSError, EOFError, ValueError):
+                    # Empty is the normal case at this 0.2s poll; the rest mean
+                    # the manager is going away, and the stop_event check on the
+                    # next iteration handles that.
                     continue
-                row = rows.setdefault(tag, {"step": "", "state": "running", "elapsed": None})
-                if kind == "always" and "START" in message:
-                    row["state"] = "running"
-                    row["step"] = "starting"
-                    start_times[tag] = time.monotonic()
-                elif kind == "always" and "FINISHED" in message:
-                    row["state"] = "done"
-                    row["step"] = "finished"
-                    if tag in start_times:
-                        row["elapsed"] = time.monotonic() - start_times[tag]
-                elif kind == "always" and "FAILED" in message:
-                    row["state"] = "failed"
-                    row["step"] = message
-                    if tag in start_times:
-                        row["elapsed"] = time.monotonic() - start_times[tag]
-                elif kind == "step":
-                    row["state"] = "running"
-                    row["step"] = message
-                elif kind == "step_done":
-                    row["step"] = f"{message} (done)"
-                elif kind == "step_failed":
-                    row["state"] = "failed"
-                    row["step"] = f"{message} (failed)"
-                if tag in start_times and row["state"] == "running":
-                    row["elapsed"] = time.monotonic() - start_times[tag]
+                _apply(tag, kind, message)
                 live.update(_render())
+            # Drain what is still queued: stop_event is set as soon as the last
+            # future resolves, and without this the final FINISHED messages are
+            # discarded, leaving finished recordings displayed as RUNNING.
+            while True:
+                try:
+                    tag, kind, message = status_queue.get_nowait()
+                except (queue.Empty, OSError, EOFError, ValueError):
+                    break  # drained, or the manager is gone
+                _apply(tag, kind, message)
             live.update(_render())
 
     thread = threading.Thread(target=_listen, daemon=True)
@@ -205,8 +260,10 @@ def _start_live_status_table(config, tags: "list[str]", status_queue):
 def _run_one_recording_nipype(config, subject: str, session: str | None, subject_template=None, status_queue=None) -> "RecordingStatus":
     from mrsiprep.io.naming import prefix as name_prefix
     from mrsiprep.io.naming import subject_session_dir
-    from mrsiprep.utils.debug import set_logbook, set_status_queue
-    from mrsiprep.workflows.nipype_engine.build import TERMINAL_NODE, build_recording_workflow
+    from mrsiprep.utils.debug import collect_timings, set_logbook, set_status_queue, set_timing_sink
+    from mrsiprep.utils.runtime_metrics import write_runtime_metrics
+    from mrsiprep.workflows.nipype_engine.build import build_recording_workflow
+    from mrsiprep.workflows.nipype_engine.steps_registry import terminal_node
     from mrsiprep.workflows.participant import RecordingStatus, _format_elapsed
 
     _configure_nipype_logging(config)
@@ -219,6 +276,7 @@ def _run_one_recording_nipype(config, subject: str, session: str | None, subject
     # docstring for why (Nipype deep-copies ctx between nodes; deep-copying a
     # Manager Queue proxy fails).
     set_status_queue(status_queue)
+    set_timing_sink(True)
 
     tag = f"sub-{subject}" + (f" ses-{session}" if session else "")
     debug = Debug(verbose=config.verbose)
@@ -231,10 +289,11 @@ def _run_one_recording_nipype(config, subject: str, session: str | None, subject
     try:
         wf = build_recording_workflow(config, subject, session, subject_template=subject_template)
         exec_graph = wf.run(plugin="Linear")
-        outputs = _terminal_outputs(exec_graph, TERMINAL_NODE)
+        outputs = _terminal_outputs(exec_graph, terminal_node(config))
         elapsed = time.monotonic() - start
         debug.always(f"[success]FINISHED[/success] {msg} in {_format_elapsed(elapsed)}")
         LOGGER.info("FINISHED %s in %s", msg, _format_elapsed(elapsed))
+        write_runtime_metrics(config, subject, session, collect_timings(), elapsed, status="success")
         return RecordingStatus(subject, session, "success", outputs=outputs)
     except Exception as exc:  # batch-safe failure, unless --stop-on-first-crash
         elapsed = time.monotonic() - start
@@ -248,12 +307,14 @@ def _run_one_recording_nipype(config, subject: str, session: str | None, subject
         debug.always(f"[failure]FAILED[/failure] {msg} after {_format_elapsed(elapsed)}: {exc_summary}")
         LOGGER.error("FAILED %s after %s: %s", msg, _format_elapsed(elapsed), exc_summary)
         debug.exception(f"FAILED {msg} after {_format_elapsed(elapsed)}: {exc}", traceback.format_exc())
+        write_runtime_metrics(config, subject, session, collect_timings(), elapsed, status="failed")
         if config.stop_on_first_crash:
             raise
         return RecordingStatus(subject, session, "failed", error=str(exc))
     finally:
         set_logbook(None)
         set_status_queue(None)
+        set_timing_sink(False)
 
 
 def _terminal_outputs(exec_graph, terminal_name: str) -> dict:

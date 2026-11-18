@@ -10,10 +10,9 @@ def run_connectivity_workflow(config, subject, session, regional_table, parcels,
     optionally correlate them into a metabolic connectivity matrix.
 
     Profile estimation (CRLB-scaled Monte Carlo uncertainty propagation,
-    Instrella & Juchem 2024) always runs -- it is the standard, unconditional
-    regional-derivative output of ``parc-con`` mode, independent of
-    ``--write-connectivity``. Connectivity-matrix construction is the
-    optional add-on: it reuses the already-computed profiles rather than
+    Instrella & Juchem 2024) always runs, for every recording, independent of
+    ``--parcellation-mode`` or ``--write-connectivity``. Connectivity-matrix
+    construction is the optional add-on: it reuses the already-computed profiles rather than
     recomputing them, and only runs when ``config.write_connectivity`` is
     set.
 
@@ -37,6 +36,7 @@ def run_connectivity_workflow(config, subject, session, regional_table, parcels,
         ``"nodes"``, and ``"edges"`` entries when ``--write-connectivity``
         was also set.
     """
+    scale = _scale_token(parcels)
     profiles, profile_npz, table = export_metabolic_profiles(
         config,
         subject,
@@ -48,9 +48,22 @@ def run_connectivity_workflow(config, subject, session, regional_table, parcels,
         brainmask,
         parcels.atlas_mrsi,
         gm_fraction_path=gm_fraction_path,
-        scale=parcels.scale,
+        scale=scale,
     )
     outputs = {"profiles": profile_npz}
     if config.write_connectivity:
-        outputs.update(export_connectivity(config, subject, session, profiles, table, parcels.atlas_name, scale=parcels.scale))
+        outputs.update(export_connectivity(config, subject, session, profiles, table, parcels.atlas_name, scale=scale))
     return outputs
+
+
+def _scale_token(parcels) -> str | None:
+    """Scale entity for this parcellation's connectivity outputs.
+
+    Folds the gyral-WM growth in when several were requested (mirroring
+    Chimera's own ``scale3grow2mm`` desc convention), so grow variants of the
+    same scheme/scale don't overwrite each other. Single-grow runs are
+    unaffected and keep their existing filenames.
+    """
+    if getattr(parcels, "grow", None) is None:
+        return parcels.scale
+    return f"{parcels.scale or ''}grow{parcels.grow}mm"

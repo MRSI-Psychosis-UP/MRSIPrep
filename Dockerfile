@@ -21,9 +21,21 @@ RUN chmod 0755 /usr/local/bin/mrsiprep-entrypoint
 RUN /usr/bin/python3 -m pip install "nipype>=1.8" \
     && /usr/bin/python3 -m pip install --no-deps --force-reinstall .
 
-# Bake in the full-head (non-skull-stripped) MNI152 2009 template used as the
-# MNI-space QC report background, so it doesn't get re-downloaded every run.
-RUN /usr/bin/python3 -c "from nilearn import datasets; datasets.fetch_icbm152_2009()"
+# Reference templates come from TemplateFlow (see mrsiprep/config/templates.py
+# for why). TemplateFlow fetches on demand by default, which would make runs
+# depend on network access and on *when* they ran; pre-fetching every template
+# MRSIPrep supports keeps the image self-contained and reproducible. Pin
+# TEMPLATEFLOW_HOME so the cache is found at a fixed path regardless of $HOME.
+#
+# Keep this list in sync with SUPPORTED_TEMPLATES in config/templates.py --
+# adding a template there without adding it here yields an image that reaches
+# for the network mid-run (or fails offline).
+ENV TEMPLATEFLOW_HOME=/opt/templateflow
+RUN /usr/bin/python3 -c "\
+import templateflow.api as api; \
+[api.get('MNI152NLin2009cAsym', resolution=r, desc=d, suffix=s, extension='.nii.gz') \
+ for r in (1, 2) for d, s in ((None, 'T1w'), ('brain', 'mask'))]" \
+    && chmod -R a+rX /opt/templateflow
 
 # nosemgrep: dockerfile.security.missing-user-entrypoint.missing-user-entrypoint
 # Intentionally root: entrypoint.sh runs the pipeline as root, then chowns the

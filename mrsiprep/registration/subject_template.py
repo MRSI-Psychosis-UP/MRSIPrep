@@ -15,9 +15,10 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
+from mrsiprep.utils.debug import note_cache_hit, note_computed
 from mrsiprep.interfaces.ants import require_cli, run_cli
 from mrsiprep.registration.transforms import all_exist, ants_transform_prefix, transform_paths
-from mrsiprep.utils.images import resolve_mni_resolution
+from mrsiprep.config.templates import template_t1w
 
 
 @dataclass
@@ -55,13 +56,14 @@ def build_subject_template(config, subject: str, session_t1_paths: dict[str, Pat
         and all_exist(mni_forward)
         and all(all_exist(paths) for paths in per_session_forward.values())
     )
-    if already_built and not (config.overwrite_mni_reg or config.overwrite):
+    if already_built and not (config.overwrite_template_reg or config.overwrite):
+        note_cache_hit()
         return SubjectTemplateResult(template_path, per_session_forward, mni_forward, mni_inverse)
 
+    note_computed()
     require_cli("antsMultivariateTemplateConstruction2.sh")
     require_cli("antsRegistrationSyN.sh")
 
-    from nilearn import datasets
 
     with tempfile.TemporaryDirectory(prefix="mrsiprep_subject_template_") as tmpdir:
         tmp = Path(tmpdir)
@@ -124,11 +126,10 @@ def build_subject_template(config, subject: str, session_t1_paths: dict[str, Pat
         # different native MRSI resolutions -- so 'origres' has no single
         # well-defined answer here; fall back to the template's own (T1w-grid)
         # resolution rather than picking one session's MRSI resolution
-        # arbitrarily. Any other explicit --mni-resolution choice (an exact
+        # arbitrarily. Any other explicit res- choice (an exact
         # 'NNmm', or 't1wres' itself) is honored as given.
-        template_resolution_choice = "t1wres" if config.mni_resolution == "origres" else config.mni_resolution
-        resolution = resolve_mni_resolution(template_resolution_choice, template_path)
-        mni_template = datasets.load_mni152_template(resolution)
+        resolution = config.resolution_for("MNI152NLin2009cAsym", template_path, prefer_t1w=True)
+        mni_template = template_t1w(resolution)
         mni_template_path = tmp / "mni152_template.nii.gz"
         mni_template.to_filename(str(mni_template_path))
 

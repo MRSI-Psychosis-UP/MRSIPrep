@@ -1,20 +1,23 @@
 """Build a per-recording Nipype workflow from the step sequence.
 
 The DAG is a linear chain that threads a single ``ctx`` dict through cached
-Function nodes (see :mod:`mrsiprep.workflows.nipype_engine.nodes`). Because the
-MRSI pipeline is an inherent data-dependency chain, a linear graph captures its
-true structure; the payoff is Nipype's per-node content/value hashing, which
-skips unchanged steps on rerun. Each node writes its derivatives straight to the
-BIDS layout as before; ``base_dir`` holds only the node result caches.
+Function nodes (see :mod:`mrsiprep.workflows.nipype_engine.nodes`). By
+default this mirrors the MRSI pipeline's true data-dependency structure
+(``resolve_step_order`` returns :data:`nodes.STEP_SEQUENCE` unchanged); a
+``--steps`` request (see
+:mod:`mrsiprep.workflows.nipype_engine.steps_registry`) substitutes a
+validated custom order/subset instead, still built as the same kind of
+linear chain over just the requested steps. Nipype's per-node content/value
+hashing skips unchanged steps on rerun regardless of which steps are
+requested. Each node writes its derivatives straight to the BIDS layout as
+before; ``base_dir`` holds only the node result caches.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from mrsiprep.workflows.nipype_engine.nodes import STEP_SEQUENCE
-
-TERMINAL_NODE = STEP_SEQUENCE[-1][0]
+from mrsiprep.workflows.nipype_engine.steps_registry import resolve_step_order
 
 
 def recording_base_dir(config, subject: str, session: str | None) -> Path:
@@ -25,8 +28,10 @@ def recording_base_dir(config, subject: str, session: str | None) -> Path:
 def build_recording_workflow(config, subject: str, session: str | None, subject_template=None):
     """Return a linear ``pe.Workflow`` for one recording.
 
-    The returned workflow's terminal node (:data:`TERMINAL_NODE`) exposes the
-    final ``ctx`` on its ``ctx`` output; ``ctx['outputs']`` is the outputs dict.
+    Builds over ``resolve_step_order(config)`` -- the full default step
+    sequence, or a validated ``--steps`` custom order/subset. The returned
+    workflow's terminal node (``terminal_node(config)``) exposes the final
+    ``ctx`` on its ``ctx`` output; ``ctx['outputs']`` is the outputs dict.
 
     Each node wraps a step function via :class:`StepInterface`, which hashes only
     ``(step, config, subject, session)`` --- deterministic across processes --- and
@@ -55,7 +60,7 @@ def build_recording_workflow(config, subject: str, session: str | None, subject_
     wf = pe.Workflow(name="mrsiprep_recording", base_dir=str(base_dir))
 
     nodes = []
-    for name, _func in STEP_SEQUENCE:
+    for name, _func in resolve_step_order(config):
         node = pe.Node(StepInterface(), name=name)
         node.inputs.step = name
         node.inputs.config = config

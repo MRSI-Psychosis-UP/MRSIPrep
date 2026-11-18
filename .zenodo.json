@@ -1,0 +1,26 @@
+{
+  "title": "MRSIPrep: A Standardized Post-Quantification Framework for Preprocessing Whole-Brain Magnetic Resonance Spectroscopic Imaging",
+  "description": "MRSIPrep is a BIDS App for preprocessing already-quantified whole-brain magnetic resonance spectroscopic imaging (MRSI) metabolite maps: registration to anatomical/template space, tissue segmentation, partial-volume correction, atlas projection, and automated quality-control reporting.",
+  "creators": [
+    {"name": "Lucchetti, Federico", "affiliation": "Center for Psychiatric Neuroscience, Department of Psychiatry, Lausanne University Hospital and University of Lausanne"},
+    {"name": "Céléreau, Edgar", "affiliation": "Center for Psychiatric Neuroscience, Department of Psychiatry, Lausanne University Hospital and University of Lausanne"},
+    {"name": "Jenni, Raoul", "affiliation": "Center for Psychiatric Neuroscience, Department of Psychiatry, Lausanne University Hospital and University of Lausanne"},
+    {"name": "Ledoux, Jean-Baptiste", "affiliation": "Center for Psychiatric Neuroscience, Department of Psychiatry, Lausanne University Hospital and University of Lausanne"},
+    {"name": "Eliez, Stephan", "affiliation": "Developmental Imaging and Psychopathology Laboratory, Department of Psychiatry, University of Geneva School of Medicine"},
+    {"name": "Delavari, Farnaz", "affiliation": "Department of Radiology, Lausanne University Hospital"},
+    {"name": "Hagmann, Patric", "affiliation": "Department of Radiology, Lausanne University Hospital"},
+    {"name": "Alemán-Gómez, Yasser", "affiliation": "Department of Radiology, Lausanne University Hospital"},
+    {"name": "Klauser, Antoine", "affiliation": "Swiss Innovation Hub, Siemens Healthineers International AG"},
+    {"name": "Klauser, Paul", "affiliation": "Center for Psychiatric Neuroscience, Department of Psychiatry, Lausanne University Hospital and University of Lausanne"}
+  ],
+  "license": "other-nc",
+  "related_identifiers": [
+    {
+      "identifier": "10.64898/2026.09.11.750896",
+      "relation": "isSupplementTo",
+      "resource_type": "publication-preprint"
+    }
+  ],
+  "upload_type": "software",
+  "access_right": "open"
+}

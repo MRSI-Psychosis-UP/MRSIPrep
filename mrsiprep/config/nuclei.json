@@ -1,0 +1,55 @@
+{
+  "1H": {
+    "display_name": "Proton",
+    "aliases": ["1H", "H1", "H", "proton"],
+    "quality_defaults": {
+      "snr_min": 4.0,
+      "linewidth_max": 0.1,
+      "crlb_max": 20.0
+    },
+    "metabolite_aliases": {
+      "Glx": ["GluGln", "Glx"],
+      "GluGln": ["GluGln", "Glx"],
+      "NAA": ["NAA", "NAANAAG"],
+      "tNAA": ["NAANAAG", "tNAA", "NAA"],
+      "NAANAAG": ["NAANAAG", "tNAA", "NAA"],
+      "Cho": ["GPCPCh", "Cho"],
+      "GPCPCh": ["GPCPCh", "Cho"],
+      "tCr": ["CrPCr", "tCr"],
+      "CrPCr": ["CrPCr", "tCr"],
+      "Ins": ["Ins"]
+    },
+    "status": "curated",
+    "notes": "Default nucleus. Thresholds are the values MRSIPrep has always used for proton MRSI; metabolite aliases resolve the common combined-resonance spellings against each other when locating input maps.",
+    "source": "MRSIPrep defaults, in use since the initial release."
+  },
+  "31P": {
+    "display_name": "Phosphorus",
+    "aliases": ["31P", "P31", "P", "phosphorus", "phosphorous"],
+    "quality_defaults": null,
+    "metabolite_aliases": {
+      "PCr": ["PCr"],
+      "Pi": ["Pi"],
+      "ATP": ["ATP", "gATP", "aATP", "bATP"],
+      "PME": ["PME"],
+      "PDE": ["PDE"]
+    },
+    "status": "uncurated",
+    "notes": "Metabolite aliases are provided, but quality thresholds are NOT curated: 31P SNR/CRLB regimes differ substantially from 1H, and shipping guessed values would look authoritative while being wrong. Pass --snr-min/--linewidth-max/--crlb-max explicitly, or contribute citation-backed defaults here.",
+    "source": null
+  },
+  "2H": {
+    "display_name": "Deuterium",
+    "aliases": ["2H", "H2", "D", "deuterium", "dmi"],
+    "quality_defaults": null,
+    "metabolite_aliases": {
+      "water": ["water", "HDO"],
+      "Glucose": ["Glucose", "Glc"],
+      "Glx": ["Glx", "GluGln"],
+      "Lactate": ["Lactate", "Lac"]
+    },
+    "status": "uncurated",
+    "notes": "Deuterium metabolic imaging (DMI). As for 31P, thresholds are deliberately uncurated -- deuterium SNR is far lower than proton and appropriate cutoffs are protocol-specific. Pass the three quality flags explicitly, or contribute curated values.",
+    "source": null
+  }
+}

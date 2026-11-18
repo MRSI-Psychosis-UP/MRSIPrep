@@ -80,18 +80,26 @@ class DerivativeNameTests(unittest.TestCase):
         self.assertTrue(str(mrsi_parcel_dir(root, "S001", "V1")).endswith("sub-S001/ses-V1/mrsi/parcel"))
 
     def test_reports_layout(self):
+        """The report HTML, its figures, and provenance.json all live
+        directly under reports/, with no coverage/ intermediary: someone
+        opening the reports/ folder should find the report they came for
+        immediately, not have to know to step into a subfolder first."""
         root = Path("/out")
         self.assertTrue(str(coverage_report_html(root, "S001", "V1")).endswith(
-            "sub-S001/ses-V1/reports/coverage/sub-S001_ses-V1_desc-report.html"
+            "sub-S001/ses-V1/reports/sub-S001_ses-V1_desc-report.html"
         ))
         self.assertTrue(str(coverage_figure_derivative(root, "S001", "V1", desc="parcelcoverage")).endswith(
-            "sub-S001/ses-V1/reports/coverage/figures/sub-S001_ses-V1_desc-parcelcoverage.png"
-        ))
-        self.assertTrue(str(qc_report_derivative(root, "S001", "V1", "tissue")).endswith(
-            "sub-S001/ses-V1/reports/qc-reports/sub-S001_ses-V1_step-tissue.html"
+            "sub-S001/ses-V1/reports/figures/sub-S001_ses-V1_desc-parcelcoverage.png"
         ))
         self.assertTrue(str(provenance_derivative(root, "S001", "V1")).endswith(
             "sub-S001/ses-V1/reports/sub-S001_ses-V1_desc-provenance.json"
+        ))
+        # qc_report_derivative's own .html path is unused as a real file --
+        # every report module that calls it only ever reads .stem, to derive
+        # a figure filename prefix (see e.g. registration_overview.py). It
+        # is untouched by the reports/coverage/ flattening.
+        self.assertTrue(str(qc_report_derivative(root, "S001", "V1", "tissue")).endswith(
+            "sub-S001/ses-V1/reports/qc-reports/sub-S001_ses-V1_step-tissue.html"
         ))
 
 

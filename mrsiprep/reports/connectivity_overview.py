@@ -1,22 +1,21 @@
-"""Connectivity matrix QC report."""
+"""Connectivity matrix QC section (Connectivity tab)."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from mrsiprep.io.naming import qc_report_derivative
-from mrsiprep.reports.slices import html_page
+from mrsiprep.io.naming import coverage_report_dir, qc_report_derivative
 
 
-def write_connectivity_qc_report(
+def build_connectivity_qc_sections(
     config,
     subject: str,
     session: str | None,
     matrix_tsv_path: Path | None,
-) -> Path:
+) -> list[tuple[str, str]]:
+    """Returns the Connectivity tab's (heading, body_html) sections."""
     out = qc_report_derivative(config.derivative_dir, subject, session, "connectivity")
-    out.parent.mkdir(parents=True, exist_ok=True)
-    figures_dir = out.parent / "figures"
+    figures_dir = coverage_report_dir(config.derivative_dir, subject, session) / "figures"
     figures_dir.mkdir(parents=True, exist_ok=True)
 
     sections: list[tuple[str, str]] = []
@@ -40,5 +39,4 @@ def write_connectivity_qc_report(
     else:
         sections.append(("Connectivity matrix", "<p>Connectivity matrix not requested (--write-connectivity).</p>"))
 
-    out.write_text(html_page(f"Connectivity QC: sub-{subject}" + (f" ses-{session}" if session else ""), sections), encoding="utf-8")
-    return out
+    return sections

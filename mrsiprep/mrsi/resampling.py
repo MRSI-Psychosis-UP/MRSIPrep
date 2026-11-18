@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from nilearn import datasets
 
+from mrsiprep.utils.debug import note_cache_hit, note_computed
 from mrsiprep.io.naming import mrsi_derivative, resampling_work_path
 from mrsiprep.registration.transforms import apply_image_transform
-from mrsiprep.utils.images import resolve_mni_resolution
+from mrsiprep.config.templates import template_t1w
 
 
 def resample_ref_met_to_t1w(
@@ -24,8 +24,10 @@ def resample_ref_met_to_t1w(
     --work-dir rather than the permanent BIDS derivatives, since nothing else
     consumes it (full T1w-space resampling is opt-in via --output-mrsi-t1w)."""
     out = resampling_work_path(config.work_dir, subject, session, space="T1w", met=config.ref_met, desc="signal")
-    if out.exists() and not config.overwrite_transform:
+    if out.exists() and not (config.overwrite_transform or config.overwrite):
+        note_cache_hit()
         return out
+    note_computed()
     return apply_image_transform(t1_reference, ref_map, mrsi_to_t1, out, interpolation="linear", threads=config.nthreads)
 
 
@@ -68,7 +70,7 @@ def transform_mrsi_maps(
             out = mrsi_derivative(config.derivative_dir, subject, session, space=space, res=res, met=met, desc="signal", suffix_override="mrsi")
             space_outputs[met] = (
                 apply_image_transform(fixed, path, transforms, out, interpolation="linear", threads=threads)
-                if not out.exists() or config.overwrite_transform
+                if not out.exists() or config.overwrite_transform or config.overwrite
                 else out
             )
         for desc, met, path in _quality_items():
@@ -76,7 +78,7 @@ def transform_mrsi_maps(
             out = mrsi_derivative(config.derivative_dir, subject, session, space=space, res=res, met=met, desc=desc, suffix_override="mrsi")
             space_outputs[f"{desc}{f'-{met}' if met else ''}"] = (
                 apply_image_transform(fixed, path, transforms, out, interpolation=interpolation, threads=threads)
-                if not out.exists() or config.overwrite_transform
+                if not out.exists() or config.overwrite_transform or config.overwrite
                 else out
             )
         return space_outputs
@@ -85,8 +87,8 @@ def transform_mrsi_maps(
     if config.output_mrsi_t1w:
         outputs["T1w"] = _resample_space("T1w", t1_reference, mrsi_to_t1)
     if ("MNI152NLin2009cAsym" in config.output_spaces or "mni" in config.transform) and t1_to_mni:
-        resolution = resolve_mni_resolution(config.mni_resolution, t1_reference, mrsi_reference)
-        template = datasets.load_mni152_template(resolution)
+        resolution = config.resolution_for("MNI152NLin2009cAsym", t1_reference, mrsi_reference)
+        template = template_t1w(resolution)
         transforms = list(t1_to_mni) + list(mrsi_to_t1)
         outputs["MNI152NLin2009cAsym"] = _resample_space("MNI152NLin2009cAsym", template, transforms, res=resolution)
     return outputs

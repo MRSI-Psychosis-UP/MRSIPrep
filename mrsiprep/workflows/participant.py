@@ -1,294 +1,75 @@
-"""Participant workflow orchestration."""
+"""Participant-level orchestration.
+
+Resolves which recordings to process, runs the preflight inventory, then drives
+each recording through the pipeline stages, collecting a per-recording
+:class:`RecordingStatus`. This module owns *ordering and error handling*; the
+stages themselves live in :mod:`mrsiprep.workflows.steps` and the pre-run
+inventory in :mod:`mrsiprep.workflows.preflight`.
+
+Those two modules were split out of this one purely to keep each readable --
+this module re-exports their public names below, so
+``from mrsiprep.workflows.participant import _step_registration`` and friends
+keep working for existing callers (notably
+:mod:`mrsiprep.workflows.nipype_engine.nodes`).
+"""
 
 from __future__ import annotations
 
-import os
-from dataclasses import dataclass, field
+import time
+import traceback
 
-from rich import box
-from rich.table import Table
-
-from mrsiprep.interfaces.freesurfer import freesurfer_subject_id, subject_dir_valid
 from mrsiprep.io.bids import BIDSLayout, Recording
 from mrsiprep.io.derivatives import init_derivative
-from mrsiprep.io.loaders import load_mrsi_inputs
 from mrsiprep.io.validators import ValidationError, validate_recording
-from mrsiprep.mrsi.pvc import create_tissue_4d, run_pvc
 from mrsiprep.utils.debug import Debug
-from mrsiprep.mrsi.resampling import transform_mrsi_maps
-from mrsiprep.parcellation.extraction import extract_regional_metabolites
-from mrsiprep.parcellation.tissue_regression import regional_tissue_regression
-from mrsiprep.parcellation.metprofiles import export_metprofile_npz
-from mrsiprep.parcellation.synthseg import run_synthseg_parcellation
-from mrsiprep.reports.parcel_qc import write_parcel_qc
-from mrsiprep.reports.parcel_figures import write_parcel_qc_figures
-from mrsiprep.reports.leakage_qc import write_signal_leakage_qc
-from mrsiprep.reports.qc_combine import combine_qc_reports
-from mrsiprep.reports.connectivity_overview import write_connectivity_qc_report
-from mrsiprep.reports.mrsi_preproc import write_mrsi_preproc_qc_report
-from mrsiprep.reports.t1_correction import write_t1_correction_qc_report
-from mrsiprep.reports.parcellation_overview import write_parcellation_qc_report
-from mrsiprep.reports.registration_overview import write_registration_overview_report
-from mrsiprep.tissue.synthseg_fast import (
-    extract_t1_synthseg,
-    segment_t1_synthseg_fast,
-    synthseg_fast_brain_path,
-    synthseg_fast_brain_mask_path,
-    synthseg_fast_csf_probseg_path,
-)
-from mrsiprep.utils.images import resolve_mni_resolution
 from mrsiprep.utils.misc import format_elapsed_hm, normalize_session, normalize_subject, read_participant_pairs
-from mrsiprep.workflows.anatomical import prepare_anatomical
 from mrsiprep.workflows.base import ensure_work_dirs
-from mrsiprep.workflows.connectivity import run_connectivity_workflow
-from mrsiprep.workflows.mrsi import run_mrsi_workflow
-from mrsiprep.workflows.parcellation import run_parcellation_workflow
-from mrsiprep.workflows.registration import run_registration_workflow
-from mrsiprep.workflows.reports import run_reports_workflow
-from mrsiprep.workflows.tissue import run_tissue_workflow, segment_t1_fuzzy_cmeans
 
-
-@dataclass
-class RecordingStatus:
-    """Outcome of processing (or validating) one subject/session recording.
-
-    :ivar subject: BIDS subject label, without the ``sub-`` prefix.
-    :ivar session: BIDS session label without the ``ses-`` prefix, or
-        ``None`` for session-less datasets.
-    :ivar status: One of ``"skipped"`` (failed validation before
-        processing started), ``"success"``, or ``"failed"`` (raised
-        during Nipype execution).
-    :ivar outputs: Output paths produced for this recording, keyed by a
-        short name (e.g. ``"t1w"``, ``"qc_summary"``, ``"regional_table"``);
-        empty for skipped recordings.
-    :ivar error: Human-readable error message, set when ``status`` is
-        ``"skipped"`` or ``"failed"``.
-    """
-
-    subject: str
-    session: str | None
-    status: str
-    outputs: dict = field(default_factory=dict)
-    error: str | None = None
-
-
-def _preflight_t1_status(layout, subject, session, config, check_integrity: bool):
-    """Returns (t1_status, t1_corrupt) for the preflight T1w check."""
-    from mrsiprep.utils.images import nifti_validity_error
-
-    t1_path = layout.t1(subject, session, config.t1_pattern)
-    t1_status = bool(t1_path and t1_path.exists())
-    t1_corrupt = bool(t1_status and check_integrity and nifti_validity_error(t1_path))
-    return t1_status, t1_corrupt
-
-
-def _preflight_corrupt_items(inputs, t1_corrupt: bool, check_integrity: bool) -> list[str]:
-    """Human-readable labels for every input file that failed a NIfTI validity check."""
-    from mrsiprep.utils.images import nifti_validity_error
-
-    if not check_integrity:
-        return []
-    corrupt_items = []
-    if t1_corrupt:
-        corrupt_items.append("T1w")
-    for met, path in inputs.metabolite_maps.items():
-        if nifti_validity_error(path):
-            corrupt_items.append(f"MRSI-{met}")
-    for met, path in inputs.crlb_maps.items():
-        if nifti_validity_error(path):
-            corrupt_items.append(f"CRLB-{met}")
-    if inputs.snr_map is not None and nifti_validity_error(inputs.snr_map):
-        corrupt_items.append("SNR")
-    if inputs.linewidth_map is not None and nifti_validity_error(inputs.linewidth_map):
-        corrupt_items.append("FWHM")
-    return corrupt_items
-
-
-def _preflight_tissue_label(layout, subject, session, config) -> str:
-    """Rich-markup cell for the preflight table's 'Tissue files' column."""
-    if config.tissue_backend != "existing":
-        return "[cyan]AUTO[/cyan]"
-    tissue_statuses = [bool(layout.cat12_probseg(subject, session, idx)) for idx in (1, 2, 3)]
-    return " ".join(
-        f"[{'green' if status else 'red'}]p{idx}[/{'green' if status else 'red'}]"
-        for idx, status in enumerate(tissue_statuses, 1)
-    )
-
-
-def _preflight_transform_status(layout, subject, session, config) -> dict[str, bool]:
-    """Which registration-transform stages already have all their files on disk."""
-    transform_stages = ["mrsi", "anat"]
-    if config.longitudinal:
-        transform_stages.append("t1-template")
-    transforms = {}
-    for stage in transform_stages:
-        stage_paths = layout.transform(subject, session, stage)
-        transforms[stage] = bool(stage_paths and all(path.exists() for path in stage_paths))
-    return transforms
-
-
-def _preflight_freesurfer_status(layout, subject, session, config) -> bool | None:
-    """FreeSurfer recon-all completeness, or None when this run doesn't need it."""
-    if config.processing_mode != "parc-con" or config.parcellation_mode != "chimera":
-        return None
-    raw_t1 = layout.raw_t1(subject, session)
-    if raw_t1 is None:
-        return False
-    fs_subject = freesurfer_subject_id(raw_t1)
-    return subject_dir_valid(config.freesurfer_dir, fs_subject)
-
-
-def _gather_input_availability(config, subject: str, session: str | None) -> dict:
-    layout = BIDSLayout(config.bids_dir, filters=config.bids_filters)
-    recording_id = f"sub-{subject}"
-    if session:
-        recording_id += f"_ses-{session}"
-
-    check_integrity = not config.skip_file_integrity_check
-
-    t1_status, t1_corrupt = _preflight_t1_status(layout, subject, session, config, check_integrity)
-    inputs = load_mrsi_inputs(layout, subject, session, config.metabolites)
-    corrupt_items = _preflight_corrupt_items(inputs, t1_corrupt, check_integrity)
-
-    return {
-        "recording_id": recording_id,
-        "subject": subject,
-        "session": session,
-        "t1": t1_status,
-        "mrsi_found": len(inputs.metabolite_maps),
-        "mrsi_expected": len(config.metabolites),
-        "crlb_found": len(inputs.crlb_maps),
-        "snr": bool(inputs.snr_map),
-        "fwhm": bool(inputs.linewidth_map),
-        "brainmask": bool(inputs.brainmask),
-        "tissue": _preflight_tissue_label(layout, subject, session, config),
-        "transforms": _preflight_transform_status(layout, subject, session, config),
-        "freesurfer": _preflight_freesurfer_status(layout, subject, session, config),
-        "corrupt_items": corrupt_items,
-    }
-
-
-_PREFLIGHT_CHECK_MARK = "[green]✔[/green]"
-_PREFLIGHT_CROSS_MARK = "[red]X[/red]"
-_PREFLIGHT_PROC_MARK = "[orange3]PROC[/orange3]"
-_PREFLIGHT_NA_MARK = "[grey58]N/A[/grey58]"
-
-
-def _preflight_transform_columns(config) -> list[tuple[str, str]]:
-    columns = [("mrsi", "MRSI→T1"), ("anat", "T1→MNI")]
-    if config.longitudinal:
-        columns.append(("t1-template", "Ses→Template"))
-    return columns
-
-
-def _build_preflight_table(config, transform_columns, show_integrity: bool, show_freesurfer: bool) -> Table:
-    table = Table(box=box.SIMPLE_HEAVY, show_lines=False, title="Input availability summary")
-    table.add_column("Recording", style="cyan", no_wrap=True)
-    table.add_column("T1w ref", justify="center", no_wrap=True)
-    table.add_column("MRSI files", justify="center", no_wrap=True)
-    table.add_column("CRLB", justify="center", no_wrap=True)
-    table.add_column("SNR", justify="center", no_wrap=True)
-    table.add_column("FWHM", justify="center", no_wrap=True)
-    table.add_column("Brainmask", justify="center", no_wrap=True)
-    table.add_column("Tissue files", justify="center", no_wrap=True)
-    if show_integrity:
-        table.add_column("Integrity", justify="center", no_wrap=True)
-    if show_freesurfer:
-        table.add_column("FreeSurfer", justify="center", no_wrap=True)
-    for _, label in transform_columns:
-        table.add_column(label, justify="center", no_wrap=True)
-    return table
-
-
-def _preflight_row_cells(row: dict, transform_columns, show_integrity: bool, show_freesurfer: bool) -> list[str]:
-    mrsi_color = "green" if row["mrsi_found"] == row["mrsi_expected"] else "red"
-    crlb_color = "green" if row["crlb_found"] == row["mrsi_expected"] else "red"
-
-    cells = [
-        row["recording_id"],
-        _PREFLIGHT_CHECK_MARK if row["t1"] else _PREFLIGHT_CROSS_MARK,
-        f"[{mrsi_color}]{row['mrsi_found']}/{row['mrsi_expected']}[/{mrsi_color}]",
-        f"[{crlb_color}]{row['crlb_found']}/{row['mrsi_expected']}[/{crlb_color}]",
-        _PREFLIGHT_CHECK_MARK if row["snr"] else _PREFLIGHT_CROSS_MARK,
-        _PREFLIGHT_CHECK_MARK if row["fwhm"] else _PREFLIGHT_CROSS_MARK,
-        _PREFLIGHT_CHECK_MARK if row["brainmask"] else _PREFLIGHT_PROC_MARK,
-        row["tissue"],
-    ]
-
-    if show_integrity:
-        corrupt_items = row.get("corrupt_items") or []
-        cells.append(f"[red]CORRUPT ({', '.join(corrupt_items)})[/red]" if corrupt_items else _PREFLIGHT_CHECK_MARK)
-
-    if show_freesurfer:
-        if row["freesurfer"] is None:
-            cells.append(_PREFLIGHT_NA_MARK)
-        else:
-            cells.append(_PREFLIGHT_CHECK_MARK if row["freesurfer"] else _PREFLIGHT_PROC_MARK)
-
-    for stage_key, _ in transform_columns:
-        cells.append(_PREFLIGHT_CHECK_MARK if row["transforms"].get(stage_key, False) else _PREFLIGHT_PROC_MARK)
-
-    return cells
-
-
-def _preflight_missing_items(row: dict, config) -> list[str]:
-    missing_items = []
-    if not row["t1"]:
-        missing_items.append("T1w")
-    if row["mrsi_found"] != row["mrsi_expected"]:
-        missing_items.append(f"MRSI {row['mrsi_found']}/{row['mrsi_expected']}")
-    if "crlb" in config.quality_metrics and row["crlb_found"] != row["mrsi_expected"]:
-        missing_items.append(f"CRLB {row['crlb_found']}/{row['mrsi_expected']}")
-    if "snr" in config.quality_metrics and not row["snr"]:
-        missing_items.append("SNR")
-    if "linewidth" in config.quality_metrics and not row["fwhm"]:
-        missing_items.append("FWHM")
-    if config.processing_mode == "parc-con" and config.tissue_backend == "existing" and "red" in row["tissue"]:
-        missing_items.append("Tissue")
-    if row.get("corrupt_items"):
-        missing_items.append(f"CORRUPT ({', '.join(row['corrupt_items'])})")
-    return missing_items
-
-
-def _report_preflight_summary(debug: Debug, summaries: list[dict], missing_recordings: list[str], total_missing_files: int) -> None:
-    if missing_recordings:
-        debug.error(
-            f"Detected {total_missing_files} missing or incomplete file categories across {len(missing_recordings)}/{len(summaries)} recordings. "
-            f"Affected recordings: {', '.join(missing_recordings)}"
-        )
-    else:
-        debug.success("All required inputs are available for the selected recordings.")
-
-
-def _report_cpu_budget(debug: Debug, config) -> None:
-    nproc, nthreads, cpu_warning = config.resolve_cpu_budget()
-    if cpu_warning:
-        debug.always(f"[warning]WARNING:[/warning] {cpu_warning}")
-    else:
-        debug.always(f"CPU budget: --nproc {nproc} x --nthreads {nthreads} = {nproc * nthreads} threads (of {os.cpu_count()} available).")
-
-
-def _render_preflight_table(config, summaries: list[dict], debug: Debug) -> None:
-    transform_columns = _preflight_transform_columns(config)
-    show_freesurfer = any(row["freesurfer"] is not None for row in summaries)
-    show_integrity = not config.skip_file_integrity_check
-
-    table = _build_preflight_table(config, transform_columns, show_integrity, show_freesurfer)
-
-    total_missing_files = 0
-    missing_recordings = []
-    for row in summaries:
-        table.add_row(*_preflight_row_cells(row, transform_columns, show_integrity, show_freesurfer))
-        missing_items = _preflight_missing_items(row, config)
-        if missing_items:
-            total_missing_files += len(missing_items)
-            missing_recordings.append(row["recording_id"])
-
-    debug.separator()
-    debug.title("Preflight input availability")
-    debug.console.print(table)
-    _report_preflight_summary(debug, summaries, missing_recordings, total_missing_files)
-    _report_cpu_budget(debug, config)
+# Re-exported for backwards compatibility -- see the module docstring. These
+# are intentionally unused here; importing them is the point.
+# pylint: disable=unused-import
+from mrsiprep.workflows.preflight import (  # noqa: F401
+    _PREFLIGHT_CHECK_MARK,
+    _PREFLIGHT_CROSS_MARK,
+    _PREFLIGHT_NA_MARK,
+    _PREFLIGHT_PROC_MARK,
+    RecordingStatus,
+    _build_preflight_table,
+    _gather_input_availability,
+    _preflight_corrupt_items,
+    _preflight_freesurfer_status,
+    _preflight_missing_items,
+    _preflight_row_cells,
+    _preflight_t1_status,
+    _preflight_tissue_label,
+    _preflight_transform_columns,
+    _preflight_transform_status,
+    _render_preflight_table,
+    _report_cpu_budget,
+    _report_preflight_summary,
+)
+from mrsiprep.workflows.steps import (  # noqa: F401
+    _step_anatomical_prep,
+    _step_connectivity,
+    _step_leakage_qc,
+    _step_metprofiles,
+    _step_mrsi_load,
+    _step_mrsi_quality,
+    _step_mrsi_reference,
+    _step_parcellation,
+    _step_pvc,
+    _step_registration,
+    _step_regional_extraction,
+    _step_reports,
+    _step_resampling,
+    _step_spike_filter,
+    _step_synthseg_parcellation_qc,
+    _step_t1_water_correction,
+    _step_tissue_probmaps,
+    _step_tissue_segmentation,
+    _step_ventricle_qc,
+    _validate_backend_inputs,
+)
 
 
 def collect_recordings(config) -> list[Recording]:
@@ -311,12 +92,77 @@ def collect_recordings(config) -> list[Recording]:
     if subjects:
         if sessions:
             return [Recording(normalize_subject(sub), normalize_session(ses)) for sub in subjects for ses in sessions]
-        return [Recording(normalize_subject(sub), None) for sub in subjects]
-    return BIDSLayout(config.bids_dir, filters=config.bids_filters).discover_recordings()
+        # No --session-label given: look up each named subject's actual
+        # session(s) instead of assuming sessionless (None) -- a subject can
+        # have real session data (discover_recordings() already merges
+        # bids_dir and --mrsi-input-dir for this), and silently ignoring it
+        # here would validate against the wrong (empty) location.
+        wanted_subjects = {normalize_subject(sub) for sub in subjects}
+        by_subject: dict[str, list[str | None]] = {}
+        for recording in BIDSLayout.from_config(config).discover_recordings():
+            if recording.subject in wanted_subjects:
+                by_subject.setdefault(recording.subject, []).append(recording.session)
+        out = []
+        for sub in subjects:
+            normalized = normalize_subject(sub)
+            out.extend(Recording(normalized, ses) for ses in by_subject.get(normalized, [None]))
+        return out
+    return BIDSLayout.from_config(config).discover_recordings()
 
 
 def _format_elapsed(seconds: float) -> str:
     return format_elapsed_hm(seconds)
+
+
+def _run_one_recording_reports_only(config, subject: str, session: str | None, subject_template=None, status_queue=None) -> "RecordingStatus":
+    """Run one recording's step sequence directly (no Nipype DAG), the same
+    work :func:`run_reports_only_workflow`'s sequential loop does per
+    iteration -- factored out to a module-level function (required for
+    ``spawn``-based multiprocessing: a worker target must be importable/
+    picklable, which a closure isn't) so it can also be dispatched through a
+    :class:`~concurrent.futures.ProcessPoolExecutor`, matching how
+    :func:`mrsiprep.workflows.nipype_engine.run._run_one_recording_nipype`
+    is used by the full-pipeline path. ``status_queue``, when given, routes
+    step transitions to the coordinating process's live status table instead
+    of printing directly -- see that function's docstring for why.
+    """
+    from mrsiprep.io.naming import prefix as name_prefix
+    from mrsiprep.io.naming import subject_session_dir
+    from mrsiprep.utils.debug import collect_timings, set_logbook, set_status_queue, set_timing_sink
+    from mrsiprep.utils.runtime_metrics import write_runtime_metrics
+    from mrsiprep.workflows.nipype_engine.steps_registry import resolve_step_order
+
+    logbook = subject_session_dir(config.derivative_dir, subject, session, "logs") / f"{name_prefix(subject, session)}_desc-mrsiprep_log.txt"
+    set_logbook(logbook)
+    set_status_queue(status_queue)
+    set_timing_sink(True)
+
+    tag = f"sub-{subject}" + (f" ses-{session}" if session else "")
+    debug = Debug(verbose=config.verbose)
+    if status_queue is None:
+        debug.always(f"[proc]START[/proc] {tag}")
+    start = time.monotonic()
+    try:
+        ctx: dict = {"subject_template": subject_template}
+        for _name, step_fn in resolve_step_order(config):
+            ctx = step_fn(config, subject, session, ctx)
+        elapsed = time.monotonic() - start
+        debug.always(f"[success]FINISHED[/success] {tag} in {_format_elapsed(elapsed)}")
+        write_runtime_metrics(config, subject, session, collect_timings(), elapsed, status="success")
+        return RecordingStatus(subject, session, "success", outputs=ctx.get("outputs", {}))
+    except Exception as exc:  # batch-safe failure, unless --stop-on-first-crash
+        elapsed = time.monotonic() - start
+        exc_summary = str(exc).splitlines()[0] if str(exc) else exc.__class__.__name__
+        debug.always(f"[failure]FAILED[/failure] {tag} after {_format_elapsed(elapsed)}: {exc_summary}")
+        debug.exception(f"FAILED {tag} after {_format_elapsed(elapsed)}: {exc}", traceback.format_exc())
+        write_runtime_metrics(config, subject, session, collect_timings(), elapsed, status="failed")
+        if config.stop_on_first_crash:
+            raise
+        return RecordingStatus(subject, session, "failed", error=str(exc))
+    finally:
+        set_logbook(None)
+        set_status_queue(None)
+        set_timing_sink(False)
 
 
 def _build_subject_templates(config, ready: list[Recording], debug: Debug) -> dict[str, object]:
@@ -337,7 +183,7 @@ def _build_subject_templates(config, ready: list[Recording], debug: Debug) -> di
             by_subject.setdefault(recording.subject, []).append(recording.session)
 
     templates: dict[str, object] = {}
-    layout = BIDSLayout(config.bids_dir, filters=config.bids_filters)
+    layout = BIDSLayout.from_config(config)
     for subject, sessions in by_subject.items():
         if len(sessions) < 2:
             continue
@@ -349,8 +195,8 @@ def _build_subject_templates(config, ready: list[Recording], debug: Debug) -> di
                 _, precomputed_tissue_t1, p3_override, brain_mask_override = _step_tissue_segmentation(
                     config, subject, session, raw_t1, t1_path, debug
                 )
-                anat = _step_anatomical_prep(config, subject, session, t1_path, p3_override, brain_mask_override, debug)
-                session_t1_paths[session] = anat.registration_t1w
+                anatprep = _step_anatomical_prep(config, subject, session, t1_path, p3_override, brain_mask_override, debug)
+                session_t1_paths[session] = anatprep.registration_t1w
             templates[subject] = build_subject_template(config, subject, session_t1_paths)
     return templates
 
@@ -377,6 +223,7 @@ def run_participant_workflow(config) -> list[RecordingStatus]:
     :returns: One :class:`RecordingStatus` per recording matched by
         ``config`` (empty list if none matched).
     """
+    config.require_mrsinmrs()
     ensure_work_dirs(config)
     init_derivative(config.derivative_dir)
     debug = Debug(verbose=config.verbose)
@@ -433,6 +280,7 @@ def validate_participant_inputs(config) -> list[RecordingStatus]:
         ``"snr"``, ``"linewidth"``, ``"brainmask"`` -- nothing is
         actually processed).
     """
+    config.require_mrsinmrs()
     debug = Debug(verbose=config.verbose)
     recordings = collect_recordings(config)
     summaries = [
@@ -462,287 +310,121 @@ def validate_participant_inputs(config) -> list[RecordingStatus]:
     return statuses
 
 
-def _validate_backend_inputs(config, subject: str, session: str | None) -> None:
-    layout = BIDSLayout(config.bids_dir, filters=config.bids_filters)
-    raw_t1 = layout.raw_t1(subject, session)
-    if config.processing_mode == "mni-norm" and raw_t1 is None:
-        raise FileNotFoundError(f"Missing raw T1w required for light-mode SynthSeg parcellation: sub-{subject} ses-{session}")
-    if config.tissue_backend == "synthseg-fast" and raw_t1 is None:
-        raise FileNotFoundError(f"Missing raw T1w required for {config.tissue_backend}: sub-{subject} ses-{session}")
-    if config.parcellation_mode == "mni" and config.atlas == "custom":
-        if not config.custom_atlas or not config.custom_atlas.exists():
-            raise FileNotFoundError("--custom-atlas is required for --parcellation-mode mni --atlas custom")
-        if not config.custom_atlas_lut or not config.custom_atlas_lut.exists():
-            raise FileNotFoundError("--custom-atlas-lut is required for --parcellation-mode mni --atlas custom")
+def run_reports_only_workflow(config) -> list[RecordingStatus]:
+    """Rerun only QC/report generation for already-processed recordings.
 
+    Same recording discovery/validation as :func:`run_participant_workflow`,
+    but executes each recording's step sequence directly in-process --
+    bypassing the Nipype DAG/node cache in
+    :mod:`mrsiprep.workflows.nipype_engine` entirely -- instead of building
+    and running a per-recording Nipype workflow. This is safe and correct
+    because every expensive step (tissue segmentation, registration,
+    parcellation, PVC, filtering) already self-skips via its own
+    ``if out.exists() and not config.overwrite*: return`` guard; Nipype's
+    own ``(step, config, subject, session)``-keyed node cache under
+    ``--work-dir`` is redundant with (and more fragile than) that file-level
+    gating, since it's invalidated by any config change or a cleared
+    ``--work-dir``. Report/QC writers themselves always unconditionally
+    re-render from whatever derivatives are on disk, so simply re-running
+    the full step sequence -- without Nipype -- yields "recompute nothing
+    that already exists, rewrite every report" for free, with no separate
+    derivative-reconstruction logic needed.
 
-def _step_tissue_segmentation(config, subject, session, raw_t1, t1_path, debug):
-    """Light mode: SynthSeg brain extraction. Full+synthseg-fast: SynthSeg+FAST inputs.
+    If a step's required upstream derivative is genuinely missing, that
+    step computes it for real (same as a normal run would) rather than
+    failing -- there is no separate pre-flight existence check, to avoid
+    duplicating each step's own gating logic (see
+    :mod:`mrsiprep.workflows.nipype_engine.nodes` for the source of truth).
 
-    Returns (t1_path, precomputed_tissue_t1, p3_override, brain_mask_override),
-    where t1_path may be overridden from the input value.
+    Cross-recording parallelism (``--nproc > 1``) works the same way it does
+    for the full pipeline (:func:`mrsiprep.workflows.nipype_engine.run.execute_recordings_nipype`):
+    a :class:`~concurrent.futures.ProcessPoolExecutor` fans recordings out
+    across worker processes, with a live per-subject status table in place
+    of interleaved step lines. Previously this path was always sequential
+    regardless of ``--nproc`` -- it bypasses Nipype's own engine (see above),
+    which is where that pooling otherwise comes from, so it needs its own.
+
+    :param config: Run-wide :class:`mrsiprep.config.settings.MRSIPrepConfig`.
+    :returns: One :class:`RecordingStatus` per recording matched by
+        ``config`` (empty list if none matched).
     """
-    precomputed_tissue_t1 = None
-    p3_override = None
-    brain_mask_override = None
-    with debug.step("Tissue segmentation"):
-        if config.processing_mode == "mni-norm":
-            if raw_t1 is None:
-                raise FileNotFoundError(f"Missing raw T1w required for SynthSeg+FAST segmentation: sub-{subject} ses-{session}")
-            precomputed_tissue_t1 = segment_t1_synthseg_fast(config, subject, session, raw_t1)
-            p3_override = synthseg_fast_csf_probseg_path(config, subject, session)
-            if config.registration_t1_target == "brain":
-                t1_path = synthseg_fast_brain_path(config, subject, session)
-                brain_mask_override = synthseg_fast_brain_mask_path(config, subject, session)
-        elif config.processing_mode == "midas":
-            if raw_t1 is None:
-                raise FileNotFoundError(f"Missing raw T1w required for MIDAS fuzzy c-means segmentation: sub-{subject} ses-{session}")
-            synthseg_brain, synthseg_mask = extract_t1_synthseg(config, subject, session, raw_t1)
-            precomputed_tissue_t1 = segment_t1_fuzzy_cmeans(config, subject, session, synthseg_brain, synthseg_mask)
-            t1_path = synthseg_brain
-            brain_mask_override = synthseg_mask
-            p3_override = precomputed_tissue_t1["CSF"]
-        elif config.processing_mode == "parc-con" and config.tissue_backend == "synthseg-fast":
-            if raw_t1 is None:
-                raise FileNotFoundError(f"Missing raw T1w required for SynthSeg+FAST segmentation: sub-{subject} ses-{session}")
-            precomputed_tissue_t1 = segment_t1_synthseg_fast(config, subject, session, raw_t1)
-            t1_path = synthseg_fast_brain_path(config, subject, session)
-            brain_mask_override = synthseg_fast_brain_mask_path(config, subject, session)
-            p3_override = synthseg_fast_csf_probseg_path(config, subject, session)
-    return t1_path, precomputed_tissue_t1, p3_override, brain_mask_override
+    config.require_mrsinmrs()
+    ensure_work_dirs(config)
+    init_derivative(config.derivative_dir)
+    debug = Debug(verbose=config.verbose)
 
+    recordings = collect_recordings(config)
+    if recordings:
+        summaries = [
+            _gather_input_availability(config, normalize_subject(rec.subject), normalize_session(rec.session))
+            for rec in recordings
+        ]
+        _render_preflight_table(config, summaries, debug)
 
-def _step_anatomical_prep(config, subject, session, t1_path, p3_override, brain_mask_override, debug):
-    with debug.step("Anatomical preparation"):
-        return prepare_anatomical(config, subject, session, t1_path, p3_override=p3_override, brain_mask_override=brain_mask_override)
+    ready: list[Recording] = []
+    statuses: list[RecordingStatus] = []
+    for recording in recordings:
+        subject = normalize_subject(recording.subject)
+        session = normalize_session(recording.session)
+        try:
+            validate_recording(config, subject, session)
+            _validate_backend_inputs(config, subject, session)
+            ready.append(Recording(subject, session))
+        except (ValidationError, FileNotFoundError) as exc:
+            msg = f"sub-{subject}" + (f" ses-{session}" if session else "")
+            debug.error("SKIP", msg, str(exc))
+            statuses.append(RecordingStatus(subject, session, "skipped", error=str(exc)))
 
+    if not ready:
+        return statuses
 
-def _step_mrsi_preprocessing(config, subject, session, inputs, debug):
-    with debug.step("MRSI preprocessing"):
-        mrsi = run_mrsi_workflow(config, subject, session, inputs)
-        qc_report_mrsi_preproc = write_mrsi_preproc_qc_report(config, subject, session, mrsi.raw_maps, mrsi.preproc_maps)
-        qc_report_t1_correction = None
-        if mrsi.t1_correction_provenance is not None:
-            qc_report_t1_correction = write_t1_correction_qc_report(
-                config, subject, session, mrsi.preproc_maps, mrsi.corrected_maps, mrsi.t1_correction_provenance
-            )
-    return mrsi, qc_report_mrsi_preproc, qc_report_t1_correction
+    subject_templates: dict[str, object] = {}
+    if config.longitudinal:
+        subject_templates = _build_subject_templates(config, ready, debug)
 
-
-def _step_registration(config, subject, session, mrsi, anat, debug, subject_template=None):
-    with debug.step("MRSI-T1w-MNI registration"):
-        return run_registration_workflow(
-            config,
-            subject,
-            session,
-            mrsi.reference,
-            anat.registration_t1w,
-            anat.registration_mask,
-            mrsi_mask=mrsi.brainmask,
-            subject_template=subject_template,
+    if config.nproc <= 1:
+        statuses.extend(
+            _run_one_recording_reports_only(config, rec.subject, rec.session, subject_templates.get(rec.subject)) for rec in ready
         )
+        return statuses
+
+    import multiprocessing
+    from concurrent.futures import ProcessPoolExecutor, as_completed
+
+    from mrsiprep.workflows.nipype_engine.run import _start_live_status_table, worker_context
+
+    manager = multiprocessing.Manager()
+    status_queue = manager.Queue()
+    tags = [f"sub-{rec.subject}" + (f" ses-{rec.session}" if rec.session else "") for rec in ready]
+    stop_listener, listener_thread = _start_live_status_table(config, tags, status_queue)
+
+    try:
+        with ProcessPoolExecutor(max_workers=config.nproc, mp_context=worker_context()) as executor:
+            futures = {
+                executor.submit(
+                    _run_one_recording_reports_only, config, rec.subject, rec.session, subject_templates.get(rec.subject), status_queue
+                ): rec
+                for rec in ready
+            }
+            for future in as_completed(futures):
+                status = future.result()
+                statuses.append(status)
+                # Same reasoning as execute_recordings_nipype: state the
+                # real outcome directly here rather than leaving the
+                # worker's own (queue-routed, possibly-still-in-flight or
+                # never-sent-if-the-worker-died) FINISHED/FAILED message as
+                # the table's only source of truth.
+                recording = futures[future]
+                tag = f"sub-{recording.subject}" + (f" ses-{recording.session}" if recording.session else "")
+                outcome = "FINISHED" if getattr(status, "status", "") == "success" else "FAILED"
+                try:
+                    status_queue.put((tag, "always", outcome))
+                except (OSError, EOFError, BrokenPipeError, ValueError):
+                    continue
+    finally:
+        stop_listener.set()
+        listener_thread.join(timeout=5)
+        manager.shutdown()
+    return statuses
 
 
-def _step_tissue_probmaps(config, subject, session, anat, mrsi, registration, precomputed_tissue_t1, debug):
-    if config.processing_mode not in {"parc-con", "midas", "mni-norm"}:
-        return None
-    with debug.step("Tissue probability maps in MRSI space"):
-        return run_tissue_workflow(
-            config,
-            subject,
-            session,
-            anat.registration_t1w,
-            anat.registration_mask,
-            mrsi.reference,
-            registration.mrsi_to_t1.inverse,
-            precomputed_tissue_t1=precomputed_tissue_t1,
-        )
-
-
-def _step_pvc(config, subject, session, mrsi, tissue, debug):
-    """Returns (corrected_maps, tissue_4d). corrected_maps defaults to
-    mrsi.preproc_maps unchanged when full-mode PVC is not applicable."""
-    corrected_maps = mrsi.preproc_maps
-    tissue_4d = None
-    if config.processing_mode in {"parc-con", "mni-norm"} and not config.no_pvc:
-        if tissue is None:
-            raise ValueError("PVC requires tissue segmentation, but none was provided")
-        with debug.step("Partial volume correction"):
-            tissue_4d = create_tissue_4d(config, subject, session, tissue.mrsi, mrsi.reference)
-            corrected_maps = run_pvc(config, subject, session, mrsi.preproc_maps, tissue_4d, mrsi.brainmask, mrsi.reference)
-            mrsi.corrected_maps = corrected_maps
-    return corrected_maps, tissue_4d
-
-
-def _step_resampling(config, subject, session, anat, mrsi, registration, corrected_maps, raw_t1, debug):
-    with debug.step("Resampling MRSI maps to T1w/MNI space"):
-        transformed = transform_mrsi_maps(
-            config,
-            subject,
-            session,
-            corrected_maps,
-            registration.mrsi_to_t1.forward,
-            registration.t1_to_mni.forward if registration.t1_to_mni else None,
-            anat.registration_t1w,
-            mrsi_reference=mrsi.reference,
-            crlb_maps=mrsi.crlb_maps,
-            snr_map=mrsi.snr_map,
-            linewidth_map=mrsi.linewidth_map,
-        )
-        mni_resolution = resolve_mni_resolution(config.mni_resolution, anat.registration_t1w, mrsi.reference) if registration.t1_to_mni else None
-        qc_report_registration = write_registration_overview_report(
-            config,
-            subject,
-            session,
-            raw_t1,
-            transformed.get("T1w", {}).get(config.ref_met),
-            transformed.get("MNI152NLin2009cAsym", {}).get(config.ref_met),
-            mni_resolution=mni_resolution,
-            orig_ref_map_path=corrected_maps.get(config.ref_met),
-            mrsi_to_t1_transforms=registration.mrsi_to_t1.forward,
-        )
-    return transformed, qc_report_registration
-
-
-def _step_leakage_qc(config, subject, session, anat, transformed, debug):
-    """Per-metabolite signal-weighted leakage outside the reference brain
-    mask, in whichever resampled space(s) were produced -- the same
-    metric used to compare registration backends (docs/benchmarks.md).
-    Returns None if no resampled space has a reference brain mask
-    available (e.g. neither MNI output nor T1w output with a T1w
-    reference brain mask, as with ``--registration-t1-target raw``)."""
-    with debug.step("Signal leakage QC"):
-        return write_signal_leakage_qc(config, subject, session, transformed, anat.registration_mask)
-
-
-def _step_synthseg_parcellation_qc(config, subject, session, raw_t1, mrsi, registration, debug):
-    with debug.step("SynthSeg parcellation and QC"):
-        preliminary_parcels = run_synthseg_parcellation(
-            config,
-            subject,
-            session,
-            raw_t1,
-            mrsi.reference,
-            registration.mrsi_to_t1.inverse,
-        )
-        parcel_qc = write_parcel_qc(
-            config,
-            subject,
-            session,
-            preliminary_parcels,
-            raw_t1,
-            mrsi.brainmask,
-            registration.mrsi_to_t1.forward,
-            mrsi.crlb_maps,
-            mrsi.qcmasks,
-        )
-        write_parcel_qc_figures(
-            config,
-            subject,
-            session,
-            preliminary_parcels.atlas_t1,
-            parcel_qc,
-            t1_to_mni=registration.t1_to_mni.forward if registration.t1_to_mni else None,
-            mrsi_reference=mrsi.reference,
-        )
-    return preliminary_parcels, parcel_qc
-
-
-def _step_parcellation(config, subject, session, raw_t1, mrsi, anat, registration, preliminary_parcels, debug):
-    """Returns (parcels, qc_report_parcellation). parcels defaults to the
-    preliminary SynthSeg parcellation outside parc-con mode."""
-    parcels = preliminary_parcels
-    qc_report_parcellation = None
-    if config.processing_mode in {"parc-con", "midas"}:
-        with debug.step("Parcellation"):
-            parcels = run_parcellation_workflow(
-                config,
-                subject,
-                session,
-                mrsi.reference,
-                registration,
-                raw_t1=raw_t1,
-                t1_reference=anat.registration_t1w,
-            )
-            qc_report_parcellation = write_parcellation_qc_report(config, subject, session, raw_t1, parcels.atlas_t1, parcels.labels)
-    return parcels, qc_report_parcellation
-
-
-def _step_regional_extraction(config, subject, session, corrected_maps, parcels, mrsi, tissue, debug):
-    """Returns (regional_table, regional_regression). regional_regression is the
-    MIDAS Eq. 4-5 pure-GM/pure-WM regression TSV in ``midas`` mode, else None."""
-    with debug.step("Regional metabolite extraction"):
-        regional = extract_regional_metabolites(
-            config,
-            subject,
-            session,
-            corrected_maps,
-            parcels,
-            mrsi.qcmasks,
-            mrsi.snr_map,
-            mrsi.linewidth_map,
-            mrsi.crlb_maps,
-            tissue.mrsi if tissue is not None else {},
-        )
-        regional_regression = None
-        if config.processing_mode == "midas" and tissue is not None:
-            regional_regression = regional_tissue_regression(
-                config, subject, session, corrected_maps, parcels, mrsi.qcmasks, tissue.mrsi
-            )
-    return regional, regional_regression
-
-
-def _step_connectivity(config, subject, session, regional, parcels, corrected_maps, mrsi, tissue, debug):
-    """Regional metabolic profile estimation (CRLB-scaled Monte Carlo
-    uncertainty propagation) always runs in parc-con mode; the metabolic
-    connectivity matrix is the optional add-on gated on
-    ``--write-connectivity`` (see ``run_connectivity_workflow``).
-
-    Metabolites with no CRLB map (e.g. a dataset whose quantification
-    pipeline never exported per-metabolite CRLB) still get a profile --
-    ``compute_metabolic_profiles`` treats missing CRLB as 0% (no injected
-    noise), so their "perturbed" draws are just the raw signal value; see
-    that function's docstring for the ``n_perturbations`` degeneracy this
-    implies when no metabolite has real CRLB at all.
-    """
-    if config.processing_mode != "parc-con":
-        return {}, None
-    with debug.step("Regional metabolic profiles" + (" and connectivity" if config.write_connectivity else ""), live=False):
-        connectivity = run_connectivity_workflow(
-            config,
-            subject,
-            session,
-            regional,
-            parcels,
-            corrected_maps,
-            mrsi.crlb_maps,
-            mrsi.brainmask,
-            gm_fraction_path=tissue.mrsi.get("GM") if tissue is not None else None,
-        )
-        qc_report_connectivity = write_connectivity_qc_report(config, subject, session, connectivity.get("matrix_tsv"))
-    return connectivity, qc_report_connectivity
-
-
-def _step_metprofiles(config, subject, session, corrected_maps, mrsi, parcels, regional, anat):
-    if config.processing_mode not in {"parc-con", "midas"}:
-        return None
-    return export_metprofile_npz(
-        config,
-        subject,
-        session,
-        corrected_maps,
-        mrsi.water_map,
-        parcels,
-        regional,
-        anat.registration_mask,
-    )
-
-
-def _step_reports(config, subject, session, outputs, debug):
-    with debug.step("Reports"):
-        report = run_reports_workflow(config, subject, session, outputs)
-        outputs["report"] = report
-        outputs["qc_report_combined"] = combine_qc_reports(config, subject, session)
-        for key in ("qc_report_tissue", "qc_report_mrsi_preproc", "qc_report_t1_correction", "qc_report_registration", "qc_report_parcellation", "qc_report_connectivity"):
-            outputs.pop(key, None)
-    return outputs

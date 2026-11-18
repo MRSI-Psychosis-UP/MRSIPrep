@@ -7,9 +7,8 @@ from pathlib import Path
 import nibabel as nib
 import numpy as np
 
-from mrsiprep.io.naming import mrsi_derivative, parcellation_derivative
+from mrsiprep.io.naming import parcellation_derivative
 from mrsiprep.parcellation.base import ParcellationResult
-from mrsiprep.registration.transforms import apply_image_transform
 from mrsiprep.utils.images import load_3d_data
 from mrsiprep.utils.tables import read_labels, write_tsv
 
@@ -19,36 +18,19 @@ def write_parcel_qc(
     subject: str,
     session: str | None,
     parcels: ParcellationResult,
-    t1_reference: Path,
     mrsi_brainmask: Path,
-    mrsi_to_t1: list[Path],
     crlb_maps: dict[str, Path],
     qcmasks: dict[str, Path],
 ) -> Path:
-    if parcels.atlas_t1 is None:
-        raise ValueError(f"{parcels.mode} parcellation does not provide a T1-space atlas for coverage QC.")
-
-    coverage_mask = mrsi_derivative(
-        config.derivative_dir,
-        subject,
-        session,
-        space="T1w",
-        desc=f"{parcels.atlas_name}Coverage",
-        suffix_override="mask",
-    )
-    if not coverage_mask.exists() or config.overwrite_transform or config.overwrite:
-        apply_image_transform(
-            t1_reference,
-            mrsi_brainmask,
-            mrsi_to_t1,
-            coverage_mask,
-            interpolation="nearestNeighbor",
-            threads=config.nthreads,
-        )
-
-    atlas_t1 = _labels(parcels.atlas_t1)
+    # Anatomical coverage is computed natively in MRSI space: atlas_mrsi is
+    # already the T1w atlas warped onto the MRSI acquisition grid (same
+    # shape/affine as mrsi_brainmask), so intersecting it with the brain mask
+    # directly avoids resampling the (typically much larger, asymmetrically
+    # padded) T1w grid, which previously made triplanar coverage figures
+    # misleading regardless of slice selection.
+    atlas_t1 = _labels(parcels.atlas_t1) if parcels.atlas_t1 is not None else None
     atlas_mrsi = _labels(parcels.atlas_mrsi)
-    support_t1 = load_3d_data(coverage_mask, dtype=np.float32, label="T1-space MRSI coverage mask")[1] > 0.5
+    support_mrsi = load_3d_data(mrsi_brainmask, dtype=np.float32, label="MRSI brain mask")[1] > 0.5
     labels = read_labels(parcels.labels)
     crlb_data = {met: _optional_data(path) for met, path in crlb_maps.items()}
     qc_data = {met: _optional_data(path, boolean=True) for met, path in qcmasks.items()}
@@ -57,11 +39,10 @@ def write_parcel_qc(
     rows = []
     for _, label_row in labels.iterrows():
         parcel_id = int(label_row["parcel_id"])
-        t1_parcel = atlas_t1 == parcel_id
         mrsi_parcel = atlas_mrsi == parcel_id
-        t1_total = int(t1_parcel.sum())
-        t1_covered = int(np.count_nonzero(t1_parcel & support_t1))
         mrsi_total = int(mrsi_parcel.sum())
+        mrsi_covered = int(np.count_nonzero(mrsi_parcel & support_mrsi))
+        t1_total = int((atlas_t1 == parcel_id).sum()) if atlas_t1 is not None else mrsi_total
         for metabolite in metabolites:
             crlb = crlb_data.get(metabolite)
             valid_crlb = mrsi_parcel & np.isfinite(crlb) & (crlb > 0) if crlb is not None else np.zeros_like(mrsi_parcel)
@@ -77,9 +58,9 @@ def write_parcel_qc(
                     "hemisphere": label_row.get("hemisphere", "NA"),
                     "metabolite": metabolite,
                     "t1_parcel_voxels": t1_total,
-                    "t1_mrsi_covered_voxels": t1_covered,
-                    "anatomical_coverage_fraction": t1_covered / max(t1_total, 1),
-                    "anatomical_coverage_percent": 100.0 * t1_covered / max(t1_total, 1),
+                    "t1_mrsi_covered_voxels": mrsi_covered,
+                    "anatomical_coverage_fraction": mrsi_covered / max(mrsi_total, 1),
+                    "anatomical_coverage_percent": 100.0 * mrsi_covered / max(mrsi_total, 1),
                     "mrsi_parcel_voxels": mrsi_total,
                     "qc_valid_voxels": int(qc_valid.sum()),
                     "qc_valid_fraction": float(qc_valid.sum() / max(mrsi_total, 1)),

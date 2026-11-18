@@ -10,7 +10,7 @@ small `dataclass` result that later stages consume.
 This page documents the internal architecture for anyone extending
 MRSIPrep or calling its stages directly from Python (`import mrsiprep`)
 rather than through the CLI. For end-user usage and the full CLI flag
-reference, see [Basic Usage](usage_basic.md).
+reference, see [First run](usage_basic.md) and [Command-line arguments](cli_reference.md).
 
 ## Configuration
 
@@ -34,8 +34,8 @@ reference, see [Basic Usage](usage_basic.md).
 
 ## Pipeline stage workflows
 
-Each module below wraps one pipeline stage (see the Workflow Architecture
-section on the [home page](index.md) for the stage order) behind a single
+Each module below wraps one pipeline stage (see
+[Processing methods](methods.md#processing-order) for the stage order) behind a single
 `run_*_workflow` entry point.
 
 ```{eval-rst}
@@ -99,9 +99,7 @@ MRSIPrep shells out to or calls via Python bindings.
    :toctree: _autosummary
 
    mrsiprep.tissue.synthseg_fast
-   mrsiprep.tissue.fuzzy_cmeans
    mrsiprep.tissue.fractions
-   mrsiprep.tissue.psf
 ```
 
 ## Parcellation and connectivity
@@ -114,7 +112,6 @@ MRSIPrep shells out to or calls via Python bindings.
    mrsiprep.parcellation.chimera_native
    mrsiprep.parcellation.mni_atlas
    mrsiprep.parcellation.extraction
-   mrsiprep.parcellation.tissue_regression
    mrsiprep.connectivity.export
    mrsiprep.connectivity.connectivity
 ```

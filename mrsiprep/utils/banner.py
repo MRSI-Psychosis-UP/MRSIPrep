@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from mrsiprep.utils.version import mrsiprep_version
+
 BANNER = r"""
  ███╗   ███╗██████╗ ███████╗██╗██████╗ ██████╗ ███████╗██████╗
  ████╗ ████║██╔══██╗██╔════╝██║██╔══██╗██╔══██╗██╔════╝██╔══██╗
@@ -16,3 +18,4 @@ BANNER = r"""
 
 def print_banner() -> None:
     print(BANNER)
+    print(f"       mrsiprep version: {mrsiprep_version()}\n")

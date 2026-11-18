@@ -2,9 +2,8 @@
 
 
 
-![version](https://img.shields.io/badge/version-v1.7.7-blue)
-[![e2e mni-norm](https://img.shields.io/github/actions/workflow/status/MRSI-Psychosis-UP/MRSIPrep/e2e-mni-norm.yml?label=e2e%20mni-norm&color=success)](https://github.com/MRSI-Psychosis-UP/MRSIPrep/actions/workflows/e2e-mni-norm.yml)
-[![e2e parc-con](https://img.shields.io/github/actions/workflow/status/MRSI-Psychosis-UP/MRSIPrep/e2e-parc-con.yml?label=e2e%20parc-con&color=success)](https://github.com/MRSI-Psychosis-UP/MRSIPrep/actions/workflows/e2e-parc-con.yml)
+[![e2e full pipeline](https://img.shields.io/github/actions/workflow/status/MRSI-Psychosis-UP/MRSIPrep/e2e-full-pipeline.yml?label=e2e%20full%20pipeline&color=success)](https://github.com/MRSI-Psychosis-UP/MRSIPrep/actions/workflows/e2e-full-pipeline.yml)
+[![codecov](https://codecov.io/gh/MRSI-Psychosis-UP/MRSIPrep/branch/main/graph/badge.svg)](https://codecov.io/gh/MRSI-Psychosis-UP/MRSIPrep)
 [![docs](https://app.readthedocs.org/projects/mrsiprep/badge/?version=stable)](https://mrsiprep.readthedocs.io/en/stable/)
 [![Codacy Badge](https://app.codacy.com/project/badge/Grade/55f24973247f41bbb27885f6b6375389)](https://app.codacy.com/gh/MRSI-Psychosis-UP/MRSIPrep/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
 [![test dataset doi](https://img.shields.io/badge/test%20dataset%20doi-10.5281%2Fzenodo.21477047-blue)](https://doi.org/10.5281/zenodo.21477047)
@@ -44,7 +43,8 @@ MRSIPrep was designed according to four main principles:
   registration, metabolite coverage, voxel-level quality metrics, tissue
   composition, and atlas projection, including the acquisition's
   [MRSinMRS](https://pubmed.ncbi.nlm.nih.gov/33559967/) sequence parameters
-  (from an optional `mrsinmrs.json`) and a citation section. Published-study
+  (required at `derivatives/mrsi-orig/mrsinmrs.json` or selected with
+  `--mrsinmrs-file`) and a citation section. Published-study
   parameter sets can be reproduced with `--config-preset <name>`
   (see `--list-presets`), which also credits the source publication in the
   report.
@@ -55,6 +55,36 @@ MRSIPrep was designed according to four main principles:
 
 See [Read the Docs](https://mrsiprep.readthedocs.io/en/stable/) for the full
 workflow architecture and quality-control framework.
+
+## Repository Structure
+
+The `mrsiprep/` package is organized by processing stage, matching the
+pipeline's modular design:
+
+```
+mrsiprep/
+├── cli/            Command-line entry point and argument parsing
+├── config/         Default parameters, literature T1/T2 values, nucleus and template definitions
+├── connectivity/   Metabolic connectivity matrix construction and export
+├── interfaces/     Wrappers around external tools (ANTs, FSL, Chimera/FreeSurfer, BIDS import)
+├── io/             BIDS discovery, MRSinMRS parsing, derivative I/O, input validation
+├── mrsi/           MRSI-specific operations: masking, resampling, spike filtering, T1 correction, orientation
+├── parcellation/   Atlas registration, SynthSeg/Chimera parcellation, region labeling
+├── qc/             Quality-control metrics (e.g. ventricle detection)
+├── registration/   MRSI-to-T1w and T1w-to-template registration backends and transforms
+├── reports/        HTML QC report generation
+├── tissue/         Tissue segmentation and partial-volume fraction computation
+├── utils/          Shared helpers: logging, provenance tracking, image utilities
+└── workflows/      Nipype workflow graphs tying the stages above into the full pipeline
+```
+
+Other top-level directories: `docs/` (Read the Docs source), `docker/` (image
+build scripts, see `docker/README.md`), `wrapper/` (the `mrsiprep-docker`
+PyPI package, a dependency-free Python wrapper that runs the Docker image
+using normal BIDS App syntax), `tests/` (unit and integration tests),
+`experiments/` (benchmark and validation scripts used to produce the
+manuscript's results, not part of the installed package), and `examples/`
+(runnable usage examples referenced from the docs).
 
 ## Test Dataset
 
@@ -68,7 +98,7 @@ following MRSIPrep's own raw-MRSI-input convention.
 - Published on Zenodo: [10.5281/zenodo.21477047](https://doi.org/10.5281/zenodo.21477047) (CC0)
 - Full download and usage instructions: [PUBLIC_DATASET.md](PUBLIC_DATASET.md)
 - Used as the fixture for this repo's automated end-to-end pipeline test (see
-  the "tested on SynthMRSI-Project" badge above)
+  the "e2e full pipeline" badge above)
 
 **SynthMRSI-Project is never modified after publication** — its Zenodo
 record is fixed and citable. A separate, unpublished internal dataset,
@@ -86,23 +116,39 @@ full generation and validation commands.
 Code derived from this pipeline has been used in the following peer-reviewed
 publications:
 
-- Lucchetti, F., Céléreau, E., Steullet, P., Alemán-Gómez, Y., Hagmann, P.,
-  Klauser, A., & Klauser, P. (2025). Constructing the human brain metabolic
+- Lucchetti, F., et al. (2025). Constructing the human brain metabolic
   connectome with MR spectroscopic imaging reveals cerebral biochemical
   organization. *Nature Communications*, 16.
   [doi:10.1038/s41467-025-66124-w](https://doi.org/10.1038/s41467-025-66124-w)
-- Céléreau, E., Lucchetti, F., Alemán-Gómez, Y., Dwir, D., Cleusix, M.,
-  Ledoux, J.-B., Jenni, R., Conchon, C., Bach Cuadra, M., Schilliger, Z.,
-  Solida, A., Armando, M., Plessen, K. J., Hagmann, P., Conus, P., Klauser,
-  A., & Klauser, P. (2026). High-resolution whole-brain magnetic resonance
-  spectroscopic imaging in youth at risk for psychosis. *Imaging
-  Neuroscience*, 4.
+- Céléreau, E., et al. (2026). High-resolution whole-brain
+  magnetic resonance spectroscopic imaging in youth at risk for psychosis.
+  *Imaging Neuroscience*, 4.
   [doi:10.1162/imag.a.1276](https://doi.org/10.1162/imag.a.1276)
-- Céléreau, E., Lucchetti, F., Steullet, P., Schilliger, Z., Alemán-Gómez,
-  Y., Jenni, R., Petrova, T., Forrer, S., Delavari, F., Ledoux, J.-B., et al.
-  (2026). Sex differences in brain metabolism assessed with whole-brain
-  magnetic resonance spectroscopic imaging. *bioRxiv*, 2026-06.
+- Céléreau, E., et al. (2026). Sex differences in brain metabolism assessed
+  with whole-brain magnetic resonance spectroscopic imaging. *bioRxiv*,
+  2026-06.
   [doi:10.64898/2026.06.30.735476](https://doi.org/10.64898/2026.06.30.735476)
+
+## How to Cite
+
+If you use MRSIPrep in your research, please cite:
+
+> Lucchetti, F., Céléreau, E., Jenni, R., Ledoux, J.-B., Eliez, S., Delavari,
+> F., Hagmann, P., Alemán-Gómez, Y., Klauser, A., & Klauser, P. (2026).
+> MRSIPrep: A Standardized Post-Quantification Framework for Preprocessing
+> Whole-Brain Magnetic Resonance Spectroscopic Imaging. *bioRxiv*.
+> [doi:10.64898/2026.09.11.750896](https://doi.org/10.64898/2026.09.11.750896)
+
+```bibtex
+@article{lucchetti2026mrsiprep,
+  title={MRSIPrep: A Standardized Post-Quantification Framework for Preprocessing Whole-Brain Magnetic Resonance Spectroscopic Imaging},
+  author={Lucchetti, Federico and Celereau, Edgar and Jenni, Raoul and Ledoux, Jean-Baptiste and Eliez, Stephan and Delavari, Farnaz and Hagmann, Patric and Aleman-Gomez, Yasser and Klauser, Antoine and Klauser, Paul},
+  journal={bioRxiv},
+  pages={2026--09},
+  year={2026},
+  publisher={Cold Spring Harbor Laboratory}
+}
+```
 
 ## License
 

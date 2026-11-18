@@ -11,6 +11,10 @@ pipeline end-to-end. 32 subjects, single session each:
   T1w (5 metabolites: `NAANAAG`, `GPCPCh`, `CrPCr`, `GluGln`, `Ins`).
 - **CRLB, SNR, FWHM** — real empirical acquisition-quality measures, copied
   directly from real MRSI acquisitions. Not synthetic.
+- **`mrsinmrs.json`** — dataset-level acquisition-parameter sidecar following
+  the MRSinMRS minimum reporting standard (Lin et al. 2021), matching the
+  Lausanne3T-ECCENTRIC acquisition this dataset's signal characteristics are
+  modeled on.
 
 This is **not real patient MRSI data**. It exists so that anyone can
 download a small, realistic-shaped dataset and run the full MRSIPrep
@@ -21,6 +25,15 @@ The raw MRSI data lives at:
 ```text
 derivatives/mrsi-orig/sub-XX/ses-01/
 ```
+
+Acquisition metadata is required at `derivatives/mrsi-orig/mrsinmrs.json`,
+alongside the subject directories, or through `--mrsinmrs-file`. Older
+dataset archives can include it at the BIDS root instead; move that file
+into `derivatives/mrsi-orig/` or select it explicitly. For plain Docker with
+the `/data` mount below, append `--mrsinmrs-file /data/mrsinmrs.json` if
+using such an older archive.
+The [input guide](docs/inputs.md#acquisition-metadata-mrsinmrsjson) describes
+the JSON layout and cites the original MRSinMRS recommendations.
 
 This is MRSIPrep's own primary convention for raw MRSI input (there is no
 ratified BIDS extension for MRSI yet, so MRSIPrep documents this
@@ -45,11 +58,17 @@ no regeneration support.
 ## Download
 
 ```bash
-curl -L -o SynthMRSI-Project.zip "https://zenodo.org/records/21477048/files/SynthMRSI-Project.zip"
-unzip SynthMRSI-Project.zip
+curl -L -o SynthMRSI-Project.zip "https://zenodo.org/records/22014466/files/SynthMRSI-Project.zip"
+unzip SynthMRSI-Project.zip -d SynthMRSI-Project
 ```
 
-This extracts a `SynthMRSI-Project/` directory in your current working directory (the zip's own top-level folder) -- don't pass `-d SynthMRSI-Project`, since that would double-nest it.
+The zip has no top-level wrapper folder -- its contents (`dataset_description.json`, `sub-01`...`sub-32`, `derivatives/`, etc.) sit flat at its root -- so `-d SynthMRSI-Project` is required to land them inside a `SynthMRSI-Project/` directory instead of scattering them into your current working directory.
+
+The record id in that URL (`22014466`) is this specific version's id, since
+Zenodo's direct-file-download route needs one -- unlike the DOI below, it
+does **not** auto-resolve to the latest version and will need updating the
+next time this dataset is republished. If the download 404s, get the current
+one from the concept DOI page instead.
 
 DOI: [10.5281/zenodo.21477047](https://doi.org/10.5281/zenodo.21477047)
 (concept DOI — always resolves to the latest version; see the project's
@@ -63,20 +82,17 @@ docker pull mrsiup/mrsiprep:cpu
 docker run --rm \
   -v "$(pwd)/SynthMRSI-Project:/data:ro" \
   -v "$(pwd)/SynthMRSI-Project/derivatives:/out" \
-  -v /path/to/your/freesurfer/license.txt:/opt/freesurfer/license.txt:ro \
-  -e FS_LICENSE=/opt/freesurfer/license.txt \
   mrsiup/mrsiprep:cpu \
   /data /out participant \
   --session-label 01 \
-  --mode mni-norm \
   --t1 acq-mprage_T1w \
   --metabolites NAANAAG,GPCPCh,CrPCr,GluGln,Ins \
   --ref-met CrPCr \
   --nthreads 8 --nproc 2 --verbose 2
 ```
 
-You'll need a FreeSurfer license file (free, from
-https://surfer.nmr.mgh.harvard.edu/registration.html) for `mri_synthseg`.
+The default SynthSeg workflow needs no FreeSurfer licence. Chimera mode
+requires a licence for `recon-all`; see the [parcellation guide](docs/usage_parcellation.md).
 
 Preflight/file-integrity checks run automatically before any recording is
 processed — a corrupt or missing input skips just that recording rather
@@ -92,10 +108,10 @@ subjects first.
 ## Expected output
 
 Per-subject outputs land under `derivatives/mrsiprep/sub-XX/ses-01/`:
-metabolite maps in T1w/MNI space (`mrsi/`), tissue segmentation (`anat/`),
-and QC reports (`reports/qc-reports/`). The QC HTML report is the fastest
-way to check a run succeeded — open
-`reports/qc-reports/sub-XX_ses-01_step-combined.html` in a browser.
+MNI-space metabolite maps (`mrsi/mni/`; T1w maps are opt-in), tissue segmentation
+(`anat/synthseg/`), and QC reports (`reports/`). The QC HTML
+report is the fastest way to check a run succeeded — open
+`reports/sub-XX_ses-01_desc-report.html` in a browser.
 
 ## Ground truth (optional)
 

@@ -1,24 +1,24 @@
-"""Tissue segmentation QC report."""
+"""Tissue segmentation QC section (Anatomical tab of the combined report)."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from mrsiprep.io.naming import qc_report_derivative
-from mrsiprep.reports.slices import html_page, load_canonical_data, render_triplanar_png, triplanar_slices
+from mrsiprep.io.naming import coverage_report_dir, qc_report_derivative
+from mrsiprep.reports.slices import load_canonical_data, render_triplanar_png, triplanar_slices
 
 
-def write_tissue_qc_report(
+def build_tissue_qc_sections(
     config,
     subject: str,
     session: str | None,
     raw_t1: Path,
     dseg_path: Path | None,
     probseg_paths: dict[str, Path] | None = None,
-) -> Path:
+) -> list[tuple[str, str]]:
+    """Returns the Anatomical tab's (heading, body_html) sections."""
     out = qc_report_derivative(config.derivative_dir, subject, session, "tissue")
-    out.parent.mkdir(parents=True, exist_ok=True)
-    figures_dir = out.parent / "figures"
+    figures_dir = coverage_report_dir(config.derivative_dir, subject, session) / "figures"
     figures_dir.mkdir(parents=True, exist_ok=True)
 
     t1_data = load_canonical_data(raw_t1)
@@ -48,5 +48,4 @@ def write_tissue_qc_report(
     else:
         sections.append(("Tissue probability maps", "<p>No tissue probability maps available.</p>"))
 
-    out.write_text(html_page(f"Tissue segmentation QC: sub-{subject}" + (f" ses-{session}" if session else ""), sections), encoding="utf-8")
-    return out
+    return sections

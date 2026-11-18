@@ -9,7 +9,10 @@ from dataclasses import fields as _dataclass_fields
 from pathlib import Path
 
 from mrsiprep.config.defaults import QUALITY_DEFAULTS
+from mrsiprep.config.nuclei import available_nuclei
 from mrsiprep.config.settings import MRSIPrepConfig
+from mrsiprep.mrsi.quantification_tools import SUPPORTED_CRLB_UNITS, SUPPORTED_LINEWIDTH_UNITS
+from mrsiprep.mrsi.quantification_tools import SUPPORTED_TOOLS as SUPPORTED_QUANTIFICATION_TOOLS
 
 PRESETS_DIR = Path(__file__).resolve().parent.parent / "config" / "presets"
 _MRSIPREP_CONFIG_FIELDS = {f.name for f in _dataclass_fields(MRSIPrepConfig)}
@@ -25,7 +28,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Processing stage to be run, only 'participant' in the case of MRSIPrep (see BIDS-Apps specification).",
     )
 
-    selection = parser.add_argument_group("Options for filtering BIDS queries")
+    selection = parser.add_argument_group("Prepare: input selection")
     selection.add_argument(
         "--participant-label",
         nargs="+",
@@ -50,56 +53,172 @@ def build_parser() -> argparse.ArgumentParser:
         "when a session has more than one. Only the \"t1w\" key is currently supported.",
     )
 
-    quality = parser.add_argument_group("quality thresholds")
-    quality.add_argument(
+    selection.add_argument(
+        "--mrsinmrs-file",
+        type=Path,
+        default=None,
+        help="Custom acquisition metadata JSON file. Defaults to "
+        "<mrsi-input-dir or bids_dir>/derivatives/mrsi-orig/mrsinmrs.json. A valid, nonempty "
+        "metadata file is required; processing and --validate-only fail if it is missing. "
+        "With mrsiprep-docker, provide a host path; the wrapper mounts the file read-only.",
+    )
+    selection.add_argument(
+        "--mrsi-input-dir",
+        type=Path,
+        default=None,
+        help="Root folder containing the raw MRSI derivatives (derivatives/mrsi-<space>/sub-*/ses-*/...). "
+        "Defaults to --bids-dir, i.e. the MRSI data is expected under <bids_dir>/derivatives/... like the "
+        "anatomical (T1w) data. Set this only when the MRSI derivatives live in a separate tree from the "
+        "BIDS root used for anatomicals. With mrsiprep-docker, provide a host path; the wrapper mounts it.",
+    )
+    selection.add_argument(
+        "--t1",
+        dest="t1_pattern",
+        default="desc-brain_T1w",
+        help="BIDS entity/suffix pattern used to locate the skull-stripped T1w derivative for each "
+        "recording (e.g. 'desc-brain_T1w', or 'acq-mprage_T1w' to select among multiple raw T1w "
+        "acquisitions -- see --bids-filter-file for finer-grained disambiguation). Also determines what "
+        "the anatprep and registration steps operate on.",
+    )
+    selection.add_argument(
         "--metabolites",
         type=_parse_comma_list,
         required=True,
-        help="Comma-separated metabolite names to process, e.g. 'CrPCr,GluGln,GPCPCh,NAANAAG,Ins'.",
-    )
-    quality.add_argument(
-        "--quality-metrics",
-        nargs="+",
-        default=["snr", "linewidth", "crlb"],
-        choices=["snr", "linewidth", "crlb"],
-        help="Which per-voxel quality maps are required inputs (any of 'snr', 'linewidth', 'crlb'); a "
-        "recording missing one of the listed maps fails preflight validation. Default: all three. Maps "
-        "that are present are always applied as voxel-inclusion thresholds regardless of this flag (see "
-        "--snr-min/--linewidth-max/--crlb-max); this flag only controls whether their absence is an error.",
-    )
-    quality.add_argument(
-        "--snr-min",
-        type=float,
-        default=QUALITY_DEFAULTS["snr_min"],
-        help="Minimum per-voxel SNR to include a voxel, when 'snr' is in --quality-metrics.",
-    )
-    quality.add_argument(
-        "--linewidth-max",
-        type=float,
-        default=QUALITY_DEFAULTS["linewidth_max"],
-        help="Maximum per-voxel linewidth (FWHM) to include a voxel, when 'linewidth' is in --quality-metrics.",
-    )
-    quality.add_argument(
-        "--crlb-max",
-        type=float,
-        default=QUALITY_DEFAULTS["crlb_max"],
-        help="Maximum per-voxel Cramér-Rao lower bound (%%) to include a voxel, when 'crlb' is in --quality-metrics.",
+        help="Comma-separated metabolite names to process, e.g. 'CrPCr,GluGln,GPCPCh,NAANAAG,Ins'. Selects "
+        "which metabolite maps are loaded from the BIDS layout at all; every later step only ever sees "
+        "these metabolites.",
     )
 
-    t1_correction = parser.add_argument_group("T1 saturation correction")
+    processing = parser.add_argument_group("Workflow: step selection")
+    processing.add_argument(
+        "--steps",
+        type=_parse_comma_list,
+        default=None,
+        help="Comma-separated, ordered list of pipeline steps to run (default: the full pipeline, in its "
+        "normal order). An explicit list means exactly these steps, in this order -- omitting a step also "
+        "skips it, and any step that reads another step's output must list that step earlier; dependency "
+        "steps are never inserted automatically. Any order the steps' real data dependencies allow is "
+        "accepted; an order that is not is rejected before the run starts, naming the missing step. Steps, "
+        "in their normal order: prepare, tissue_seg, anatprep, mrsi_load, spike_filter, t1_saturation_correction, "
+        "mrsi_reference, mrsi_quality, registration, tissue_probmaps, tissue_qc, pvc, resampling, leakage_qc, "
+        "anat_parcellation_qc, mrsi_parcellation, regional, connectivity, metprofiles, reports.",
+    )
+
+    tissue_seg = parser.add_argument_group("Anatomical branch: tissue segmentation")
+    tissue_seg.add_argument(
+        "--tissue-backend",
+        choices=["synthseg-fast", "existing", "none"],
+        default="synthseg-fast",
+        help="Tissue segmentation backend for PVC. 'none' disables tissue segmentation and PVC entirely. "
+        "Also selects which tissue-probability maps the tissue_probmaps step resamples onto the MRSI grid.",
+    )
+    tissue_seg.add_argument("--overwrite-seg", action="store_true", help="Force recompute of tissue segmentation (SynthSeg brain extraction + dseg/probseg), even if cached outputs exist.")
+
+    anatprep = parser.add_argument_group("Anatomical branch: anatomical preparation")
+    anatprep.add_argument(
+        "--registration-t1-target",
+        choices=["brain-csf", "brain", "raw"],
+        default=None,
+        help="Which T1w image registration targets. 'brain' registers directly to the skull-stripped T1w "
+        "(default when --parcellation-mode synthseg). 'brain-csf' re-adds the CSF compartment to the "
+        "skull-stripped image before registering, so CSF-adjacent MRSI signal isn't clipped at the "
+        "brain-only boundary (default when --parcellation-mode chimera or atlas; requires a CAT12 p3 CSF "
+        "map). 'raw' registers to the original, non-skull-stripped T1w with no fixed mask. The target "
+        "image this builds is consumed by the registration step.",
+    )
+    anatprep.add_argument(
+        "--csf-pv-threshold",
+        type=float,
+        default=0.95,
+        help="CSF partial-volume probability threshold used when building the 'brain-csf' registration "
+        "target: voxels with CAT12 p3 CSF probability at or above this value are added back to the "
+        "skull-stripped brain image.",
+    )
+
+    mrsi_load = parser.add_argument_group("MRSI branch: loading")
+    mrsi_load.add_argument(
+        "--correct-mrsi-orientation",
+        dest="correct_mrsi_orientation",
+        action="store_true",
+        default=False,
+        help="Off by default. Post-quantification MRSI maps can occasionally come out with a wrong "
+        "sform/qform -- close enough to plausible that later steps 'succeed' on a misaligned recording. "
+        "When set, a quick rigid-only registration of the reference metabolite map to the T1w anatomical "
+        "runs first, before any MRSI preprocessing, and that same rigid correction is applied to every "
+        "other metabolite/CRLB/SNR/FWHM map and the brainmask, in place, at native MRSI resolution. Uses "
+        "--registration-backend (ANTs Rigid, or FLIRT dof=6 for fsl).",
+    )
+    mrsi_load.add_argument(
+        "--ref-met",
+        required=True,
+        help="Reference metabolite map used to build the MRSI registration target, e.g. 'CrPCr'. Also "
+        "used by the mrsi_reference step.",
+    )
+
+    spike_filter = parser.add_argument_group("MRSI branch: spike filtering")
+    spike_filter.add_argument("--no-filter", action="store_true", help="Disable biharmonic spike filtering (enabled by default).")
+    spike_filter.add_argument(
+        "--filter-fwhm-mm",
+        type=float,
+        default=None,
+        help="Smoothing FWHM (mm) used when splicing repaired biharmonic-filter voxels back in. "
+        "Default: derived from the native MRSI voxel size (mean voxel dimension x sqrt(2)).",
+    )
+    spike_filter.add_argument(
+        "--spikepc",
+        type=float,
+        default=99.0,
+        help="Percentile threshold (0-100) above which a voxel is flagged as a spike for biharmonic "
+        "filtering/repair. Ignored when --no-filter is set.",
+    )
+    spike_filter.add_argument(
+        "--spike-max-cluster-voxels",
+        type=int,
+        default=None,
+        help="A connected cluster of spike-thresholded voxels larger than this is treated as real focal "
+        "signal (e.g. a genuine metabolic abnormality) and left unfiltered, rather than median-repaired/"
+        "biharmonic-inpainted like an isolated noise spike. Default: derived from the native MRSI voxel "
+        "size (6 voxels at ~5.0mm/3T-like resolution, 9 voxels at ~3.4mm/7T-like resolution, empirically "
+        "the 90th-percentile spike-cluster size measured on real acquisitions at each resolution). Set to "
+        "a very large number to disable cluster-size filtering (every above-threshold voxel is filtered "
+        "regardless of cluster size, matching pre-existing behavior).",
+    )
+    spike_filter.add_argument(
+        "--spike-extreme-zscore",
+        type=float,
+        default=4.0,
+        help="Safety net on top of --spike-max-cluster-voxels: a cluster larger than the size cap is still "
+        "repaired (rather than exempted as real focal signal) if its mean intensity is an implausible "
+        "outlier -- a z-score (against the map's own inside-brain mean/std) above this value. On real data, "
+        "large spike clusters are just as likely as small ones to be extreme intensity outliers (acquisition "
+        "artifacts, typically near the FOV/slab edge), which the size cap alone would otherwise leave "
+        "unfiltered and visibly distort the report's display scale. Default 4.0. Set to a very large number "
+        "or a negative value has no safety effect (nothing exceeds it); pass a value close to 0 to make the "
+        "safety net dominate the size cap entirely.",
+    )
+    spike_filter.add_argument(
+        "--overwrite-filt",
+        action="store_true",
+        help="Force recompute of biharmonic spike filtering, even if cached filtered maps exist.",
+    )
+
+    t1_correction = parser.add_argument_group("MRSI branch: T1 saturation correction")
     t1_correction.add_argument(
         "--t1-correction",
-        choices=["none", "literature"],
+        choices=["none", "literature", "voxelwise"],
         default="none",
         help="Correct metabolite maps for incomplete T1 relaxation recovery (T1 saturation) using the "
         "steady-state spoiled-gradient-echo signal equation (default: 'none', no correction applied). "
         "'literature' applies a single scalar correction factor per metabolite, derived from the "
-        "acquisition's TR/flip angle (read from mrsinmrs.json) and a curated literature T1 value per "
-        "metabolite per field strength (see mrsiprep/config/t1_literature.json). Requires a dataset-level "
-        "mrsinmrs.json with unambiguous TR/FlipAngle/MagneticFieldStrength entries -- fails loudly, "
-        "per-recording, if these or a requested metabolite's T1 value are missing, rather than silently "
-        "skipping or substituting. A future 'voxelwise' mode (per-voxel correction using a measured B1+ "
-        "map) is planned but not yet implemented; mrsiprep does not currently ingest B1+ maps.",
+        "acquisition's nominal TR/flip angle (read from mrsinmrs.json) and a curated literature T1 value "
+        "per metabolite per field strength (see mrsiprep/config/t1_literature.json). 'voxelwise' applies "
+        "a per-voxel correction factor per metabolite instead, using a measured flip-angle (B1+) map "
+        "(desc-b1map in the MRSI input layout, same grid as the metabolite maps) in place of the nominal "
+        "flip angle -- TR and the literature T1 value are still scalar; requires that map to be present, "
+        "there is no fallback to 'literature' mode. Both modes require acquisition metadata "
+        "(the default mrsinmrs.json or --mrsinmrs-file) with "
+        "unambiguous TR/FlipAngle/MagneticFieldStrength entries -- fails loudly, per-recording, if these "
+        "or a requested metabolite's T1 value are missing, rather than silently skipping or substituting.",
     )
     t1_correction.add_argument(
         "--t1-correction-water-status",
@@ -116,33 +235,91 @@ def build_parser() -> argparse.ArgumentParser:
         help="Force recomputation of T1-corrected maps even if cached outputs exist.",
     )
 
-    processing = parser.add_argument_group("Options for performing only a subset of the workflow")
-    processing.add_argument(
-        "--mode",
-        "--processing-mode",
-        dest="processing_mode",
-        choices=["mni-norm", "parc-con", "midas"],
-        default="mni-norm",
-        help="Processing mode. 'midas' runs a MIDAS-faithful pipeline (Maudsley et al. 2006): fuzzy c-means "
-        "tissue segmentation, PSF-convolved tissue fractions, rigid MRSI->T1 registration, and per-parcel "
-        "Eq. 4 pure-GM/pure-WM regression instead of PETPVC.",
+    mrsi_quality = parser.add_argument_group("MRSI branch: quality masking")
+    mrsi_quality.add_argument(
+        "--quantification-tool",
+        choices=list(SUPPORTED_QUANTIFICATION_TOOLS),
+        default=None,
+        help="Upstream spectral-fitting tool that produced the CRLB/SNR/linewidth maps. Required: pass this "
+        "explicitly, or add \"QuantificationTool\" to CommonMetadata in mrsinmrs.json. MRSIPrep's quality "
+        "thresholds assume LCModel's convention (CRLB as %%, SNR via peak height over residual noise SD, "
+        "linewidth in Hz); 'lcmodel', 'fsl-mrs', and 'osprey' (LCModel-wrapper mode only) are verified to "
+        "already match it, so no rescaling is applied. Use 'custom' for any other tool (including TARQUIN, "
+        "jMRUI, or Osprey's native fitting engine, whose conventions were not verified as equivalent) -- "
+        "MRSIPrep performs no rescaling for 'custom', and you are solely responsible for ensuring your maps "
+        "already match the expected convention before running MRSIPrep.",
     )
-    processing.add_argument(
-        "--tissue-backend",
-        choices=["synthseg-fast", "existing", "none"],
-        default="synthseg-fast",
-        help="Tissue segmentation backend for PVC. 'none' disables tissue segmentation and PVC entirely. "
-        "Ignored in --mode midas, which always uses its own fuzzy c-means segmentation.",
+    mrsi_quality.add_argument(
+        "--linewidth-unit",
+        choices=list(SUPPORTED_LINEWIDTH_UNITS),
+        default=None,
+        help="Unit the upstream tool's linewidth/FWHM map is stored in. Required: pass this explicitly, or "
+        "add \"LinewidthUnit\" to CommonMetadata in mrsinmrs.json. --linewidth-max is defined in Hz; 'ppm' "
+        "values are converted to Hz using CommonMetadata's MagneticFieldStrength before thresholding.",
+    )
+    mrsi_quality.add_argument(
+        "--crlb-unit",
+        choices=list(SUPPORTED_CRLB_UNITS),
+        default=None,
+        help="Unit the upstream tool's CRLB map is stored in. Required: pass this explicitly, or add "
+        "\"CRLBUnit\" to CommonMetadata in mrsinmrs.json. --crlb-max is defined as a percentage.",
+    )
+    mrsi_quality.add_argument(
+        "--nucleus",
+        default=None,
+        help="Acquired nucleus, e.g. "
+        + "/".join(available_nuclei())
+        + " (aliases such as 'proton' or 'phosphorus' are accepted). Selects the curated voxel-quality "
+        "defaults and metabolite alias spellings for that nucleus. Falls back to the 'Nucleus' field of "
+        "the selected acquisition metadata file, then to 1H. Nuclei other than 1H ship no curated quality "
+        "thresholds, so pass --snr-min/--linewidth-max/--crlb-max explicitly for them; see "
+        "mrsiprep/config/nuclei.json to contribute values.",
+    )
+    mrsi_quality.add_argument(
+        "--quality-metrics",
+        nargs="+",
+        default=["snr", "linewidth", "crlb"],
+        choices=["snr", "linewidth", "crlb"],
+        help="Which per-voxel quality maps are required inputs (any of 'snr', 'linewidth', 'crlb'); a "
+        "recording missing one of the listed maps fails preflight validation. Default: all three. Maps "
+        "that are present are always applied as voxel-inclusion thresholds regardless of this flag (see "
+        "--snr-min/--linewidth-max/--crlb-max); this flag only controls whether their absence is an error.",
+    )
+    mrsi_quality.add_argument(
+        "--snr-min",
+        type=float,
+        default=None,
+        help=f"Minimum per-voxel SNR to include a voxel, when 'snr' is in --quality-metrics. "
+        f"Defaults to the acquired nucleus's curated value (--nucleus; {QUALITY_DEFAULTS['snr_min']} for 1H).",
+    )
+    mrsi_quality.add_argument(
+        "--linewidth-max",
+        type=float,
+        default=None,
+        help=f"Maximum per-voxel linewidth (FWHM) to include a voxel, when 'linewidth' is in --quality-metrics. "
+        f"Defaults to the acquired nucleus's curated value (--nucleus; {QUALITY_DEFAULTS['linewidth_max']} for 1H).",
+    )
+    mrsi_quality.add_argument(
+        "--crlb-max",
+        type=float,
+        default=None,
+        help=f"Maximum per-voxel Cramér-Rao lower bound (%%) to include a voxel, when 'crlb' is in --quality-metrics. "
+        f"Defaults to the acquired nucleus's curated value (--nucleus; {QUALITY_DEFAULTS['crlb_max']} for 1H).",
     )
 
-    registration = parser.add_argument_group("Specific options for registrations")
+    registration = parser.add_argument_group("Shared: registration")
     registration.add_argument(
         "--registration-backend",
         choices=["ants", "fsl", "flirt-fnirt", "flirt_fnirt", "flirt/fnirt"],
         default="ants",
-        help="Registration toolchain. 'ants' is the default and generally most accurate (rigid+affine+SyN). "
-        "'fsl'/'flirt-fnirt' uses FLIRT+FNIRT (deformable) for MRSI-to-T1w by default; pass --no-fsl-deformable "
-        "for FLIRT-only (faster, less accurate).",
+        help="Registration toolchain -- the only two choices; 'flirt-fnirt'/'flirt_fnirt'/'flirt/fnirt' are "
+        "accepted as deprecated spellings of 'fsl' for backward compatibility, not separate backends. "
+        "'ants' is the default: rigid+SyN for MRSI-to-T1w and rigid+affine+SyN for T1w-to-MNI. "
+        "'fsl' uses FLIRT, with an FNIRT deformable stage added by default for MRSI-to-T1w (FNIRT is FSL's "
+        "own deformable-registration tool, not a separate backend here -- see --fsl-deformable/"
+        "--no-fsl-deformable to control it). See the registration benchmark for the evaluated "
+        "configurations and metrics. Also used by the mrsi_load step's optional orientation-correction "
+        "sub-step.",
     )
     registration.add_argument(
         "--ants-mrsi-to-t1-transform",
@@ -150,7 +327,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="ANTs transform preset/code for MRSI-to-T1w registration. Default matches the previous implementation: 'sr'.",
     )
     registration.add_argument(
-        "--ants-t1-to-mni-transform",
+        "--ants-t1-to-template-transform",
         default="s",
         help="ANTs transform preset/code for T1w-to-MNI registration. Default matches the previous implementation: 's'.",
     )
@@ -173,7 +350,7 @@ def build_parser() -> argparse.ArgumentParser:
         "on MRSI-reference-vs-T1w registration and is not offered.",
     )
     registration.add_argument(
-        "--fsl-t1-to-mni-dof",
+        "--fsl-t1-to-template-dof",
         type=int,
         choices=[6, 7, 9, 12],
         default=12,
@@ -186,7 +363,7 @@ def build_parser() -> argparse.ArgumentParser:
         default="corratio",
         help="FLIRT cost function for FSL registrations. Default changed from FLIRT's own 'mutualinfo' default to "
         "'corratio': mutualinfo was found to diverge on the small, low-contrast MRSI reference maps used for "
-        "MRSI-to-T1w registration.",
+        "MRSI-to-T1w registration. Also used by the mrsi_load step's optional orientation-correction sub-step.",
     )
     registration.add_argument(
         "--fsl-deformable",
@@ -197,8 +374,7 @@ def build_parser() -> argparse.ArgumentParser:
         "mimic ANTs' default SyN warp. On by default when --registration-backend fsl is selected (confirmed to "
         "give consistently better MRSI-brainmask/T1w-brain overlap than FLIRT-only across a 3T and a 7T subject, "
         "see experiments/registration_backend_benchmark.py); pass --no-fsl-deformable for FLIRT-only (faster, "
-        "seconds instead of several minutes per subject). Has no effect on --registration-backend ants or on "
-        "--mode midas (rigid-only by design).",
+        "seconds instead of several minutes per subject). Has no effect on --registration-backend ants.",
     )
     registration.add_argument(
         "--no-fsl-deformable",
@@ -227,76 +403,102 @@ def build_parser() -> argparse.ArgumentParser:
         "--normalization",
         choices=["simple", "ants-syn", "existing"],
         default="simple",
-        help="Legacy T1w-to-MNI normalization strategy (superseded by --registration-backend for new code; "
-        "kept for backward compatibility). 'simple' registers via the backend selected by "
-        "--registration-backend. 'ants-syn' forces ANTs SyN regardless of --registration-backend. "
-        "'existing' reuses a previously computed T1w-to-MNI transform instead of recomputing it.",
+        help="Whether to (re)compute the T1w-to-MNI transform. 'simple' (default) and 'ants-syn' are "
+        "currently equivalent -- both recompute it using whatever --registration-backend/its transform "
+        "settings already select; 'ants-syn' is kept only for backward compatibility with older configs/"
+        "presets, and does not force ANTs/SyN regardless of --registration-backend. 'existing' instead "
+        "reuses a previously computed T1w-to-MNI transform and fails if none is found.",
     )
     registration.add_argument(
+        "--longitudinal",
+        action="store_true",
+        help="Build one unbiased ANTs template across a subject's sessions and register it to MNI once, "
+        "composing (session-to-template)+(template-to-MNI) instead of registering each session directly to MNI. "
+        "No-op for subjects with a single session. Requires --registration-backend ants.",
+    )
+    registration.add_argument(
+        "--overwrite-t1-reg",
+        action="store_true",
+        help="Force recompute of MRSI-to-T1w registration, even if a cached transform exists. Also forces "
+        "recompute of the anatprep step's brain-CSF registration target, when used.",
+    )
+    registration.add_argument(
+        "--overwrite-template-reg",
+        action="store_true",
+        help="Force recompute of T1w-to-MNI registration, even if a cached transform exists.",
+    )
+
+    tissue_probmaps = parser.add_argument_group("Shared: tissue probability maps and PVC")
+    tissue_probmaps.add_argument(
+        "--no-pvc",
+        action="store_true",
+        help="Skip partial-volume correction (PETPVC) entirely. Equivalent to --tissue-backend none, "
+        "except tissue segmentation itself still runs (its maps are just not used for PVC).",
+    )
+    tissue_probmaps.add_argument(
+        "--overwrite-pve",
+        action="store_true",
+        help="Force recompute of partial-volume correction (PETPVC), even if cached corrected maps exist.",
+    )
+
+    resampling = parser.add_argument_group("Outputs: resampling")
+    resampling.add_argument(
         "--output-spaces",
         nargs="+",
         default=["MNI152NLin2009cAsym"],
-        help="One or more target spaces to resample final MRSI derivatives into. Accepts case-insensitive "
-        "aliases: 'mni'/'mni152'/'mni152nlin2009casym' (MNI152NLin2009cAsym, default), 't1'/'t1w' (T1w space, "
-        "equivalent to also passing --output-mrsi-t1w), 'mrsi'/'orig' (native MRSI grid). See "
-        "docs/usage_normalization.md.",
+        help="One or more target spaces to resample final MRSI derivatives into, each optionally qualified "
+        "with a resolution, e.g. 'MNI152NLin2009cAsym:res-2 T1w'. Accepts case-insensitive aliases: "
+        "'mni'/'mni152'/'mni152nlin2009casym' (MNI152NLin2009cAsym, default), 't1'/'t1w' (T1w space, "
+        "equivalent to also passing --output-mrsi-t1w), 'mrsi'/'orig' (native MRSI grid). The 'res-' "
+        "modifier takes an integer millimetre value ('res-2'), 'res-origres' (MRSI native -- the default, "
+        "since it avoids implying spatial precision the acquisition never had) or 'res-t1wres' (T1w "
+        "native). Qualifying each space individually replaces the old global --mni-resolution flag, which "
+        "could not express different resolutions for different spaces. See docs/usage_normalization.md. "
+        "Also read by the registration step, to decide whether the T1w-to-MNI stage needs to run at all.",
     )
-    registration.add_argument(
+    resampling.add_argument(
         "--output-mrsi-t1w",
         action="store_true",
         help="Also resample all metabolite (and CRLB/SNR/FWHM/spikemask) maps into T1w space as permanent "
         "derivatives (mrsi-t1w/). Off by default; the registration-overview report generates its own single "
         "reference-metabolite T1w map in the work directory regardless of this flag.",
     )
-    registration.add_argument(
-        "--mni-resolution",
-        default="origres",
-        help="MNI template resolution: 'origres' (MRSI native, default -- avoids implying spatial precision "
-        "the MRSI acquisition never had, and matches the resolution mrsiprep's own spatial-smoothness "
-        "benchmark evaluates), 't1wres' (T1w native), or '<N>mm' (e.g. '2mm').",
-    )
-    registration.add_argument(
-        "--registration-t1-target",
-        choices=["brain-csf", "brain", "raw"],
-        default=None,
-        help="Which T1w image registration targets. 'brain' registers directly to the skull-stripped T1w "
-        "(default for --mode mni-norm/midas). 'brain-csf' re-adds the CSF compartment to the skull-stripped "
-        "image before registering, so CSF-adjacent MRSI signal isn't clipped at the brain-only boundary "
-        "(default for --mode parc-con; requires a CAT12 p3 CSF map). 'raw' registers to the original, "
-        "non-skull-stripped T1w with no fixed mask.",
-    )
-    registration.add_argument(
-        "--csf-pv-threshold",
-        type=float,
-        default=0.95,
-        help="CSF partial-volume probability threshold used when building the 'brain-csf' registration "
-        "target: voxels with CAT12 p3 CSF probability at or above this value are added back to the "
-        "skull-stripped brain image.",
-    )
-    registration.add_argument(
-        "--ref-met",
-        required=True,
-        help="Reference metabolite map used to build the MRSI registration target, e.g. 'CrPCr'.",
-    )
-    registration.add_argument(
-        "--t1",
-        dest="t1_pattern",
-        default="desc-brain_T1w",
-        help="BIDS entity/suffix pattern used to locate the skull-stripped T1w derivative for each "
-        "recording (e.g. 'desc-brain_T1w', or 'acq-mprage_T1w' to select among multiple raw T1w "
-        "acquisitions -- see --bids-filter-file for finer-grained disambiguation).",
+    resampling.add_argument("--transform-spikemask", action="store_true", help="Also transform per-metabolite spike masks into T1w/MNI space.")
+    resampling.add_argument(
+        "--overwrite-transform",
+        action="store_true",
+        help="Force recompute of resampling MRSI maps through existing transforms into output spaces, even "
+        "if cached resampled maps exist. Does not itself force-recompute the transforms -- see "
+        "--overwrite-t1-reg/--overwrite-template-reg.",
     )
 
     parcellation = parser.add_argument_group("parcellation")
     parcellation.add_argument(
         "--parcellation-mode",
-        choices=["synthseg", "chimera", "mni"],
+        choices=["synthseg", "chimera", "atlas"],
+        default="synthseg",
+        help="Region-labeling backend used for connectivity/per-parcel output -- separate from tissue "
+        "segmentation, which always runs via SynthSeg (--tissue-backend) regardless of this flag and "
+        "never needs a FreeSurfer license. 'synthseg' (default) reuses SynthSeg's own cortical/subcortical "
+        "labels -- already computed for QC -- as the parcellation too, needs no FreeSurfer recon-all or "
+        "license, and is the lighter-weight default (see --registration-t1-target). 'chimera' runs the "
+        "Chimera multi-atlas fusion tool live, combining several region-specific atlases per "
+        "--chimera-scheme; this is the ONLY mode that runs FreeSurfer recon-all and therefore needs "
+        "--fs-license/FS_LICENSE. 'atlas' warps a pre-bundled or custom standardized MNI-space atlas (see "
+        "--atlas) into subject space instead -- no FreeSurfer either. Regional metabolite extraction, "
+        "per-parcel metabolite-profile export, and CRLB-scaled Monte Carlo profile estimation all run "
+        "unconditionally regardless of this flag's value. See --write-connectivity for the optional "
+        "connectivity matrix.",
+    )
+    parcellation.add_argument(
+        "--fs-license",
+        dest="fs_license",
         default=None,
-        help="Parcellation scheme. 'synthseg' uses SynthSeg's own cortical/subcortical labels (default for "
-        "--mode mni-norm/midas; the only mode compatible with mni-norm). 'chimera' runs the Chimera "
-        "multi-atlas fusion tool live, combining several region-specific atlases per --chimera-scheme "
-        "(default for --mode parc-con; requires FreeSurfer recon-all and FS_LICENSE). 'mni' warps a "
-        "pre-bundled or custom MNI-space atlas (see --atlas) into subject space instead of running Chimera.",
+        help="Path to a FreeSurfer license.txt. Required only when --parcellation-mode is 'chimera' "
+        "(Chimera runs FreeSurfer recon-all internally) -- the default 'synthseg' and the 'atlas' mode "
+        "never need a license, and neither does mrsiprep's always-on SynthSeg tissue segmentation. "
+        "Ignored when not needed. If omitted, the usual FreeSurfer discovery order is used instead "
+        "($FS_LICENSE, $FREESURFER_HOME/license.txt, /opt/freesurfer/license.txt).",
     )
     parcellation.add_argument(
         "--synthseg-mode",
@@ -309,34 +511,55 @@ def build_parser() -> argparse.ArgumentParser:
     parcellation.add_argument(
         "--chimera-scheme",
         default="LFMIHIFIFF",
-        help="10-character Chimera parcellation code, one letter per supra-region in order: cortex, basal "
-        "ganglia, thalamus, amygdala, hippocampus, hypothalamus, cerebellum, brainstem, gyral WM, WM. "
-        "Default 'LFMIHIFIFF' = Lausanne cortex, FreeSurfer/Aseg subcortex/cerebellum/WM, MIALThalParc "
-        "thalamus, FSAmygHippoParc amygdala, HBT hippocampus, FSHypoThalParc hypothalamus, FSBrainStemParc "
-        "brainstem. See the Chimera documentation for the full per-position letter set.",
+        help="Only used when --parcellation-mode chimera: 10-character Chimera parcellation code, one "
+        "letter per supra-region in order: cortex, basal ganglia, thalamus, amygdala, hippocampus, "
+        "hypothalamus, cerebellum, brainstem, gyral WM, WM. Chimera runs live per-subject (via FreeSurfer "
+        "recon-all) to build a parcellation matching this exact code -- contrast with --atlas, whose bundled "
+        "'chimera-<code>_scale<N>' names (e.g. 'chimera-LFMIHIFIS_scale3') are different, already-generated "
+        "atlases from past Chimera runs, just warped into each new subject rather than rerun: use --atlas "
+        "for that 'reuse without needing FreeSurfer' path, and --chimera-scheme only when you want Chimera "
+        "itself to run. Default 'LFMIHIFIFF' = Lausanne cortex, FreeSurfer/Aseg subcortex/cerebellum/WM, "
+        "MIALThalParc thalamus, FSAmygHippoParc amygdala, HBT hippocampus, FSHypoThalParc hypothalamus, "
+        "FSBrainStemParc brainstem. See the Chimera documentation for the full per-position letter set, or "
+        "use the guided picker in the mrsiprep-build-command GUI. Accepts a comma-separated list (e.g. "
+        "'LFMIHIFIFF,LFMIHIFIS') to build several parcellations in one run; see --chimera-scale for how the "
+        "lists combine.",
     )
     parcellation.add_argument(
         "--chimera-scale",
-        type=_parse_scale,
-        default=3,
+        default="3",
         help="Lausanne2018 cortical parcellation granularity (1-5; higher = more, finer parcels), used only "
-        "when --chimera-scheme's cortex position is 'L'. Accepts a bare integer or 'scaleN'.",
+        "when --chimera-scheme's cortex position is 'L'. Accepts a bare integer or 'scaleN'. Also accepts a "
+        "comma-separated list (e.g. '1,3'), which is combined with --chimera-scheme and --chimera-grow as a "
+        "cross product -- '--chimera-scheme A,B --chimera-scale 1,3' builds four parcellations. Every "
+        "parcellation gets its own regional table, metabolite profiles, and connectivity outputs, all off a "
+        "single shared preprocessing pass. Schemes whose cortex position isn't 'L' aren't multi-resolution, "
+        "so they yield one parcellation regardless of how many scales are listed.",
     )
     parcellation.add_argument(
         "--chimera-grow",
-        type=int,
-        default=2,
+        default="2",
         help="Distance (mm) to grow cortical/subcortical gray-matter parcel labels into adjacent white "
-        "matter when building the gyral-WM parcellation. Set to 0 to disable growing.",
+        "matter when building the gyral-WM parcellation. Set to 0 to disable growing. Accepts a "
+        "comma-separated list, combined as a cross product with --chimera-scheme/--chimera-scale.",
     )
     parcellation.add_argument(
         "--atlas",
-        default="chimera-LFMIHIFIS-3",
-        help="Atlas used when --parcellation-mode mni. One of: a bundled atlas name (see "
-        "mrsiprep.parcellation.atlas_registry.available_bundled_atlases(), e.g. 'chimera-LFMIHIFIS-3'); "
+        default="chimera-LFMIHIFIS_scale3",
+        help="Only used when --parcellation-mode atlas (a different, lighter path from --parcellation-mode "
+        "chimera: no FreeSurfer recon-all, just warping an already-generated, standardized MNI-space atlas "
+        "into subject space). One of: a bundled atlas name (see "
+        "mrsiprep.parcellation.atlas_registry.available_bundled_atlases()) -- several of these happen to be "
+        "named 'chimera-<code>_scale<N>' (e.g. 'chimera-LFMIHIFIS_scale3') because they were themselves "
+        "originally produced by a past live Chimera run, but picking one here does NOT rerun Chimera or "
+        "need FreeSurfer/--fs-license: it just warps that fixed, pre-existing label image -- unrelated to "
+        "--chimera-scheme, which instead runs Chimera live under --parcellation-mode chimera; "
         "'custom' (requires --custom-atlas and --custom-atlas-lut); 'schaefer<N>' for the Schaefer 2018 "
-        "N-parcel cortical atlas (e.g. 'schaefer400'); or 'mist197'/'mist-197' for the BASC multiscale "
-        "atlas at scale 197.",
+        "N-parcel cortical atlas (e.g. 'schaefer400'); 'mist197'/'mist-197' for the BASC multiscale "
+        "atlas at scale 197; or 'cubic<N>mm' (e.g. 'cubic10mm') for a non-anatomical grid parcellation -- "
+        "the bundled MNI-space gray-matter mask tiled into N-millimeter cubes, generated on demand at any "
+        "N rather than shipped as fixed sizes. Accepts a comma-separated list to project several atlases "
+        "in one run.",
     )
     parcellation.add_argument(
         "--custom-atlas",
@@ -360,14 +583,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="FreeSurfer SUBJECTS_DIR to reuse pre-existing recon-all output from, instead of running "
         "recon-all inside MRSIPrep. Only relevant with --parcellation-mode chimera.",
     )
+    parcellation.add_argument("--overwrite-chimera", action="store_true", help="Force re-run Chimera parcellation even if the output dseg file already exists.")
 
-    connectivity = parser.add_argument_group("connectivity")
+    connectivity = parser.add_argument_group("Outputs: regional profiles and connectivity")
+    connectivity.add_argument(
+        "--regional-summary",
+        choices=["mean", "median", "weighted_mean"],
+        default="mean",
+        help="How each parcel's per-voxel metabolite values are summarized into a single regional value: "
+        "'mean', 'median', or 'weighted_mean' (SNR-weighted average; falls back to an unweighted mean if no "
+        "SNR map is available for that recording).",
+    )
     connectivity.add_argument(
         "--write-connectivity",
         action="store_true",
         help="Build and write a regional metabolic connectivity (similarity) matrix on top of the "
-        "regional metabolic profiles that parc-con mode already computes unconditionally, using "
-        "CRLB-scaled noise perturbations to estimate edge similarity between parcels' metabolite profiles.",
+        "regional metabolic profiles that mrsiprep already computes unconditionally for every recording, "
+        "using CRLB-scaled noise perturbations to estimate edge similarity between parcels' metabolite profiles.",
     )
     connectivity.add_argument(
         "--connectivity-method",
@@ -381,8 +613,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--connectivity-space",
         choices=["MRSI", "T1w", "MNI"],
         default="MRSI",
-        help="Space the regional metabolite profiles are extracted in before building the connectivity "
-        "matrix: native MRSI grid (default), T1w space, or MNI space.",
+        help="Legacy space setting retained for compatibility. Current regional profiles and connectivity "
+        "are computed from native MRSI maps and atlas regardless of this value.",
     )
     connectivity.add_argument("--connectivity-n-perturbations", type=int, default=50, help="Number of CRLB-scaled noise perturbations per metabolite used to build the connectivity similarity matrix.")
     connectivity.add_argument("--connectivity-sigma-scale", type=float, default=2.0, help="Scale factor applied to the CRLB-derived noise sigma when perturbing metabolite maps for connectivity.")
@@ -397,59 +629,9 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Exclude parcels whose label/ID is greater than or equal to this value from the connectivity matrix.",
     )
-    connectivity.add_argument(
-        "--regional-summary",
-        choices=["mean", "median", "weighted_mean"],
-        default="mean",
-        help="How each parcel's per-voxel metabolite values are summarized into a single regional value: "
-        "'mean', 'median', or 'weighted_mean' (SNR-weighted average; falls back to an unweighted mean if no "
-        "SNR map is available for that recording).",
-    )
 
     processing_control = parser.add_argument_group("Workflow configuration")
     processing_control.add_argument("--transform", default="", help="Legacy output transform override; prefer --output-spaces.")
-    processing_control.add_argument("--no-filter", action="store_true", help="Disable biharmonic spike filtering (enabled by default in every processing mode).")
-    processing_control.add_argument(
-        "--filter-fwhm-mm",
-        type=float,
-        default=None,
-        help="Smoothing FWHM (mm) used when splicing repaired biharmonic-filter voxels back in. "
-        "Default: derived from the native MRSI voxel size (mean voxel dimension x sqrt(2)).",
-    )
-    processing_control.add_argument(
-        "--spikepc",
-        type=float,
-        default=99.0,
-        help="Percentile threshold (0-100) above which a voxel is flagged as a spike for biharmonic "
-        "filtering/repair. Ignored when --no-filter is set.",
-    )
-    processing_control.add_argument(
-        "--spike-max-cluster-voxels",
-        type=int,
-        default=None,
-        help="A connected cluster of spike-thresholded voxels larger than this is treated as real focal "
-        "signal (e.g. a genuine metabolic abnormality) and left unfiltered, rather than median-repaired/"
-        "biharmonic-inpainted like an isolated noise spike. Default: derived from the native MRSI voxel "
-        "size (6 voxels at ~5.0mm/3T-like resolution, 9 voxels at ~3.4mm/7T-like resolution, empirically "
-        "the 90th-percentile spike-cluster size measured on real acquisitions at each resolution). Set to "
-        "a very large number to disable cluster-size filtering (every above-threshold voxel is filtered "
-        "regardless of cluster size, matching pre-existing behavior).",
-    )
-    processing_control.add_argument(
-        "--no-pvc",
-        action="store_true",
-        help="Skip partial-volume correction (PETPVC) entirely, even in --mode parc-con. Equivalent to "
-        "--tissue-backend none, except tissue segmentation itself still runs (its maps are just not used "
-        "for PVC).",
-    )
-    processing_control.add_argument(
-        "--longitudinal",
-        action="store_true",
-        help="Build one unbiased ANTs template across a subject's sessions and register it to MNI once, "
-        "composing (session-to-template)+(template-to-MNI) instead of registering each session directly to MNI. "
-        "No-op for subjects with a single session. Requires --registration-backend ants.",
-    )
-    processing_control.add_argument("--transform-spikemask", action="store_true", help="Also transform per-metabolite spike masks into T1w/MNI space.")
     processing_control.add_argument("--nthreads", type=int, default=16, help="ANTs/ITK thread count per subject/session process.")
     processing_control.add_argument(
         "--nproc",
@@ -476,35 +658,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Force recompute of every cached step for selected recordings, ignoring the Nipype node cache "
         "entirely. Equivalent to passing all of the --overwrite-* flags below at once.",
     )
-    overwrite.add_argument(
-        "--overwrite-filt",
-        action="store_true",
-        help="Force recompute of biharmonic spike filtering, even if cached filtered maps exist.",
-    )
-    overwrite.add_argument("--overwrite-seg", action="store_true", help="Force recompute of tissue segmentation (SynthSeg brain extraction + dseg/probseg), even if cached outputs exist.")
-    overwrite.add_argument(
-        "--overwrite-pve",
-        action="store_true",
-        help="Force recompute of partial-volume correction (PETPVC), even if cached corrected maps exist.",
-    )
-    overwrite.add_argument(
-        "--overwrite-t1-reg",
-        action="store_true",
-        help="Force recompute of MRSI-to-T1w registration, even if a cached transform exists.",
-    )
-    overwrite.add_argument(
-        "--overwrite-mni-reg",
-        action="store_true",
-        help="Force recompute of T1w-to-MNI registration, even if a cached transform exists.",
-    )
-    overwrite.add_argument(
-        "--overwrite-transform",
-        action="store_true",
-        help="Force recompute of resampling MRSI maps through existing transforms into output spaces, even "
-        "if cached resampled maps exist. Does not itself force-recompute the transforms -- see "
-        "--overwrite-t1-reg/--overwrite-mni-reg.",
-    )
-    overwrite.add_argument("--overwrite-chimera", action="store_true", help="Force re-run Chimera parcellation even if the output dseg file already exists.")
 
     runtime = parser.add_argument_group("Other options")
     runtime.add_argument(
@@ -519,7 +672,21 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Print available built-in --config-preset names and their source citation, then exit.",
     )
+    runtime.add_argument(
+        "--hello-world",
+        action="store_true",
+        help="Print the MRSIPrep banner and a confirmation message, then exit. Useful to verify the Docker image "
+        "was pulled and runs correctly, without mounting a BIDS dataset.",
+    )
     runtime.add_argument("--validate-only", action="store_true", help="Check selected subject/session inputs and exit without running preprocessing.")
+    runtime.add_argument(
+        "--reports-only",
+        action="store_true",
+        help="Skip recomputation of already-completed steps (tissue segmentation, registration, parcellation, etc. "
+        "are reused as-is when their output derivatives already exist) and only rewrite QC tables, figures, and "
+        "HTML reports. Fails a recording with a clear error, rather than silently recomputing, if a required "
+        "upstream derivative (e.g. registration transforms) is missing.",
+    )
     runtime.add_argument(
         "--skip-file-integrity-check",
         action="store_true",
@@ -619,32 +786,43 @@ def parse_args(argv: list[str] | None = None) -> MRSIPrepConfig:
         session_label=args.session_label,
         participants_file=args.participants,
         bids_filter_file=args.bids_filter_file,
+        mrsinmrs_file=args.mrsinmrs_file,
+        mrsi_input_dir=args.mrsi_input_dir,
+        quantification_tool=args.quantification_tool,
+        linewidth_unit=args.linewidth_unit,
+        crlb_unit=args.crlb_unit,
         metabolites=args.metabolites,
+        steps=args.steps,
         quality_metrics=args.quality_metrics,
+        nucleus=args.nucleus,
         snr_min=args.snr_min,
         linewidth_max=args.linewidth_max,
         crlb_max=args.crlb_max,
-        processing_mode=args.processing_mode,
         tissue_backend=args.tissue_backend,
+        correct_mrsi_orientation=args.correct_mrsi_orientation,
         registration_backend=args.registration_backend,
         ants_mrsi_to_t1_transform=args.ants_mrsi_to_t1_transform,
-        ants_t1_to_mni_transform=args.ants_t1_to_mni_transform,
+        ants_t1_to_template_transform=args.ants_t1_to_template_transform,
         fsl_mrsi_to_t1_dof=args.fsl_mrsi_to_t1_dof,
         fsl_mrsi_to_t1_init=args.fsl_mrsi_to_t1_init,
-        fsl_t1_to_mni_dof=args.fsl_t1_to_mni_dof,
+        fsl_t1_to_template_dof=args.fsl_t1_to_template_dof,
         fsl_cost=args.fsl_cost,
         fsl_deformable=args.fsl_deformable,
         fsl_fnirt_warpres=tuple(args.fsl_fnirt_warpres) if args.fsl_fnirt_warpres else None,
         fsl_fnirt_lambda=args.fsl_fnirt_lambda,
         normalization=args.normalization,
         output_spaces=args.output_spaces,
+        # Not a CLI flag -- resolutions normally arrive as --output-spaces
+        # res- modifiers. Forwarded so a --config-preset can still set
+        # them directly (the preset loader injects them via set_defaults).
+        space_resolutions=getattr(args, "space_resolutions", None) or {},
         output_mrsi_t1w=args.output_mrsi_t1w,
-        mni_resolution=args.mni_resolution,
         registration_t1_target=args.registration_t1_target,
         csf_pv_threshold=args.csf_pv_threshold,
         ref_met=args.ref_met,
         t1_pattern=args.t1_pattern,
         parcellation_mode=args.parcellation_mode,
+        fs_license=args.fs_license,
         synthseg_mode=args.synthseg_mode,
         chimera_scheme=args.chimera_scheme,
         chimera_scale=args.chimera_scale,
@@ -666,6 +844,7 @@ def parse_args(argv: list[str] | None = None) -> MRSIPrepConfig:
         filter_fwhm_mm=args.filter_fwhm_mm,
         spike_percentile=args.spikepc,
         spike_max_cluster_voxels=args.spike_max_cluster_voxels,
+        spike_extreme_zscore=args.spike_extreme_zscore,
         no_pvc=args.no_pvc,
         t1_correction=args.t1_correction,
         t1_correction_water_status=args.t1_correction_water_status,
@@ -680,25 +859,20 @@ def parse_args(argv: list[str] | None = None) -> MRSIPrepConfig:
         overwrite_seg=args.overwrite_seg,
         overwrite_pve=args.overwrite_pve,
         overwrite_t1_reg=args.overwrite_t1_reg,
-        overwrite_mni_reg=args.overwrite_mni_reg,
+        overwrite_template_reg=args.overwrite_template_reg,
         overwrite_transform=args.overwrite_transform,
         overwrite_chimera=args.overwrite_chimera,
         validate_only=args.validate_only,
+        reports_only=args.reports_only,
         skip_file_integrity_check=args.skip_file_integrity_check,
         check_external_libs=args.check_external_libs,
         stop_on_first_crash=args.stop_on_first_crash,
         verbose=args.verbose,
     )
     config.preset_citation = citation
+    config.require_mrsinmrs()
     return config
 
 
 def _parse_comma_list(value: str) -> list[str]:
     return [item.strip() for item in str(value).split(",") if item.strip()]
-
-
-def _parse_scale(value) -> int:
-    text = str(value)
-    if text.startswith("scale"):
-        text = text[len("scale") :]
-    return int(text)

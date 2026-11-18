@@ -1,24 +1,24 @@
-"""T1w-space parcellation outline QC report."""
+"""T1w-space parcellation outline QC section (Parcellation tab)."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from mrsiprep.io.naming import qc_report_derivative
-from mrsiprep.reports.slices import html_page, load_canonical_data, render_triplanar_png, triplanar_slices
+from mrsiprep.io.naming import coverage_report_dir, qc_report_derivative
+from mrsiprep.reports.slices import load_canonical_data, render_triplanar_png, triplanar_slices
 
 
-def write_parcellation_qc_report(
+def build_parcellation_qc_sections(
     config,
     subject: str,
     session: str | None,
     raw_t1: Path,
     atlas_t1: Path | None,
     labels_path: Path | None = None,
-) -> Path:
+) -> list[tuple[str, str]]:
+    """Returns the Parcellation tab's (heading, body_html) sections."""
     out = qc_report_derivative(config.derivative_dir, subject, session, "parcellation")
-    out.parent.mkdir(parents=True, exist_ok=True)
-    figures_dir = out.parent / "figures"
+    figures_dir = coverage_report_dir(config.derivative_dir, subject, session) / "figures"
     figures_dir.mkdir(parents=True, exist_ok=True)
 
     sections: list[tuple[str, str]] = []
@@ -39,5 +39,4 @@ def write_parcellation_qc_report(
     else:
         sections.append(("Parcellation outlines (T1w space)", "<p>Atlas not available in T1w space for this configuration.</p>"))
 
-    out.write_text(html_page(f"Parcellation QC: sub-{subject}" + (f" ses-{session}" if session else ""), sections), encoding="utf-8")
-    return out
+    return sections

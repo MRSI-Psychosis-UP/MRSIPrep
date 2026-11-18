@@ -1,10 +1,654 @@
 # Changelog
 
-## Unreleased
+## 2.2.2
+
+### CLI
+
+- Regrouped `--help`'s argument sections to mirror the pipeline's own
+  step/branch structure (`STEP_SEQUENCE`) instead of loose topics: each
+  section now corresponds to one pipeline step (e.g. "MRSI branch:
+  spike filtering", "MRSI branch: quality masking", "Shared:
+  registration"), with genuinely cross-cutting flags (BIDS selection,
+  workflow-wide config, cache invalidation, other/runtime) kept as
+  their own separate sections. Most notably, the five spike-filter
+  flags move out of "Workflow configuration" into their own "MRSI
+  branch: spike filtering" section. No flag was renamed, removed, or
+  had its behavior changed -- only which `--help` section it's listed
+  under. The Command Builder GUI's "Standardized Pipeline" tab mirrors
+  the same new sections (see `TAB_GROUPS` in `command_builder_app.py`).
+- Fixed the Command Builder GUI's "Custom Pipeline" tab never showing a
+  widget for `--quality-metrics` under the `mrsi_quality` step (a
+  pre-existing gap, unrelated to the section regrouping above).
+- Moved `--metabolites` into the renamed "Prepare: input selection"
+  section (previously "Options for filtering BIDS queries"): it is
+  read inside `validate_recording` (`prepare`, the very first step) to
+  decide which metabolite maps get loaded from the BIDS layout at all,
+  not inside `mrsi_quality`/`mrsi_load`, neither of which reads
+  `config.metabolites` directly. It had briefly lived under
+  "quality thresholds"/"MRSI branch: quality masking" instead.
+
+### Pipeline
+
+- Split the `mrsi_finish` step into `mrsi_reference` (builds the
+  reference-metabolite image used for MRSI->T1w registration) and
+  `mrsi_quality` (normalizes CRLB/SNR/linewidth units and builds the
+  per-voxel quality masks + QC summary). The two did unrelated work
+  with almost entirely disjoint downstream consumers -- `mrsi_reference`
+  is needed immediately by the next step (`registration`) and five
+  others, while `mrsi_quality`'s output is untouched until parcel QC
+  and regional extraction much later in the pipeline -- so they are now
+  independently cacheable Nipype nodes instead of one bundled result.
+  `--steps` users referencing `mrsi_finish` must switch to
+  `mrsi_reference,mrsi_quality` (in that order); cached derivatives
+  keyed by the old step name are recomputed once under the new names.
+
+### Inputs
+
+- New optional `--mrsi-input-dir` lets the raw MRSI derivatives
+  (`derivatives/mrsi-orig/...`, and `mrsinmrs.json` unless
+  `--mrsinmrs-file` is also given) be read from a different folder than
+  `bids_dir`. Defaults to `bids_dir`, unchanged from before; the T1w
+  anatomicals always still come from `bids_dir`. The Command Builder page
+  has a matching `mrsi_input_dir` field next to `bids_dir`/`output_dir`,
+  blank by default ("same as bids_dir"). With `mrsiprep-docker`, pass a
+  host path; the wrapper mounts it read-only.
+
+## 2.2.1
+
+### Reports
+
+- New `report_overview.html`, written at the derivatives root
+  (`<output_dir>/mrsiprep/report_overview.html`) and rebuilt after every
+  recording's own HTML report is generated. Lists every recording the
+  project's BIDS directory names, each with a status (processed,
+  failed/incomplete, raw MRSI data found but not yet processed, or no
+  MRSI data found) and its median ventricle registration Dice score,
+  linking through to that recording's own report in a new tab.
+- The Command Builder page now shows its own (`mrsiprep`) version and the
+  installed `mrsiprep-docker` wrapper's version.
+
+### Fixes
+
+- `BIDSLayout.discover_recordings()` no longer crashes when
+  `participants_allsessions.tsv` exists but isn't valid UTF-8 (e.g. kept
+  GPG-encrypted at rest); it now falls back to a directory scan instead.
+
+## 2.2.0
+
+### Quality metrics
+
+- Require the upstream quantification tool to be declared, via
+  `--quantification-tool` or `CommonMetadata.QuantificationTool` in
+  `mrsinmrs.json`. `lcmodel`, `fsl-mrs`, and `osprey` (LCModel-wrapper mode)
+  are verified to already match MRSIPrep's CRLB/SNR/linewidth convention;
+  `custom` performs no rescaling and leaves the user solely responsible.
+  See [Quantification tool conventions](mrsinmrs.md#quantification-tool-conventions).
+
+### Chimera parcellation
+
+- `--parcellation-mode chimera` now checks for a FreeSurfer license
+  immediately at startup instead of mid-run, after a subject's
+  preprocessing has already completed. Adds a native `--fs-license` flag
+  alongside the existing `FS_LICENSE`/`--fs-license-file` discovery.
+- Clarified that tissue segmentation (always SynthSeg) is independent of
+  `--parcellation-mode` and never needs a license, and that
+  `--registration-backend` really only has two backends
+  (`flirt-fnirt`/`flirt_fnirt`/`flirt/fnirt` are kept as deprecated
+  spellings of `fsl`, not separate choices) -- `--normalization`'s
+  `ants-syn` is similarly just a legacy alias of `simple`.
+- The command-builder GUI now guides `--chimera-scheme` selection with one
+  dropdown per supra-region (real atlas names, e.g. "Lausanne (L)
+  (default)", and a cortex-dependent `--chimera-scale`/seg range), shows a
+  real `--atlas` dropdown of every bundled atlas found under
+  `mrsiprep/data/atlas/`, and hides each parcellation mode's irrelevant
+  options.
+- The HTML report cites Chimera itself plus the full published reference
+  (not just "Author et al, Year") for every atlas a run's
+  `--chimera-scheme` actually combined.
+
+### Report
+
+- The "PrepParams" tab is renamed "Provenance" and now also holds all
+  citations (MRSIPrep, MRSinMRS, Chimera parcellation, then any
+  config-preset citation) as its own subsections, replacing the old
+  standalone Citations block at the page bottom, plus a download button
+  for the run's provenance JSON.
+
+### Documentation
+
+- Split acquisition-metadata and other-input-derivatives content out of
+  [Preparing inputs](inputs.md), [Tissue processing](processing.md), and
+  [Experimental features](future_development.md) into two new User guide
+  pages, [MRSinMRS](mrsinmrs.md) and
+  [Other input derivatives](other_input_derivatives.md) -- the latter also
+  newly documents `mrsiprep-import`/`mrsiprep-import-gui`.
+
+## 2.1.0
+
+### Acquisition metadata
+
+- Require a valid, nonempty MRSinMRS specification before processing,
+  input validation, or report regeneration. The default location is
+  `derivatives/mrsi-orig/mrsinmrs.json`.
+- Add `--mrsinmrs-file` for a custom metadata path. The Docker wrapper
+  mounts the host file read-only, and the Command builder exposes the option.
+- Remove automatic BIDS-root metadata discovery. Move older files into
+  `mrsi-orig` or supply their path explicitly.
+
+## 2.0.6
+
+### CLI
+
+- **Added `mrsiprep-build-command`**, a local browser-based form (built
+  with Streamlit, installed via `pip install mrsiprep[command-builder]`)
+  that assembles a runnable `mrsiprep-docker` command from a point-and-click
+  interface. It is generated directly from the CLI's own argument parser,
+  so its fields and defaults never drift out of sync with the real flag
+  set. Options are grouped the same way as the CLI reference docs, the
+  generated command updates live at the top of the page, and selecting a
+  `--registration-backend` only shows the ANTs- or FSL-specific options
+  relevant to that backend. It only builds and displays the command; it
+  never executes mrsiprep itself.
+- Fixed the command builder generating a bare `mrsiprep` command, which
+  cannot run outside the container; it now generates `mrsiprep-docker`.
+
+### Misc
+
+- `mrsiprep-docker` now prints the installed mrsiprep version just below
+  the startup banner.
+- Docs: merged the standalone T1 saturation correction page into Future
+  Development, replaced remaining `docker run` examples with
+  `mrsiprep-docker` across the usage pages, reordered Installation to lead
+  with the `mrsiprep-docker` wrapper, and linked the Chimera parcellation
+  docs to its GitHub repository.
+
+## 2.0.5
+
+### Reports
+
+- **Split the "MRSI Raw QC" tab into two tabs.** "MRSI Raw" now holds only
+  the per-metabolite raw slice montages, a quick-look image gallery with no
+  other info; a new "MRSI Raw QC" tab carries everything measured from the
+  raw maps instead (the QC summary table and the ventricle-visibility/Dice
+  section), both previously crammed into one combined tab.
+- **Spike Filter tab now uses a hover-to-flicker montage**, replacing the
+  static before/after triplanar image pairs: a single SVG per metabolite,
+  at the same axial, center-weighted slices as the MRSI Raw tab (biased
+  toward the slices with the most spike voxels so repaired voxels are
+  actually visible), matching the hover pattern already used by the
+  T1w-space and Template-space alignment tabs. Each state carries an
+  explicit "Raw (unfiltered)"/"Spike-filtered" title and a single shared
+  colorbar labeled as covering both states.
+
+## 2.0.4
+
+### Reports
+
+- **Added hover-to-flicker alignment reportlets**, matching fMRIPrep's own
+  coregistration panels: the T1w-space and Template-space (MNI) alignment
+  tabs now show a multi-slice (coronal/axial/sagittal) montage with mm
+  coordinate titles, L/R markers, and a white-matter contour, composited as
+  two SVG layers that fade between anatomy and the metabolite overlay on
+  hover instead of one flat, permanently alpha-blended slice.
+- Fixed the Template-space alignment figure's colorbar, which could overlap
+  a slice panel or silently lose its tick labels/axis label depending on
+  layout details; it now sits in its own dedicated column with
+  `"<ref-met> [IU]"` units always shown.
+
+### CLI
+
+- Fixed `--reports-only` always running recordings sequentially regardless
+  of `--nproc`: it bypasses the Nipype engine (where cross-recording
+  parallelism normally comes from), so it needed its own
+  `ProcessPoolExecutor` dispatch, now added to match the full-pipeline path.
+
+## 2.0.3
+
+### Documentation
+
+- **Added a "How to Cite" section** to the README, a matching Read the Docs
+  page (`docs/citing.md`), and an up-to-date `CITATION.cff`, all pointing to
+  the MRSIPrep bioRxiv preprint (doi:10.64898/2026.09.11.750896). The QC
+  report's Citations section now includes this reference directly (with
+  DOI link) instead of only pointing readers to `CITATION.cff`.
+
+### Parcellation
+
+- Fixed `--atlas gm_mesh_12mm`: its bundled NIfTI file was named
+  `gm_mesh_12mm.gz` instead of `gm_mesh_12mm.nii.gz`, so the bundled-atlas
+  discovery glob silently failed to find it and every subject's
+  Parcellation step raised, despite the atlas data itself being valid.
+
+### Preflight
+
+- Fixed the preflight table's registration-transform status check: it
+  looked for transforms under `<bids_dir>/derivatives/mrsiprep` instead of
+  the configured `--output-dir`, so it could report "present" for stale or
+  unrelated transforms while the run itself looked elsewhere and found
+  nothing (e.g. with the `mrsiprep-docker` wrapper's fixed `/out` mount
+  point). Now uses the same path-resolution logic as the registration
+  steps themselves.
+
+## 2.0.2
+
+### CLI
+
+- **Added `--hello-world`**, a zero-argument smoke test that prints the
+  MRSIPrep banner and a confirmation message, then exits with status 0.
+  Verifies a `docker pull`/image works without mounting a BIDS dataset or
+  FreeSurfer license.
+
+### QC report
+
+- Fixed a `UserWarning: Casting data from int16 to float32` that fired on
+  every report build with a non-native MNI resolution (e.g. `res-5`): the
+  full-head MNI template used as the Template-space alignment tab's
+  background is fetched as `int16` and was resampled without first
+  casting to `float32`, so nilearn warned about its own implicit cast on
+  every call.
+
+## 2.0.1
+
+### Parcellation
+
+- **Added a cubic (grid) parcellation**, selected via `--parcellation-mode
+  atlas --atlas cubic<N>mm` (e.g. `cubic10mm`, `cubic12mm`): tiles the
+  bundled MNI-space gray-matter mask into a regular grid of `N`-millimeter
+  cubes instead of anatomical regions, useful for analyses that want
+  spatially uniform sampling rather than atlas-defined boundaries. Any
+  integer `N` is accepted -- the grid is generated (and cached per size)
+  the first time it's requested, the same way `schaefer<N>`/`mist197`
+  already are, rather than shipping one bundled file per size.
+
+## 2.0.0
+
+The version described by the MRSIPrep bioRxiv preprint.
+
+### CI
+
+- **Replaced the two parcellation-mode-specific e2e workflows** (`e2e-mni-norm`,
+  `e2e-parc-con` -- named after `--mode` values removed back in 1.11.0/1.10.0,
+  which made the badges misleading) **with one `e2e-full-pipeline` workflow**:
+  two subjects run in parallel (`--nproc 2 --nthreads 12`) through the full
+  pipeline -- Chimera parcellation plus `--write-connectivity` -- instead of
+  two separate partial runs.
+
+### MRSI preprocessing
+
+- **Added `--correct-mrsi-orientation`** (off by default). Post-quantification
+  MRSI maps occasionally come out of the vendor/quantification pipeline with
+  a wrong sform/qform -- close enough to plausible that spike filtering, PVC,
+  and even MRSI-to-T1w registration all "succeed" on a misaligned recording.
+  When set, a quick rigid-only registration of the reference metabolite map
+  to the T1w anatomical runs first, before any MRSI preprocessing, and that
+  same rigid correction is applied to every other metabolite/CRLB/SNR/FWHM
+  map, in place, at native MRSI resolution. Uses `--registration-backend`
+  (ANTs `Rigid`, or FLIRT `dof=6` for `fsl`).
+
+## 1.15.3
+
+### QC report
+
+- **Parcelwise CRLB figure now shows the voxelwise CRLB map**, not a
+  per-parcel pass/fail summary. Averaging into one number per parcel is
+  exactly what the (unchanged) Coverage-tab table is for; folding that
+  back into a two-colour image on top of it hid the within-parcel spread
+  a continuous map shows for free. The colour scale is fixed to the
+  run's own `--crlb-max`, and the parcel atlas is still used to pick
+  matching slice indices and an anatomical underlay.
+- **Template-space alignment now shows multiple slices per plane**
+  (coronal/axial/sagittal), not a single center slice, which could land
+  on an unremarkable part of the registration and miss a real
+  misalignment a few slices away. Slice selection is driven by the
+  overlaid signal itself, not the full-head template background, so the
+  montage doesn't spend most of its panels on scalp/neck the signal
+  never reaches.
+- **`reports/` no longer has a `coverage/` intermediary.** The report
+  HTML, its `figures/`, and `provenance.json` now all live directly
+  under `reports/`, so opening that folder immediately shows the report
+  to open instead of requiring a step into a subfolder first.
+
+## 1.15.2
+
+### Fixed
+
+- **A recording could hang indefinitely under `--nproc > 1`.** The
+  worker pool forked (Linux's default), which could copy a parent
+  process's OpenMP/OpenBLAS thread-pool locks into a child in a state
+  no thread in that child could ever release, deadlocking the first
+  parallel region it entered (observed during the resampling step's QC
+  figure rendering). The pool now uses a `spawn` context instead.
+- Native thread pools (`OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS`, and
+  related) are now capped to `--nthreads`, rather than defaulting to
+  the full host core count inside every worker.
+
+## 1.15.1
+
+### Runtime tab
+
+- **Each step now reports an outcome beside its duration**, which a
+  duration alone could not convey:
+  - `PROC` -- computed during this run.
+  - `REUSED` -- every output already existed and was reused because
+    `--overwrite` was not passed. The step ran but did no work.
+  - `N/A` -- the configuration never requested this step
+    (`--no-pvc`, `--t1-correction none`, `--write-connectivity` unset),
+    shown with the reason.
+  - `FAILED` -- the step raised.
+
+  "Skipped" previously conflated the middle two, which answer different
+  questions: one is "why was this run fast", the other "why is this
+  output missing".
+- **MRSI-to-T1w and T1w-to-template registration are reported
+  separately**, in the console step list and in the Runtime tab. They are
+  independent registrations with different failure modes and very
+  different costs, and one combined line hid which of the two a slow run
+  was spending its time in.
+
+## 1.15.0
+
+### QC report
+
+- **Tabs reordered and renamed** to follow the pipeline: MRSI Raw QC,
+  MRSI PVC, Spike Filter, Anatomical, T1-space alignment, Template-space
+  alignment, Coverage, Parcellation, Connectivity, MRSinMRS, PrepParams,
+  Runtime, Outputs. `Preproc` is now **PrepParams**,
+  `Coverage & Alignment` is **Coverage**, and `MNI-space alignment` is
+  **Template-space alignment** (which now names the exact template and its
+  resolution in mm).
+- **New MRSI PVC tab**, when partial-volume correction ran: one
+  10-slice axial montage per metabolite, at the same slices as MRSI Raw
+  QC so the two can be compared by flipping between them. Omitted under
+  `--no-pvc`, where the maps are identical to the uncorrected ones.
+- **Coverage tab** is ranked by `qc_valid_fraction` (worst first) instead
+  of `anatomical_coverage_percent`, and states the per-voxel thresholds
+  actually in force for the run rather than a summary sentence.
+- **Anatomical coverage** is shown as 10 equally-spaced axial slices
+  instead of a triplanar view.
+- **Parcelwise CRLB quality** is one metabolite x slice grid over the
+  normalization template, semi-transparent so anatomy reads through. This
+  replaces the glass-brain projection, which collapsed the volume onto
+  three planes and so could not distinguish a deep unreliable parcel from
+  a superficial one.
+- **Outputs** is a `tree`-style listing of the recording's own derivative
+  directory, excluding `reports/`.
+- Tables sort on header click; the report title carries the BIDS dataset
+  name.
+
+### Fixes
+
+- **Finished recordings now display DONE rather than RUNNING** in the
+  parallel status table. The listener discarded messages still queued at
+  shutdown, and the worker's completion message could be lost in transit
+  entirely; the parent now asserts each outcome from its own future.
+- **`--overwrite` now forces MRSI resampling to recompute.** Every other
+  cached step (tissue segmentation, filtering, PVC, registration,
+  subject templates) already treated `--overwrite` as "recompute
+  everything" alongside its own specific flag; `mrsi/resampling.py` was
+  the sole exception, honouring only `--overwrite-transform`. A run with
+  `--overwrite` therefore kept stale resampled maps.
+
+## 1.14.0
+
+- **Breaking: `--mni-resolution` is removed; resolution is now a modifier
+  on `--output-spaces`.** Following fMRIPrep's convention, each requested
+  space may be qualified individually:
+
+  ```bash
+  --output-spaces MNI152NLin2009cAsym:res-2 T1w
+  ```
+
+  `res-` accepts an integer millimetre value, `res-origres` (MRSI native,
+  the default) or `res-t1wres`. A single global flag could not express
+  different resolutions for different spaces, which became a real
+  limitation now that the template is no longer hard-wired to MNI.
+
+  Migration: `--mni-resolution 2mm` becomes
+  `--output-spaces MNI152NLin2009cAsym:res-2`; `--mni-resolution origres`
+  is the default and can simply be dropped.
+
+- **Breaking: three flags renamed** from MNI-specific to template-generic,
+  since the target space is no longer necessarily MNI:
+
+  | old | new |
+  | --- | --- |
+  | `--ants-t1-to-mni-transform` | `--ants-t1-to-template-transform` |
+  | `--fsl-t1-to-mni-dof` | `--fsl-t1-to-template-dof` |
+  | `--overwrite-mni-reg` | `--overwrite-template-reg` |
+
+  No aliases are kept, matching how `--mode` and `--parcellation-mode mni`
+  were handled. The built-in `imaging-neurosci-2026` preset is updated;
+  custom preset JSON files using the old keys will need the same edit.
+
+## 1.13.0
+
+- **MNI outputs are now genuinely in the space their filenames claim.**
+  MRSIPrep resampled into `nilearn.datasets.load_mni152_template()` --
+  ICBM152 2009 release *a*, per nilearn's own documentation -- while
+  labelling every output `space-MNI152NLin2009cAsym`, i.e. release *c*.
+  The reference template now comes from TemplateFlow, so the label is
+  correct and derivatives genuinely share a space with fMRIPrep outputs
+  and TemplateFlow atlases.
+
+  **This changes MNI-space output grids** (origin moves from
+  `(-98,-134,-72)` to `(-96,-132,-78)`, matching the 2009cAsym
+  reference). Regional values shift too, but by *less than the
+  pipeline's own run-to-run variation*: median 1.5% vs a 2.2% noise
+  floor measured by re-running the same image twice. Existing analyses
+  do not need re-running on account of this.
+
+  Also brought into line: the signal-leakage and ventricle QC masks,
+  which came from FSL's `$FSLDIR` standard directory -- the
+  MNI152NLin6Asym lineage, a different space again from the data being
+  checked. They now use the same template the run normalizes into, with
+  the FSL copy kept only as a fallback.
+
+- **A single template provider** (`mrsiprep/config/templates.py`)
+  replaces six scattered `load_mni152_template()` calls, so the target
+  space is decided in one place -- the hook a non-MNI template would
+  need. Templates are pre-fetched at image build time with
+  `TEMPLATEFLOW_HOME` pinned, so runs remain fully offline (verified
+  with `docker run --network none`).
+
+- **Removed the dead `Registration` facade** from
+  `interfaces/ants.py`. Nothing instantiated it, and it behaved
+  differently from the live module-level functions (always wrapping
+  `type_of_transform` in `antsRegistrationSyN[...]`, no CLI fallback).
+
+## 1.12.0
+
+- **Nucleus is now explicit, and non-proton MRSI is a first-class case.**
+  New `--nucleus` (or a `Nucleus` field in `mrsinmrs.json`'s
+  `CommonMetadata`) declares which nucleus a dataset was acquired with;
+  it is recorded in the QC report and `provenance.json`. Nucleus
+  definitions live in the new data-only `mrsiprep/config/nuclei.json`
+  (¹H, ³¹P, ²H ship), so supporting another nucleus is a JSON edit rather
+  than a code change -- see the new `docs/extending.md`.
+
+  Voxel-quality thresholds and metabolite alias spellings are now
+  per-nucleus rather than global. **Proton behaviour is unchanged**: ¹H
+  keeps exactly the previous `snr_min=4.0 / linewidth_max=0.1 /
+  crlb_max=20.0` and the same alias table, now sourced from the JSON.
+
+  ³¹P and ²H ship *no* curated thresholds on purpose: their SNR regimes
+  differ substantially from proton, so MRSIPrep refuses to run without
+  explicit `--snr-min/--linewidth-max/--crlb-max` rather than silently
+  applying proton values. Contributing citation-backed defaults is
+  welcome.
+
+  Precedence for the thresholds is: explicit CLI flag > `--config-preset`
+  > nucleus defaults. `config/defaults.py`'s `QUALITY_DEFAULTS` and
+  `METABOLITE_ALIASES` remain importable as the proton values.
+
+- **Contributor documentation.** New `CONTRIBUTING.md` (container-based
+  dev/test loop, the gitignored-`tests/` gotcha, CI expectations), plus
+  `docs/architecture.md` (package responsibilities, config resolution
+  order, the output-naming contract) and `docs/extending.md` (worked
+  recipes for adding a nucleus, a tissue backend, or a parcellation
+  backend).
+
+- **Backend selection is now a registry rather than an if/elif chain.**
+  `TISSUE_BACKENDS` (`workflows/tissue.py`) and `PARCELLATION_BACKENDS`
+  (`workflows/parcellation.py`) map a name to a callable; adding a
+  backend means adding an entry, and an unknown name errors listing what
+  is registered.
+
+- **`workflows/participant.py` split** (863 lines) into `preflight.py`
+  (pre-run inventory and startup table), `steps.py` (the `_step_*`
+  stages), and `participant.py` (orchestration). Pure code movement --
+  `participant.py` re-exports the moved names, so existing imports keep
+  working. `BIDSLayout.from_config()` replaces nine identical
+  construction sites and carries the run's nucleus aliases.
+
+- **Several parcellations in one run.** `--chimera-scheme`,
+  `--chimera-scale`, `--chimera-grow`, and `--atlas` now each accept a
+  comma-separated list, the same syntax Chimera's own
+  `--parcodes`/`--scale`/`--growwm` use. The lists combine as a cross
+  product, so `--chimera-scheme A,B --chimera-scale 1,3` builds four
+  parcellations off a **single** preprocessing pass -- `recon-all` and
+  Chimera each run once for the whole set, with registration, PVC, and
+  resampling shared.
+
+  Every parcellation gets its own regional table, metabolite-profile NPZ,
+  profile estimation, and connectivity matrix, each keyed by atlas and
+  scale so they never collide. The QC report stays one file per
+  recording, gaining one Parcellation section per parcellation.
+
+  Notes:
+  - The cross product is a *request*, not a guarantee: `--chimera-scale`
+    only applies to multi-resolution (Lausanne `L` cortex) schemes, so a
+    non-multi-resolution scheme yields one parcellation however many
+    scales are listed. Combinations Chimera doesn't produce are logged
+    and skipped rather than failing the run.
+  - When several `--chimera-grow` values are requested, the growth
+    distance is added to the output names to keep the variants apart.
+    Single-value runs are unaffected and keep byte-identical paths.
+  - `provenance.json`'s `outputs` gains a `parcellations` list carrying
+    every parcellation's derivatives. The existing singular keys
+    (`regional_table`, `metprofiles`, `connectivity`, `atlas_mrsi`) still
+    point at the first parcellation, so existing consumers keep working.
+  - `--chimera-scale`/`--chimera-grow` are stored as given rather than
+    coerced to `int`, so configs and presets round-trip unchanged; both
+    bare integers (as in the shipped presets) and `scaleN` are accepted.
+
+## 1.11.0
+
+- **Removed `--mode`/`--processing-mode`.** `parc-con` was never a
+  fundamentally different pipeline from `mni-norm` -- it ran everything
+  `mni-norm` ran, plus a few optional extras. `--parcellation-mode`
+  (`synthseg`/`chimera`/`atlas`) is now the sole switch for how much of
+  the pipeline runs: `synthseg` (the new default) is the lighter-weight
+  path; `chimera`/`atlas` additionally run full parcellation. Every other
+  behavior (tissue backend, PVC, connectivity matrix, metabolite
+  profiles) is controlled independently by its own already-existing
+  flag, as it always should have been. `--mode`/`--processing-mode` is
+  now a hard, unrecognized-argument error.
+
+  Bundled with this, three real behavior changes (not just renames):
+  - Regional metabolic profile estimation and the per-parcel metabolite
+    NPZ export now run unconditionally for every recording, regardless
+    of `--parcellation-mode` (previously `mni-norm`-equivalent runs
+    skipped both entirely). Only the connectivity *matrix* itself stays
+    behind `--write-connectivity`.
+  - The preflight "Tissue" warning for `--tissue-backend existing` with
+    an incomplete CAT12 map now applies regardless of
+    `--parcellation-mode` (previously only checked under what used to
+    be `parc-con` mode).
+  - `--tissue-backend synthseg-fast`'s SynthSeg-brain path/mask
+    override is now unconditional, regardless of
+    `--registration-t1-target` (previously only applied when the
+    target was `brain`, unless what used to be `parc-con` mode was
+    also set) -- this also fixes a pre-existing gap where a
+    `mni-norm`-equivalent run silently ignored `--tissue-backend`
+    entirely and always forced `synthseg-fast`.
+  - `--check-external-libs`'s required-tool list is corrected to key
+    `fast`/`petpvc` off `--tissue-backend`/`--no-pvc` directly rather
+    than off the old mode bundle, so a `synthseg`-parcellation run now
+    correctly lists them as required.
+
+## 1.10.1
+
+- **Fixed the SynthMRSI-Project quickstart's `unzip` instructions**
+  (`usage_basic.md`, `PUBLIC_DATASET.md`). The published zip has no
+  top-level wrapper folder -- its contents sit flat at the archive root
+  -- so the previously documented plain `unzip SynthMRSI-Project.zip`
+  scattered files into the current directory instead of a
+  `SynthMRSI-Project/` directory, breaking the demo's `docker run`
+  mounts. Now uses `unzip SynthMRSI-Project.zip -d SynthMRSI-Project`.
+
+## 1.10.0
+
+- **Removed `--mode midas`.** The MIDAS-faithful pipeline (fuzzy c-means
+  tissue segmentation, PSF-convolved tissue fractions, rigid MRSI→T1
+  registration, and per-parcel Eq. 4 pure-GM/pure-WM regression) is no
+  longer available; only `mni-norm` and `parc-con` remain. Removed
+  `mrsiprep.tissue.fuzzy_cmeans`, `mrsiprep.tissue.psf`, and
+  `mrsiprep.parcellation.tissue_regression` along with their call sites.
+
+- **Added `--reports-only`,** which reuses every already-completed step's
+  output derivatives as-is (tissue segmentation, registration,
+  parcellation, PVC, etc.) and only regenerates QC tables, figures, and
+  `desc-report.html`. Fails a recording with a clear error, rather than
+  silently recomputing, if a required upstream derivative is missing. Runs
+  the same per-recording step sequence directly, bypassing the Nipype
+  node cache entirely, so it isn't affected by cache staleness/hashing and
+  always produces a genuinely fresh report.
+
+- **Added a Runtime tab to the per-recording HTML report,** with real
+  per-step wall-clock timing (tissue segmentation, registration, PVC,
+  parcellation, connectivity, etc.) and the `nproc`/`nthreads` context for
+  the run. New output: `reports/coverage/*_desc-runtimeqc.json`
+  (`mrsiprep.io.naming.runtime_metrics_derivative`).
+
+- **Tightened spike-filter repair.** `get_spike_mask()` now restricts its
+  percentile threshold and resulting spike mask to brain-mask voxels only
+  (`--spike-mask`-equivalent behavior, matching the original
+  mrsitoolbox's `bnd_np` parameter, which this port had never exposed),
+  and gained a z-score safety net (`--spike-extreme-zscore`, default
+  `4.0`): a repaired cluster larger than `--spike-max-cluster-voxels` is
+  still repaired, rather than exempted as real focal signal, if its mean
+  intensity is an implausible outlier against the map's own inside-brain
+  mean/std. Large spike clusters are just as likely as small ones to be
+  extreme-intensity acquisition artifacts, so cluster size alone was
+  letting some genuinely broken clusters through unrepaired.
+
+- **Renamed report tabs**: "MRSI QC" is now "MRSI Raw QC" (raw
+  pre-pipeline metabolite maps and their QC, now including the ventricle
+  visibility panel below); "Acquisition" is now "MRSinMRS", its table
+  gained a Unit column, and the broken sequence-citation hyperlink was
+  removed.
+
+- **Fixed connectivity matrix export** to also write a labeled
+  `*_desc-connectivity_matrix.tsv` (parcel-name row/column headers)
+  alongside the existing `.npz`, which was previously the only matrix
+  output.
+
+- **Clarified T1w-space signal leakage reporting**: the T1w-space
+  alignment tab now explains explicitly when leakage wasn't computed
+  (T1w-space leakage requires `--output-mrsi-t1w`) instead of silently
+  omitting the section, so its absence isn't mistaken for a bug.
+
+- **Added a native-space ventricle visibility check to the MRSI Raw QC
+  tab,** run before any T1w coregistration touches the data. A cheap,
+  prior-only placement (translation + per-axis scale from brainmask
+  centroid/extent, no iterative registration) warps FSL's Harvard-Oxford
+  lateral-ventricle prior into each recording's own native MRSI grid;
+  a local darker-than-surroundings threshold then detects whatever
+  actually looks like ventricle in each metabolite's own raw signal, and
+  the slice with the most detected voxels is rendered with the outline
+  for visual inspection. Deliberately not reduced to a single pass/fail
+  metric -- a naive summary ratio was tried and found to invert
+  direction on real data, so the outline itself is the QC signal, not a
+  derived score. All metabolites are laid out in a single combined
+  montage, at most 5 per row (e.g. 9 metabolites -> 5 columns x 2 rows),
+  rather than one image per metabolite. Requires `FSLDIR` and the
+  Harvard-Oxford atlas data (bundled in the standard image); skipped
+  gracefully, with no new section, when unavailable. New output:
+  `reports/coverage/figures/*_ventricle-qc.png`.
 
 - **Added a per-metabolite signal leakage metric to the standard
   coverage report.** Reuses the signal-weighted leakage metric from the
-  [Registration Frameworks](benchmarks.md) benchmark (fraction of
+  [Registration Frameworks](registration_benchmark.md) benchmark (fraction of
   CRLB-passing signal mass falling outside the reference brain mask) and
   now computes it automatically for every recording, not just that
   benchmark: against the MNI152 standard brain mask for the default
@@ -17,7 +661,7 @@
 
 ## 1.9.1
 
-- Trimmed the [Registration Frameworks](benchmarks.md) benchmark's
+- Trimmed the [Registration Frameworks](registration_benchmark.md) benchmark's
   interpretation into a concise Conclusions section.
 
 ## 1.9.0
@@ -35,7 +679,7 @@
   `confounds/*_desc-t1corr.tsv`, a new QC report, and a `t1_correction`
   provenance block. See `--t1-correction-water-status` for handling
   already water-referenced inputs, and
-  [T1 Saturation Correction](usage_t1_correction.md).
+  [T1 Saturation Correction](future_development.md#t1-saturation-correction).
 
 - Anonymized the [Cross-Site/Cross-Sequence Regional Profile
   Reproducibility](cross_sequence_benchmark.md) page: the two compared

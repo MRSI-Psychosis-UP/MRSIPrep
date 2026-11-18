@@ -10,7 +10,9 @@ import numpy as np
 from mrsiprep.mrsi.t1_correction import (
     T1CorrectionError,
     apply_t1_correction,
+    apply_t1_correction_voxelwise,
     ernst_saturation_factor,
+    ernst_saturation_factor_map,
     resolve_acquisition_params,
     resolve_metabolite_t1,
 )
@@ -139,6 +141,112 @@ class ApplyT1CorrectionTests(unittest.TestCase):
 
             with self.assertRaises(T1CorrectionError):
                 apply_t1_correction(config, "S001", "V1", {"Gln": metabolite}, params, "unknown")
+
+
+class ErnstSaturationFactorMapTests(unittest.TestCase):
+    def test_matches_scalar_version_at_each_voxel(self):
+        tr_s, t1_s = 2.0, 1.38
+        flip_map = np.array([[[60.0, 90.0], [75.0, 90.0]]], dtype=np.float32)
+        factor_map = ernst_saturation_factor_map(tr_s, flip_map, t1_s)
+        for idx in np.ndindex(flip_map.shape):
+            expected = ernst_saturation_factor(tr_s, float(flip_map[idx]), t1_s)
+            self.assertAlmostEqual(factor_map[idx], expected, places=5)
+
+    def test_non_physical_voxel_is_nan_not_an_exception(self):
+        # flip_deg=0 -> sin(alpha)=0 -> denominator <= 0 everywhere TR/T1 finite.
+        flip_map = np.array([[[0.0, 90.0]]], dtype=np.float32)
+        factor_map = ernst_saturation_factor_map(2.0, flip_map, 1.38)
+        self.assertTrue(np.isnan(factor_map[0, 0, 0]))
+        self.assertFalse(np.isnan(factor_map[0, 0, 1]))
+
+
+class ApplyT1CorrectionVoxelwiseTests(unittest.TestCase):
+    def test_writes_signalt1corrvoxelwise_output_with_per_voxel_scaling(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            image = nib.Nifti1Image(np.full((2, 2, 2), 4.0, dtype=np.float32), np.eye(4))
+            metabolite = root / "CrPCr.nii.gz"
+            nib.save(image, metabolite)
+            # Two distinct flip angles so the correction is genuinely per-voxel.
+            flip_data = np.full((2, 2, 2), 90.0, dtype=np.float32)
+            flip_data[0, 0, 0] = 60.0
+            flip_map_path = root / "b1map.nii.gz"
+            nib.save(nib.Nifti1Image(flip_data, np.eye(4)), flip_map_path)
+            config = _config(root)
+            params = resolve_acquisition_params({"RepetitionTime": 2.0, "FlipAngle": 90.0, "MagneticFieldStrength": 3.0})
+
+            corrected, rows, summary = apply_t1_correction_voxelwise(
+                config, "S001", "V1", {"CrPCr": metabolite}, flip_map_path, params, "unknown"
+            )
+
+            out_path = corrected["CrPCr"]
+            self.assertIn("orig-t1corr", str(out_path))
+            self.assertIn("desc-signalt1corrvoxelwise", out_path.name)
+            result = nib.load(str(out_path)).get_fdata()
+            factor_90 = ernst_saturation_factor(2.0, 90.0, 1.38)
+            factor_60 = ernst_saturation_factor(2.0, 60.0, 1.38)
+            np.testing.assert_allclose(result[0, 0, 0], 4.0 * factor_60, rtol=1e-4)
+            np.testing.assert_allclose(result[1, 1, 1], 4.0 * factor_90, rtol=1e-4)
+            self.assertEqual(rows[0]["metabolite"], "CrPCr")
+            self.assertEqual(rows[0]["flip_angle_map"], str(flip_map_path))
+            self.assertAlmostEqual(rows[0]["non_physical_voxel_fraction"], 0.0)
+            self.assertIn("Water-referencing status unknown", rows[0]["warnings"])
+            self.assertTrue(summary.exists())
+            self.assertIn("desc-t1corrvoxelwise", summary.name)
+
+    def test_non_physical_voxels_are_left_uncorrected_not_fatal(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            image = nib.Nifti1Image(np.full((2, 2, 2), 4.0, dtype=np.float32), np.eye(4))
+            metabolite = root / "CrPCr.nii.gz"
+            nib.save(image, metabolite)
+            flip_data = np.full((2, 2, 2), 90.0, dtype=np.float32)
+            flip_data[0, 0, 0] = 0.0  # non-physical: sin(0)=0 -> NaN factor at this voxel
+            flip_map_path = root / "b1map.nii.gz"
+            nib.save(nib.Nifti1Image(flip_data, np.eye(4)), flip_map_path)
+            config = _config(root)
+            params = resolve_acquisition_params({"RepetitionTime": 2.0, "FlipAngle": 90.0, "MagneticFieldStrength": 3.0})
+
+            corrected, rows, _ = apply_t1_correction_voxelwise(
+                config, "S001", "V1", {"CrPCr": metabolite}, flip_map_path, params, "unknown"
+            )
+
+            result = nib.load(str(corrected["CrPCr"])).get_fdata()
+            self.assertAlmostEqual(result[0, 0, 0], 4.0)  # left uncorrected
+            factor_90 = ernst_saturation_factor(2.0, 90.0, 1.38)
+            np.testing.assert_allclose(result[1, 1, 1], 4.0 * factor_90, rtol=1e-4)
+            self.assertAlmostEqual(rows[0]["non_physical_voxel_fraction"], 1 / 8)
+
+    def test_raises_on_grid_mismatch_with_flip_angle_map(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            image = nib.Nifti1Image(np.ones((2, 2, 2), dtype=np.float32), np.eye(4))
+            metabolite = root / "CrPCr.nii.gz"
+            nib.save(image, metabolite)
+            flip_map_path = root / "b1map.nii.gz"
+            nib.save(nib.Nifti1Image(np.ones((3, 3, 3), dtype=np.float32), np.eye(4)), flip_map_path)
+            config = _config(root)
+            params = resolve_acquisition_params({"RepetitionTime": 2.0, "FlipAngle": 90.0, "MagneticFieldStrength": 3.0})
+
+            with self.assertRaisesRegex(T1CorrectionError, "same grid"):
+                apply_t1_correction_voxelwise(config, "S001", "V1", {"CrPCr": metabolite}, flip_map_path, params, "unknown")
+
+    def test_skips_recompute_when_cached(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            image = nib.Nifti1Image(np.ones((2, 2, 2), dtype=np.float32), np.eye(4))
+            metabolite = root / "CrPCr.nii.gz"
+            nib.save(image, metabolite)
+            flip_map_path = root / "b1map.nii.gz"
+            nib.save(nib.Nifti1Image(np.full((2, 2, 2), 90.0, dtype=np.float32), np.eye(4)), flip_map_path)
+            config = _config(root)
+            params = resolve_acquisition_params({"RepetitionTime": 2.0, "FlipAngle": 90.0, "MagneticFieldStrength": 3.0})
+
+            corrected1, _, _ = apply_t1_correction_voxelwise(config, "S001", "V1", {"CrPCr": metabolite}, flip_map_path, params, "unknown")
+            mtime1 = corrected1["CrPCr"].stat().st_mtime_ns
+            corrected2, _, _ = apply_t1_correction_voxelwise(config, "S001", "V1", {"CrPCr": metabolite}, flip_map_path, params, "unknown")
+            mtime2 = corrected2["CrPCr"].stat().st_mtime_ns
+            self.assertEqual(mtime1, mtime2)
 
 
 if __name__ == "__main__":

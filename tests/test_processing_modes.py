@@ -1,9 +1,7 @@
-import shutil
 import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
 
 import nibabel as nib
 import numpy as np
@@ -23,12 +21,21 @@ class ProcessingModeTests(unittest.TestCase):
         self.assertEqual(round_mm_resolution(1.6), 2)
 
     def test_bundled_mni_atlas_is_discoverable(self):
-        self.assertIn("chimera-LFMIHIFIS-3", available_bundled_atlases())
+        self.assertIn("chimera-LFMIHIFIS_scale3", available_bundled_atlases())
+        config = SimpleNamespace(atlas="chimera-LFMIHIFIS_scale3")
+        image, labels, name = load_mni_atlas(config, "/tmp/unused-atlas-work")
+        self.assertTrue(image.exists())
+        self.assertTrue(labels.exists())
+        self.assertEqual(name, "chimeraLFMIHIFIS_scale3")
+
+    def test_bundled_mni_atlas_accepts_old_style_atlas_arg(self):
+        # --atlas matching is alphanumeric-only (_atlas_key), so the old
+        # bare-number CLI value must still resolve to the renamed directory.
         config = SimpleNamespace(atlas="chimera-LFMIHIFIS-3")
         image, labels, name = load_mni_atlas(config, "/tmp/unused-atlas-work")
         self.assertTrue(image.exists())
         self.assertTrue(labels.exists())
-        self.assertEqual(name, "chimeraLFMIHIFIS3")
+        self.assertEqual(name, "chimeraLFMIHIFIS_scale3")
 
     def test_full_mode_metprofile_export_matches_legacy_core_fields(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -59,9 +66,9 @@ class ProcessingModeTests(unittest.TestCase):
                 no_pvc=False,
                 derivative_dir=root / "derivatives",
                 bids_dir=root / "dataset",
-                processing_mode="parc-con",
-                chimera_grow=2,
+                chimera_grow="2",
             )
+            config.chimera_grows = lambda: [2]
             parcels = ParcellationResult(atlas_mrsi=atlas, labels=labels, mode="chimera", atlas_name="chimeraLFMIHIFIS", scale="3")
             output = export_metprofile_npz(config, "S001", "V1", maps, None, parcels, regional, None)
             archive = np.load(output, allow_pickle=True)
@@ -78,14 +85,12 @@ class ProcessingModeTests(unittest.TestCase):
             atlas_data = np.repeat(np.array([[[1], [1]], [[2], [2]]], dtype=np.int16), 2, axis=2)
             atlas_t1 = root / "atlas_t1.nii.gz"
             atlas_mrsi = root / "atlas_mrsi.nii.gz"
-            reference = root / "t1.nii.gz"
             brainmask = root / "brainmask.nii.gz"
             crlb = root / "crlb.nii.gz"
             qcmask = root / "qcmask.nii.gz"
             for path, data in (
                 (atlas_t1, atlas_data),
                 (atlas_mrsi, atlas_data),
-                (reference, np.ones_like(atlas_data)),
                 (brainmask, np.repeat(np.array([[[1], [0]], [[1], [0]]], dtype=np.uint8), 2, axis=2)),
                 (crlb, np.repeat(np.array([[[5], [15]], [[10], [20]]], dtype=np.float32), 2, axis=2)),
                 (qcmask, np.ones_like(atlas_data, dtype=np.uint8)),
@@ -93,31 +98,18 @@ class ProcessingModeTests(unittest.TestCase):
                 nib.save(nib.Nifti1Image(data, np.eye(4)), path)
             labels = root / "labels.tsv"
             pd.DataFrame({"parcel_id": [1, 2], "parcel_name": ["left", "right"]}).to_csv(labels, sep="\t", index=False)
-            config = SimpleNamespace(
-                derivative_dir=root / "derivatives",
-                overwrite_transform=True,
-                overwrite=True,
-                nthreads=2,
-            )
+            config = SimpleNamespace(derivative_dir=root / "derivatives")
             parcels = ParcellationResult(atlas_t1=atlas_t1, atlas_mrsi=atlas_mrsi, labels=labels, mode="synthseg", atlas_name="synthseg")
 
-            def copy_transform(_fixed, moving, _transforms, output, **_kwargs):
-                Path(output).parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(moving, output)
-                return Path(output)
-
-            with patch("mrsiprep.reports.parcel_qc.apply_image_transform", side_effect=copy_transform):
-                output = write_parcel_qc(
-                    config,
-                    "S001",
-                    "V1",
-                    parcels,
-                    reference,
-                    brainmask,
-                    [root / "transform.mat"],
-                    {"CrPCr": crlb},
-                    {"CrPCr": qcmask},
-                )
+            output = write_parcel_qc(
+                config,
+                "S001",
+                "V1",
+                parcels,
+                brainmask,
+                {"CrPCr": crlb},
+                {"CrPCr": qcmask},
+            )
             table = pd.read_csv(output, sep="\t").set_index("parcel_id")
             self.assertEqual(table.loc[1, "anatomical_coverage_percent"], 50.0)
             self.assertEqual(table.loc[2, "anatomical_coverage_percent"], 50.0)

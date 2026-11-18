@@ -16,6 +16,7 @@ class MRSIInputs:
     linewidth_map: Path | None = None
     brainmask: Path | None = None
     water_map: Path | None = None
+    flip_angle_map: Path | None = None
 
 
 def load_mrsi_inputs(layout: BIDSLayout, subject: str, session: str | None, metabolites: list[str]) -> MRSIInputs:
@@ -31,4 +32,5 @@ def load_mrsi_inputs(layout: BIDSLayout, subject: str, session: str | None, meta
     out.linewidth_map = layout.mrsi_map(subject, session, "fwhm", space="orig") or layout.mrsi_map(subject, session, "linewidth", space="orig")
     out.brainmask = layout.mrsi_map(subject, session, "brainmask", space="orig")
     out.water_map = layout.mrsi_map(subject, session, "signal", met="water", space="orig")
+    out.flip_angle_map = layout.mrsi_map(subject, session, "b1map", space="orig")
     return out

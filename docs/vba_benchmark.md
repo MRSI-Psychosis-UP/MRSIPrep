@@ -11,7 +11,7 @@ abnormality via a standard voxel-based-analysis (VBA) group comparison
 configurations compared here are not simply "with SyN" vs. "rigid+affine,
 without SyN":** mrsiprep's default ANTs transform codes are
 `ants-mrsi-to-t1-transform=sr` (Rigid + SyN, no separate Affine stage)
-for MRSI→T1w, and `ants-t1-to-mni-transform=s` (Rigid + Affine + SyN)
+for MRSI→T1w, and `ants-t1-to-template-transform=s` (Rigid + Affine + SyN)
 for T1w→MNI. **ANTs (R+SyN)** is this default, full pipeline. **ANTs
 (R+Aff)** drops only the deformable SyN warp from each stage while keeping
 everything else identical, which means, precisely, **Rigid-only**
@@ -22,7 +22,7 @@ later SyN stage also ran, so this comparison reuses the exact same
 already-computed registrations with no recompute. See "Runs compared"
 below.
 
-(The [Registration Frameworks benchmark](benchmarks.md) separately
+(The [Registration Frameworks benchmark](registration_benchmark.md) separately
 compares a genuine **ANTs Rigid+Affine** configuration: a real second
 registration run with an actual Affine stage at MRSI→T1w, not a reuse
 of this page's Rigid-only transform. That page's ANTs (Rigid+Affine)
@@ -42,7 +42,19 @@ T1w-native space into that dummy subject's MRSI-native space and on into
 `derivatives/mrsi-orig/`. `group=0` subjects (16 of 32) receive no
 injection. This lets `randomise`'s two-sample group contrast
 (`group1 > group0`) be checked against a known, exact ground truth,
-independent of registration backend.
+independent of registration backend. A dataset-level `mrsinmrs.json`
+sidecar (MRSinMRS minimum reporting standard, Lin et al. 2021) is
+included, matching the Lausanne3T-ECCENTRIC acquisition this dataset's
+signal characteristics are modeled on.
+
+Published on Zenodo:
+[10.5281/zenodo.21849051](https://doi.org/10.5281/zenodo.21849051)
+(CC0, concept DOI — always resolves to the latest version). Raw T1w
+anatomicals and raw/model-synthesized MRSI signal for all 32 subjects are
+included, together with the population-level ground-truth injection
+masks; per-subject, per-registration-backend processed derivatives are
+not, since they are fully regeneratable from these raw files with
+MRSIPrep itself.
 
 This report covers **CrPCr** (bilateral Precuneus) and **GluGln**
 (bilateral Thalamus) only. The other three injected metabolites
@@ -180,7 +192,7 @@ added and how it's computed.
   near-chance on GluGln** (ROC-AUC 0.48, PR-AUC 0.00, no better than
   random). This is specific to the Thalamus, a small, deep,
   centrally-located structure, consistent with the Registration
-  Frameworks benchmark's (see the [Benchmarks](benchmarks.md) page)
+  Frameworks benchmark's (see the [Benchmarks](registration_benchmark.md) page)
   finding that FNIRT's nonlinear warp has higher signal-weighted
   leakage than ANTs or FLIRT-only: a small deep structure is exactly
   where local nonlinear-warp distortion would do the most damage to a
@@ -195,7 +207,7 @@ added and how it's computed.
   signal change matters, and since the R+Aff variant matches or
   exceeds full R+SyN's detection power here at a fraction of the
   registration cost (see the runtime comparison on the
-  [Benchmarks](benchmarks.md) page), it is worth considering as the
+  [Benchmarks](registration_benchmark.md) page), it is worth considering as the
   default over the full deformable pipeline for VBA workflows
   specifically. FSL FLIRT+FNIRT's extra registration cost does not
   translate into better (and for deep structures, translates into

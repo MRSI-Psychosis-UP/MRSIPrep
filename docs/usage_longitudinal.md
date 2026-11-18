@@ -5,20 +5,14 @@ unbiased ANTs template across all of that subject's sessions and registers
 the template to MNI once, instead of registering each session directly to
 MNI independently. Every session's final MNI-space maps are then produced by
 composing (session→template) with (template→MNI), reducing registration
-noise/bias across timepoints, the same "custom template" concept used by
-fMRIPrep's longitudinal processing.
+noise/bias across timepoints.
 
 ```bash
-docker run --rm \
-  -v /path/to/bids:/data:ro \
-  -v /path/to/derivatives:/out \
-  mrsiup/mrsiprep:cpu \
-  /data /out participant \
+mrsiprep-docker /path/to/bids /path/to/derivatives participant \
   --participant-label S001 \
   --session-label V1 V2 V3 \
   --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \
   --ref-met CrPCr \
-  --mode mni-norm \
   --longitudinal \
   --nthreads 16
 ```
@@ -68,7 +62,7 @@ The template and its MNI registration are cached the same way as every other
 registration stage in MRSIPrep: on a rerun, if the subject template image and
 every expected transform file already exist on disk, the whole
 construction+registration step is skipped. Pass `--overwrite` or
-`--overwrite-mni-reg` to force it to rerun (e.g. after adding a new session
+`--overwrite-template-reg` to force it to rerun (e.g. after adding a new session
 for a subject that was previously built with fewer sessions).
 
 `--verbose 1` and above show a `Building subject template (sub-<label>, N
@@ -104,8 +98,8 @@ stored.
 usual `MRSI→T1` and `T1→MNI` columns) when `--longitudinal` is set, reporting
 whether each session's (session→template) transform already exists on disk.
 
-See [Basic Usage](usage_basic.md) for the full CLI reference, and
+See [Command-line arguments](cli_reference.md) for the full CLI reference, and
 [MNI Normalization Usage](usage_normalization.md) for the non-longitudinal
 (direct per-session) T1w→MNI registration options
 (`--normalization`, `--output-spaces`, `--output-mrsi-t1w`,
-`--mni-resolution`, `--registration-t1-target`).
+`--output-spaces` `res-` modifiers, `--registration-t1-target`).

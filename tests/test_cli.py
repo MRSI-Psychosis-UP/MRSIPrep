@@ -1,19 +1,28 @@
 from pathlib import Path
+import json
+import tempfile
 import unittest
 
 from mrsiprep.cli.parser import parse_args as _parse_args
 
 _REQUIRED_ARGS = ["--metabolites", "CrPCr", "--ref-met", "CrPCr"]
+_METADATA_DIR = tempfile.TemporaryDirectory()
+_METADATA_PATH = Path(_METADATA_DIR.name) / "mrsinmrs.json"
+_METADATA_PATH.write_text(json.dumps({"CommonMetadata": {"Nucleus": "1H", "QuantificationTool": "lcmodel", "LinewidthUnit": "Hz", "CRLBUnit": "percent"}}))
+_METADATA_ARGS = ["--mrsinmrs-file", str(_METADATA_PATH)]
+
+
+def tearDownModule():
+    _METADATA_DIR.cleanup()
 
 
 def parse_args(argv):
-    return _parse_args(argv + _REQUIRED_ARGS)
+    return _parse_args(argv + _REQUIRED_ARGS + _METADATA_ARGS)
 
 
 class CLITests(unittest.TestCase):
-    def test_cli_defaults_to_mni_norm_mode(self):
+    def test_cli_defaults_to_synthseg_parcellation(self):
         cfg = parse_args(["/tmp/bids", "/tmp/derivatives", "participant", "--participant-label", "sub-S001"])
-        self.assertEqual(cfg.processing_mode, "mni-norm")
         self.assertEqual(cfg.registration_t1_target, "brain")
         self.assertEqual(cfg.parcellation_mode, "synthseg")
         self.assertEqual(cfg.synthseg_mode, "robust")
@@ -35,7 +44,7 @@ class CLITests(unittest.TestCase):
         cfg = parse_args(["/tmp/bids", "/tmp/out", "participant"])
         self.assertEqual(cfg.registration_backend, "ants")
         self.assertEqual(cfg.ants_mrsi_to_t1_transform, "sr")
-        self.assertEqual(cfg.ants_t1_to_mni_transform, "s")
+        self.assertEqual(cfg.ants_t1_to_template_transform, "s")
 
     def test_cli_accepts_flirt_fnirt_registration_backend(self):
         cfg = parse_args([
@@ -46,15 +55,14 @@ class CLITests(unittest.TestCase):
             "flirt-fnirt",
             "--fsl-mrsi-to-t1-dof",
             "12",
-            "--fsl-t1-to-mni-dof",
+            "--fsl-t1-to-template-dof",
             "12",
         ])
         self.assertEqual(cfg.registration_backend, "fsl")
         self.assertEqual(cfg.fsl_cost, "corratio")
 
-    def test_cli_parc_con_mode_defaults_to_chimera_and_synthseg_brain(self):
-        cfg = parse_args(["/tmp/bids", "/tmp/out", "participant", "--mode", "parc-con"])
-        self.assertEqual(cfg.processing_mode, "parc-con")
+    def test_cli_chimera_parcellation_defaults_registration_target_to_brain_csf(self):
+        cfg = parse_args(["/tmp/bids", "/tmp/out", "participant", "--parcellation-mode", "chimera"])
         self.assertEqual(cfg.registration_t1_target, "brain-csf")
         self.assertEqual(cfg.parcellation_mode, "chimera")
         self.assertEqual(cfg.derivative_dir, Path("/tmp/out/mrsiprep"))
@@ -64,21 +72,19 @@ class CLITests(unittest.TestCase):
         cfg = parse_args(["/tmp/bids", "/tmp/derivatives/mrsiprep", "participant"])
         self.assertEqual(cfg.derivative_dir, Path("/tmp/derivatives/mrsiprep"))
 
-    def test_cli_parc_con_mode_accepts_mni_atlas(self):
+    def test_cli_accepts_atlas_parcellation(self):
         cfg = parse_args([
             "/tmp/bids",
             "/tmp/out",
             "participant",
-            "--mode",
-            "parc-con",
             "--parcellation-mode",
-            "mni",
+            "atlas",
             "--atlas",
             "chimera-LFMIHIFIS-3",
             "--synthseg-mode",
             "robust",
         ])
-        self.assertEqual(cfg.parcellation_mode, "mni")
+        self.assertEqual(cfg.parcellation_mode, "atlas")
         self.assertEqual(cfg.synthseg_mode, "robust")
 
     def test_cli_normalizes_mni_output_space_alias(self):
@@ -86,22 +92,16 @@ class CLITests(unittest.TestCase):
             "/tmp/bids",
             "/tmp/out",
             "participant",
-            "--mode",
-            "parc-con",
             "--parcellation-mode",
-            "mni",
+            "atlas",
             "--output-spaces",
             "mni",
         ])
         self.assertEqual(cfg.output_spaces, ["MNI152NLin2009cAsym"])
 
-    def test_cli_rejects_chimera_in_mni_norm_mode(self):
-        with self.assertRaises(ValueError):
-            parse_args(["/tmp/bids", "/tmp/out", "participant", "--parcellation-mode", "chimera"])
-
-    def test_cli_mni_norm_accepts_brain_csf_registration_target(self):
+    def test_cli_synthseg_parcellation_accepts_brain_csf_registration_target(self):
         cfg = parse_args(["/tmp/bids", "/tmp/out", "participant", "--registration-t1-target", "brain-csf"])
-        self.assertEqual(cfg.processing_mode, "mni-norm")
+        self.assertEqual(cfg.parcellation_mode, "synthseg")
         self.assertEqual(cfg.registration_t1_target, "brain-csf")
 
     def test_config_rejects_unsupported_registration_target(self):
@@ -118,13 +118,21 @@ class CLITests(unittest.TestCase):
         self.assertEqual(cfg.tissue_backend, "synthseg-fast")
 
     def test_cli_none_tissue_backend_forces_no_pvc(self):
-        cfg = parse_args(["/tmp/bids", "/tmp/out", "participant", "--mode", "parc-con", "--tissue-backend", "none"])
+        cfg = parse_args(["/tmp/bids", "/tmp/out", "participant", "--tissue-backend", "none"])
         self.assertEqual(cfg.tissue_backend, "none")
         self.assertTrue(cfg.no_pvc)
 
     def test_cli_validate_only_option(self):
         cfg = parse_args(["/tmp/bids", "/tmp/out", "participant", "--validate-only"])
         self.assertTrue(cfg.validate_only)
+
+    def test_cli_correct_mrsi_orientation_defaults_off(self):
+        cfg = parse_args(["/tmp/bids", "/tmp/out", "participant"])
+        self.assertFalse(cfg.correct_mrsi_orientation)
+
+    def test_cli_correct_mrsi_orientation_opts_in(self):
+        cfg = parse_args(["/tmp/bids", "/tmp/out", "participant", "--correct-mrsi-orientation"])
+        self.assertTrue(cfg.correct_mrsi_orientation)
 
     def test_cli_fsl_deformable_defaults_on(self):
         cfg = parse_args(["/tmp/bids", "/tmp/out", "participant"])
@@ -152,8 +160,6 @@ class CLITests(unittest.TestCase):
             "/tmp/bids",
             "/tmp/out",
             "participant",
-            "--mode",
-            "parc-con",
             "--parcellation-mode",
             "chimera",
             "--fs-subjects-dir",
@@ -163,15 +169,15 @@ class CLITests(unittest.TestCase):
 
 
 class ConfigPresetTests(unittest.TestCase):
-    def test_nature_comms_2025_preset_sets_parc_con_parameters(self):
+    def test_nature_comms_2025_preset_sets_chimera_parcellation_parameters(self):
         cfg = _parse_args([
             "/tmp/bids",
             "/tmp/out",
             "participant",
             "--config-preset",
             "nature-comms-2025",
+            *_METADATA_ARGS,
         ])
-        self.assertEqual(cfg.processing_mode, "parc-con")
         self.assertEqual(cfg.tissue_backend, "existing")
         self.assertEqual(cfg.registration_backend, "ants")
         self.assertEqual(cfg.parcellation_mode, "chimera")
@@ -182,18 +188,19 @@ class ConfigPresetTests(unittest.TestCase):
         self.assertIsNotNone(cfg.preset_citation)
         self.assertEqual(cfg.preset_citation["doi"], "10.1038/s41467-025-66124-w")
 
-    def test_imaging_neurosci_2026_preset_sets_mni_norm_parameters(self):
+    def test_imaging_neurosci_2026_preset_sets_synthseg_parcellation_parameters(self):
         cfg = _parse_args([
             "/tmp/bids",
             "/tmp/out",
             "participant",
             "--config-preset",
             "imaging-neurosci-2026",
+            *_METADATA_ARGS,
         ])
-        self.assertEqual(cfg.processing_mode, "mni-norm")
+        self.assertEqual(cfg.parcellation_mode, "synthseg")
         self.assertEqual(cfg.tissue_backend, "existing")
-        self.assertEqual(cfg.ants_t1_to_mni_transform, "s")
-        self.assertEqual(cfg.mni_resolution, "5mm")
+        self.assertEqual(cfg.ants_t1_to_template_transform, "s")
+        self.assertEqual(cfg.space_resolutions["MNI152NLin2009cAsym"], "5mm")
         self.assertIsNotNone(cfg.preset_citation)
         self.assertEqual(cfg.preset_citation["doi"], "10.1162/imag.a.1276")
 
@@ -204,10 +211,11 @@ class ConfigPresetTests(unittest.TestCase):
             "participant",
             "--config-preset",
             "imaging-neurosci-2026",
-            "--mni-resolution",
-            "2mm",
+            "--output-spaces",
+            "mni:res-2",
+            *_METADATA_ARGS,
         ])
-        self.assertEqual(cfg.mni_resolution, "2mm")
+        self.assertEqual(cfg.space_resolutions["MNI152NLin2009cAsym"], "2mm")
 
     def test_no_preset_leaves_preset_citation_none(self):
         cfg = parse_args(["/tmp/bids", "/tmp/out", "participant"])
@@ -226,3 +234,17 @@ class ConfigPresetTests(unittest.TestCase):
                 "--ref-met",
                 "CrPCr",
             ])
+
+
+class StepsFlagTests(unittest.TestCase):
+    def test_omitted_steps_flag_defaults_to_none(self):
+        cfg = parse_args(["/tmp/bids", "/tmp/out", "participant"])
+        self.assertIsNone(cfg.steps)
+
+    def test_steps_flag_parses_comma_separated_order(self):
+        cfg = parse_args(["/tmp/bids", "/tmp/out", "participant", "--steps", "prepare,tissue_seg,anatprep"])
+        self.assertEqual(cfg.steps, ["prepare", "tissue_seg", "anatprep"])
+
+    def test_invalid_steps_order_raises_at_parse_time(self):
+        with self.assertRaisesRegex(ValueError, "--steps"):
+            parse_args(["/tmp/bids", "/tmp/out", "participant", "--steps", "prepare,anat"])

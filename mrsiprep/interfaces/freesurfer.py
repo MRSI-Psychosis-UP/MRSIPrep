@@ -14,10 +14,12 @@ class FreeSurferError(RuntimeError):
     """Raised for FreeSurfer-related failures."""
 
 
-def check_license() -> None:
+def check_license(fs_license: str | None = None) -> None:
     import os
 
     candidates = []
+    if fs_license:
+        candidates.append(Path(fs_license))
     if os.environ.get("FS_LICENSE"):
         candidates.append(Path(os.environ["FS_LICENSE"]))
     if os.environ.get("FREESURFER_HOME"):
@@ -27,7 +29,9 @@ def check_license() -> None:
         if license_path.exists():
             os.environ["FS_LICENSE"] = str(license_path)
             return
-    raise FreeSurferError("FreeSurfer license not found. Set FS_LICENSE to use FreeSurfer/Chimera mode.")
+    if fs_license:
+        raise FreeSurferError(f"FreeSurfer license not found at --fs-license path: {fs_license!r}")
+    raise FreeSurferError("FreeSurfer license not found. Set FS_LICENSE or pass --fs-license to use FreeSurfer/Chimera mode.")
 
 
 def require_command(command: str) -> str:

@@ -13,6 +13,8 @@ wrapper/build/
 *.egg-info/
 crash-*
 *.png
+# Figure referenced by the public cross-site benchmark.
+!docs/figures/cross_sequence_regional_profile_geneva3t_supplementary.png
 *svg
 /results*
 *.nii.gz
@@ -26,3 +28,16 @@ scripts/qc/plot_axial_slice.py
 
 # Local-only benchmark writeup, not published/pushed, not in any toctree.
 /docs/benchmark_smoothing.md
+
+# test and dev files
+.claude/
+.coverage
+SynthMRSI-Project/
+bash_history
+outputs/
+scripts/
+
+# self-hosted GitHub Actions runner (local install, holds registration
+# credentials -- never commit)
+actions-runner/
+.venv-docs/

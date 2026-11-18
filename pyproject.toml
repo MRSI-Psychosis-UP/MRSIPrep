@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mrsiprep"
-version = "1.9.1"
+version = "2.2.2"
 description = "BIDS-like preprocessing pipeline for quantified whole-brain MRSI derivatives"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -22,6 +22,10 @@ dependencies = [
   "scikit-image",
   "rich",
   "nipype>=1.8",
+  # Reference templates (see mrsiprep/config/templates.py). Also arrives
+  # transitively via chimera in the container, but MRSIPrep imports it
+  # directly, so it is declared here rather than relied on second-hand.
+  "templateflow",
 ]
 classifiers = [
   "Development Status :: 3 - Alpha",
@@ -33,7 +37,8 @@ classifiers = [
 [project.optional-dependencies]
 ants = ["antspyx"]
 gui = ["PyQt6"]
-all = ["antspyx", "PyQt6"]
+command-builder = ["streamlit"]
+all = ["antspyx", "PyQt6", "streamlit"]
 dev = ["pytest", "pytest-cov"]
 test-e2e = ["requests"]
 
@@ -41,6 +46,7 @@ test-e2e = ["requests"]
 mrsiprep = "mrsiprep.cli.run:main"
 mrsiprep-import = "mrsiprep.interfaces.bids_import:main"
 mrsiprep-import-gui = "mrsiprep.interfaces.bids_import_gui:main"
+mrsiprep-build-command = "mrsiprep.interfaces.command_builder_app:launch"
 
 [tool.pytest.ini_options]
 markers = [
@@ -65,6 +71,8 @@ mrsiprep = [
   "data/atlas/**/*.nii",
   "data/atlas/**/*.tsv",
   "data/atlas/**/*.md",
+  "data/masks/**/*.nii.gz",
+  "data/masks/**/*.md",
   "config/*.json",
   "reports/templates/*.html",
   "config/presets/*.json",

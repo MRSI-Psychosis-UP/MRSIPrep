@@ -1,25 +1,94 @@
 # Installation
 
-MRSIPrep is distributed as a Docker image. There is no supported host
-installation of the pipeline itself: everything runs inside the container,
-including its [Nipype](https://nipype.readthedocs.io/)-based workflow engine.
+Install and start [Docker](https://docs.docker.com/get-started/get-docker/)
+first. MRSIPrep's processing tools run inside its container.
+
+## Install via the Docker wrapper
+
+The default setup uses `mrsiprep-docker`, also used by commands generated
+with the Command builder:
 
 ```bash
-docker pull mrsiup/mrsiprep:cpu
+pip install mrsiprep-docker
+mrsiprep-docker --help
 ```
 
-The image bundles ANTs, FSL (FAST plus FLIRT/FNIRT registration tools),
-FreeSurfer (`recon-all`, `mri_synthseg`, `mri_vol2vol`), PETPVC, Chimera, and Nipype. It does not
-include a FreeSurfer license file. Mount your own and set `FS_LICENSE`.
+`pip` installs the wrapper. If the image is missing, `--help` offers to
+download it; accepting runs `docker pull mrsiup/mrsiprep:cpu`. An existing
+local image is reused. Processing commands also pull a missing image
+automatically.
 
-## Option A: plain `docker run`
+## Verify the pull: `--hello-world`
+
+Check that the container runs, without a dataset or licence:
+
+```bash
+docker run --rm mrsiup/mrsiprep:cpu --hello-world
+```
+
+A FreeSurfer licence is needed only for Chimera/`recon-all`; the default
+SynthSeg workflow runs without one.
+
+## Option A: Command builder (recommended)
+
+Use the **Command builder** to configure a run in a browser form. Choose
+your dataset, subjects, metabolites, and processing settings, then copy the
+generated command into a terminal to run MRSIPrep.
+
+With the wrapper installed above, install and launch the form:
+
+```bash
+pip install "mrsiprep[command-builder]"
+mrsiprep-build-command
+```
+
+The command opens a local browser form. Docker must still be installed and
+running; preprocessing runs in the container when you execute the generated
+command. The form's options come from the same CLI definition as the
+[argument reference](cli_reference.md).
+
+1. Select your BIDS input and output directories using host paths. Include
+   `derivatives/mrsi-orig/mrsinmrs.json`, or set `--mrsinmrs-file` to a custom
+   acquisition metadata file.
+2. Choose subjects/sessions, metabolites, and a reference metabolite.
+3. Adjust processing settings, then copy the generated `mrsiprep-docker`
+   command and run it in a terminal.
+4. [Inspect the output and QC report](outputs.md) after processing.
+
+See [Preparing inputs](inputs.md) for your own dataset, or follow
+[First run](usage_basic.md) with the public demo dataset.
+
+## Option B: the `mrsiprep-docker` wrapper
+
+With the wrapper installed above, you can write a processing command
+directly. The wrapper builds the equivalent `docker run` command and
+downloads a missing image before starting the run:
+
+```bash
+mrsiprep-docker /path/to/bids /path/to/bids/derivatives participant \
+  --participant-label S001 --session-label V1 \
+  --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \
+  --ref-met CrPCr \
+  --nthreads 8
+```
+
+Every ordinary `mrsiprep` argument (`--tissue-backend`, `--nproc`,
+`--verbose`, ...) is passed straight through unchanged; the wrapper only
+handles bind-mounting `--fs-license-file`, `--fs-subjects-dir`, `--work-dir`,
+`--participants`, and `--mrsinmrs-file`, and forwards the host timezone
+automatically. See the
+[wrapper README](https://github.com/MRSI-Psychosis-UP/MRSIPrep/tree/main/wrapper)
+for the full option list.
+
+You will still need a BIDS dataset with already-quantified MRSI maps; see
+[Preparing inputs](inputs.md) and [First run](usage_basic.md).
+
+## Option C: plain `docker run`
 
 ```bash
 docker run --rm \
   -v /path/to/bids:/data:ro \
   -v /path/to/bids/derivatives:/out \
-  -v /path/to/freesurfer/license.txt:/opt/freesurfer/license.txt:ro \
-  -e FS_LICENSE=/opt/freesurfer/license.txt \
   -e TZ="$(cat /etc/timezone)" \
   mrsiup/mrsiprep:cpu \
   /data /out participant \
@@ -27,48 +96,27 @@ docker run --rm \
   --session-label V1 \
   --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \
   --ref-met CrPCr \
-  --mode mni-norm \
   --nthreads 8
 ```
 
+For Chimera, add `--fs-license-file /path/to/license.txt` to the wrapper.
+With plain Docker, bind-mount the file at `/opt/freesurfer/license.txt` and
+set `-e FS_LICENSE=/opt/freesurfer/license.txt`. See the
+[parcellation guide](usage_parcellation.md#chimera-parcellation) for mode settings.
+
 The container runs as root and chowns the output directory back to its
-existing owner after the run (see "Container internals" below), no `-u`
-flag is required. `-e TZ=...` keeps console/log timestamps in sync with the
-host clock (the container defaults to UTC otherwise).
-
-## Option B: the `mrsiprep-docker` wrapper
-
-A lightweight, dependency-free Python wrapper is installable from PyPI and builds the `docker run`
-command above for you:
-
-```bash
-pip install mrsiprep-docker
-
-mrsiprep-docker /path/to/bids /path/to/bids/derivatives participant \
-  --participant-label S001 --session-label V1 \
-  --metabolites CrPCr,GluGln,GPCPCh,NAANAAG,Ins \
-  --ref-met CrPCr \
-  --mode mni-norm --nthreads 8 \
-  --fs-license-file /path/to/freesurfer/license.txt
-```
-
-Every ordinary `mrsiprep` argument (`--mode`, `--tissue-backend`, `--nproc`,
-`--verbose`, ...) is passed straight through unchanged; the wrapper only
-handles bind-mounting `--fs-license-file`, `--fs-subjects-dir`, `--work-dir`,
-and `--participants`, and forwards the host timezone automatically. See the
-[wrapper README](https://github.com/MRSI-Psychosis-UP/MRSIPrep/tree/main/wrapper)
-for the full option list.
-
-You will still need a BIDS dataset with already-quantified MRSI maps; see
-[Basic Usage](usage_basic.md) for the full command-line walkthrough.
+existing owner after the run (see "Container internals" in
+[Batch runs, caching, and logs](running.md)), no `-u` flag is required. `-e TZ=...` keeps
+console/log timestamps in sync with the host clock (the container defaults
+to UTC otherwise).
 
 ## Minimum hardware requirements
 
 | Resource | Minimum | Notes |
 |---|---|---|
 | RAM (Docker-allocated) | **8 GB** | Below this, `mri_synthseg` reliably crashes with `std::bad_alloc` / exit status `-9` (SIGKILL from the OOM killer), confirmed reproducible with as little as 4 GB allocated to the Docker VM, and previously hit on GitHub Actions' standard 16 GB runners under concurrent `--nproc`. `--synthseg-mode fast` uses somewhat less memory than `robust` (the default) but is not a substitute for adequate RAM. |
-| CPU cores | **4** | `recon-all` (parc-con + Chimera) and `mri_synthseg` are the most CPU-heavy steps; `--nthreads`/`--nproc` (see [Basic Usage](usage_basic.md)) should stay within the machine's actual core count; MRSIPrep coerces `--nthreads` down automatically if `nproc * nthreads` would exceed it. |
-| Disk | A few GB per subject/session | Nipype's `--work-dir` cache (SynthSeg/FAST intermediates, resampled QC scratch maps) is the bulk of this; safe to delete between runs (see "The Nipype workflow engine" in [Basic Usage](usage_basic.md)). |
+| CPU cores | **4** | `recon-all` (with `--parcellation-mode chimera`) and `mri_synthseg` are the most CPU-heavy steps; `--nthreads`/`--nproc` (see [Batch runs, caching, and logs](running.md)) should stay within the machine's actual core count; MRSIPrep coerces `--nthreads` down automatically if `nproc * nthreads` would exceed it. |
+| Disk | A few GB per subject/session | Nipype's `--work-dir` cache (SynthSeg/FAST intermediates, resampled QC scratch maps) is the bulk of this; safe to delete between runs (see "Caching and reruns" in [Batch runs, caching, and logs](running.md)). |
 
 **On memory specifically**: if running multiple subjects concurrently
 (`--nproc > 1`), each concurrent recording's `mri_synthseg`/`recon-all`
@@ -79,19 +127,6 @@ have roughly `4 x 8 GB` = 32 GB available, not just 8 GB total, or reduce
 `recon-all` disappearing mid-run with no other error, this is almost always
 insufficient memory, not a data or configuration problem.
 
-## Container internals
-
-Two things run automatically inside the container on every invocation
-(`docker/entrypoint.sh`), regardless of which option above you use:
-
-- **Output ownership.** The container runs as root (required by some
-  `recon-all`/ANTs/Chimera configurations) and afterward `chown`s the output
-  directory back to `HOST_UID`/`HOST_GID` if set, or to the output
-  directory's own existing owner otherwise, so files are never left
-  root-owned on the host. Disable with `-e MRSIPREP_NO_FIXPERMS=1`, or pass
-  `-u "$(id -u):$(id -g)"` (or `mrsiprep-docker -u ...`) to run as a non-root
-  user from the start instead.
-- **Timezone.** If `-e TZ=<zone>` is set, timestamps in the console, the
-  per-recording logbook, and `mrsiprep_provenance.json` (see
-  [Basic Usage](usage_basic.md)) match the host clock instead of defaulting
-  to UTC.
+See [Container internals](running.md#container-internals) in [Batch runs, caching, and logs](running.md) for what runs
+automatically inside the container on every invocation (output-ownership
+chown, timezone handling).

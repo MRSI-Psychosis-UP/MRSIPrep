@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import time
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
@@ -26,6 +27,31 @@ _LOGBOOK: Path | None = None
 # serialized inputs.
 _STATUS_QUEUE = None
 
+# Per-process step-timing accumulator: list of {"step": label, "seconds":
+# float} dicts, appended to by every Debug.step() context manager while a
+# sink is armed (set_timing_sink). Same process-local pattern as _LOGBOOK --
+# each recording gets a fresh list (a fresh Debug() instance per Nipype node
+# means an instance attribute can't accumulate across a whole recording, but
+# a module-level list keyed only by "the current process's current
+# recording" works exactly like the logbook path does).
+_TIMINGS: list[dict] | None = None
+
+# Per-process tally of work done inside the current step, so a step that only
+# reused existing outputs can be reported as such. Every cache short-circuit
+# calls note_cache_hit(); every path that actually does the work calls
+# note_computed(). Debug.step() reads the delta across its own body.
+_WORK = {"cached": 0, "computed": 0}
+
+
+def note_cache_hit() -> None:
+    """An output already existed and was reused instead of recomputed."""
+    _WORK["cached"] += 1
+
+
+def note_computed() -> None:
+    """An output was actually produced by this run."""
+    _WORK["computed"] += 1
+
 
 def timestamp() -> str:
     """Day/month-hour:minute, e.g. 06/07-10:54."""
@@ -42,6 +68,21 @@ def set_logbook(path: str | Path | None) -> None:
 def set_status_queue(queue) -> None:
     global _STATUS_QUEUE
     _STATUS_QUEUE = queue
+
+
+def set_timing_sink(enabled: bool) -> None:
+    """Arm (``True``) or clear (``False``/default) the per-recording timing
+    accumulator. Call with ``True`` right before a recording starts and read
+    back via :func:`collect_timings` right after it finishes, mirroring
+    ``set_logbook``'s per-recording lifecycle."""
+    global _TIMINGS
+    _TIMINGS = [] if enabled else None
+
+
+def collect_timings() -> list[dict]:
+    """Returns the accumulated ``[{"step": str, "seconds": float}, ...]``
+    entries recorded since the last :func:`set_timing_sink(True)` call."""
+    return list(_TIMINGS) if _TIMINGS is not None else []
 
 
 def _strip_markup(message: str) -> str:
@@ -215,60 +256,97 @@ class Debug:
         (e.g. a `rich.progress.Progress` bar) — nesting two `Live` regions on the
         terminal makes both unreadable, so the step falls back to the same plain
         start/end lines used for non-interactive terminals.
+
+        Records wall-clock duration into the process-local timing sink (see
+        `set_timing_sink`/`collect_timings`) whenever one is armed, regardless
+        of verbosity -- the Runtime report tab needs this even when console
+        output itself is suppressed.
         """
-        if self.verbose < 1:
-            yield
-            return
-
-        prefix, message = self._prepare_message(*messages)
-        escaped = escape(message)
-        _logbook_write("PROC", message)
-
-        if _STATUS_QUEUE is not None:
-            # Under the ProcessPoolExecutor fan-out, skip both the spinner
-            # and the plain start/end lines -- the coordinating process
-            # renders this subject's current step as one row in a shared
-            # live table instead (see nipype_engine.run), so nothing should
-            # be printed to the terminal from this worker directly.
-            self._emit_status("step", message)
-            try:
+        # Untagged label for the timing sink: the report table is already
+        # scoped to one recording, so repeating "[sub-X ses-Y]" on every row
+        # (as _prepare_message's tag-prefixed form would) is pure noise there.
+        message_for_timing = " ".join(str(item) for item in messages if str(item).strip()) or "(unnamed step)"
+        start = time.monotonic()
+        # Set by the finally block from whether the body raised, so the Runtime
+        # report can say what happened to a step rather than only how long it
+        # took. A step that raised still gets a row: its duration is how long
+        # the run spent before failing, which is the useful part.
+        outcome = "processed"
+        work_at_start = dict(_WORK)
+        try:
+            if self.verbose < 1:
                 yield
-            except BaseException:
-                _logbook_write("FAIL", message)
-                self._emit_status("step_failed", message)
-                raise
-            else:
-                _logbook_write("DONE", message)
-                self._emit_status("step_done", message)
-            return
+                return
 
-        self.console.print()
+            prefix, message = self._prepare_message(*messages)
+            escaped = escape(message)
+            _logbook_write("PROC", message)
 
-        if not self._is_live_terminal or not live:
-            self.console.print(f"{prefix}{timestamp()} [proc][  PROC  ][/proc] {escaped}")
-            try:
-                yield
-            except BaseException:
-                _logbook_write("FAIL", message)
-                self.console.print(f"{prefix}{timestamp()} [failure][   ✗    ][/failure] {escaped}")
-                raise
-            else:
-                _logbook_write("DONE", message)
-                self.console.print(f"{prefix}{timestamp()} [success][   ✓    ][/success] {escaped}")
-            return
+            if _STATUS_QUEUE is not None:
+                # Under the ProcessPoolExecutor fan-out, skip both the spinner
+                # and the plain start/end lines -- the coordinating process
+                # renders this subject's current step as one row in a shared
+                # live table instead (see nipype_engine.run), so nothing should
+                # be printed to the terminal from this worker directly.
+                self._emit_status("step", message)
+                try:
+                    yield
+                except BaseException:
+                    _logbook_write("FAIL", message)
+                    self._emit_status("step_failed", message)
+                    raise
+                else:
+                    _logbook_write("DONE", message)
+                    self._emit_status("step_done", message)
+                return
 
-        with self.console.status(f"{prefix}{timestamp()} [proc][  PROC  ][/proc] {escaped}", spinner="dots") as status:
-            try:
-                yield
-            except BaseException:
-                status.stop()
-                _logbook_write("FAIL", message)
-                self.console.print(f"{prefix}{timestamp()} [failure][   ✗    ][/failure] {escaped}")
-                raise
-            else:
-                status.stop()
-                _logbook_write("DONE", message)
-                self.console.print(f"{prefix}{timestamp()} [success][   ✓    ][/success] {escaped}")
+            self.console.print()
+
+            if not self._is_live_terminal or not live:
+                self.console.print(f"{prefix}{timestamp()} [proc][  PROC  ][/proc] {escaped}")
+                try:
+                    yield
+                except BaseException:
+                    _logbook_write("FAIL", message)
+                    self.console.print(f"{prefix}{timestamp()} [failure][   ✗    ][/failure] {escaped}")
+                    raise
+                else:
+                    _logbook_write("DONE", message)
+                    self.console.print(f"{prefix}{timestamp()} [success][   ✓    ][/success] {escaped}")
+                return
+
+            with self.console.status(f"{prefix}{timestamp()} [proc][  PROC  ][/proc] {escaped}", spinner="dots") as status:
+                try:
+                    yield
+                except BaseException:
+                    status.stop()
+                    _logbook_write("FAIL", message)
+                    self.console.print(f"{prefix}{timestamp()} [failure][   ✗    ][/failure] {escaped}")
+                    raise
+                else:
+                    status.stop()
+                    _logbook_write("DONE", message)
+                    self.console.print(f"{prefix}{timestamp()} [success][   ✓    ][/success] {escaped}")
+        except BaseException:
+            outcome = "failed"
+            raise
+        finally:
+            if outcome != "failed":
+                cached = _WORK["cached"] - work_at_start["cached"]
+                computed = _WORK["computed"] - work_at_start["computed"]
+                # Only "cached" when nothing at all was recomputed. A step that
+                # reused some outputs and computed others did real work, and
+                # calling that cached would understate what the run did.
+                if cached and not computed:
+                    outcome = "cached"
+            if _TIMINGS is not None:
+                _TIMINGS.append(
+                    {
+                        "step": message_for_timing or "(unnamed step)",
+                        "seconds": time.monotonic() - start,
+                        "outcome": outcome,
+                    }
+                )
 
     def separator(self):
         if self.verbose >= 1:

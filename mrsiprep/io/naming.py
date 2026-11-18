@@ -65,7 +65,17 @@ def chimera_derivative(root: Path, subject: str, session: str | None, **entities
 
 
 def coverage_report_dir(root: Path, subject: str, session: str | None) -> Path:
-    return subject_session_dir(root, subject, session, "reports") / "coverage"
+    """The recording's ``reports/`` directory itself.
+
+    Previously an extra ``coverage/`` level under ``reports/``. Removed: the
+    report HTML, provenance.json and runtimemetrics.json already lived
+    directly in ``reports/``, so a reader opening that folder had to know to
+    step into ``coverage/`` to find the one file (the report) they actually
+    came for. The name is unchanged since every caller of this function only
+    ever wants "where do this recording's report and figures live", which
+    ``reports/`` itself now answers directly.
+    """
+    return subject_session_dir(root, subject, session, "reports")
 
 
 def coverage_figure_derivative(root: Path, subject: str, session: str | None, extension: str = "png", **entities) -> Path:
@@ -87,13 +97,17 @@ def provenance_derivative(root: Path, subject: str, session: str | None) -> Path
     return subject_session_dir(root, subject, session, "reports") / f"{prefix(subject, session)}_desc-provenance.json"
 
 
+def runtime_metrics_derivative(root: Path, subject: str, session: str | None) -> Path:
+    return subject_session_dir(root, subject, session, "reports") / f"{prefix(subject, session)}_desc-runtimemetrics.json"
+
+
 def resampling_work_path(work_dir: Path, subject: str, session: str | None, **entities) -> Path:
     """Scratch location (under --work-dir) for resampled maps needed only to
     render a report, not intended as a permanent BIDS derivative."""
     return _derivative(work_dir, subject, session, "resampling", "mrsi", **entities)
 
 
-_CONFOUND_DESCS = {"brain", "mrsiqc", "qcmask", "spikemask", "crlb", "snr", "fwhm", "t1corr", "leakageqc"}
+_CONFOUND_DESCS = {"brain", "mrsiqc", "qcmask", "spikemask", "crlb", "snr", "fwhm", "b1map", "t1corr", "t1corrvoxelwise", "leakageqc", "ventricleqc"}
 
 
 def _mrsi_folder(entities: dict) -> str:
@@ -102,7 +116,7 @@ def _mrsi_folder(entities: dict) -> str:
     space = entities.get("space")
     if entities.get("label") in {"GM", "WM", "CSF"}:
         return "confounds"
-    if desc == "signalt1corr":
+    if desc in {"signalt1corr", "signalt1corrvoxelwise"}:
         return "mrsi/orig-t1corr"
     if desc == "signalpvc":
         return "mrsi/orig-pvc"

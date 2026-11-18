@@ -1,9 +1,13 @@
-"""Parcelwise MRSI figures: anatomical coverage and per-metabolite CRLB quality.
+"""Parcelwise MRSI figures: anatomical coverage and per-metabolite CRLB.
 
-Both are derived from the parcel-QC TSV written by
-:func:`mrsiprep.reports.parcel_qc.write_parcel_qc` plus the T1-space parcel
-atlas, and are saved into the subject/session ``reports/coverage/figures/``
-folder next to the HTML report so it can embed them with relative paths.
+The coverage montage is a per-parcel summary, coloured from the parcel-QC TSV
+written by :func:`mrsiprep.reports.parcel_qc.write_parcel_qc`, on the
+native-MRSI-space parcel atlas. The CRLB montage shows the voxelwise CRLB
+map itself (not a parcel summary) on the T1w atlas resampled into MNI space,
+so within-parcel spread stays visible; the parcel-averaged numbers are
+reported separately as a table, in the Coverage tab. Saved into the
+subject/session ``reports/figures/`` folder next to the HTML report so it
+can embed them with relative paths.
 """
 
 from __future__ import annotations
@@ -14,7 +18,6 @@ import numpy as np
 import pandas as pd
 
 from mrsiprep.io.naming import coverage_figure_derivative
-from mrsiprep.reports.slices import render_triplanar_png, triplanar_slices
 
 # A parcel's metabolite estimate is treated as reliable when its mean CRLB is
 # below this percentage (green); at or above it, unreliable (red).
@@ -36,38 +39,184 @@ def _value_volume(atlas: np.ndarray, parcel_to_value: dict[int, float]) -> np.nd
     return out
 
 
-def write_parcel_coverage_figure(config, subject: str, session: str | None, atlas_t1: Path, parcel_qc_tsv: Path) -> Path | None:
-    """Triplanar (coronal/axial/sagittal) heatmap of per-parcel MRSI anatomical coverage %."""
+
+#: Axial slices per montage, matching the MRSI Raw tab so the two read the
+#: same way.
+N_SLICES = 10
+
+
+def _axial_slice_indices(volume: np.ndarray, n_slices: int = N_SLICES) -> list[int]:
+    """``n_slices`` indices spanning the slices that actually contain data.
+
+    Spanning the whole array instead would spend half the montage on the empty
+    padding above and below the brain, which is what makes a fixed linspace
+    over the raw extent look mostly blank.
+    """
+    occupied = np.flatnonzero(np.any(volume != 0, axis=(0, 1)))
+    if occupied.size == 0:
+        low, high = 0, volume.shape[2] - 1
+    else:
+        low, high = int(occupied[0]), int(occupied[-1])
+    if high <= low:
+        return [low] * n_slices
+    return [int(round(value)) for value in np.linspace(low, high, n_slices)]
+
+
+def _render_axial_montage(
+    out_path: Path,
+    value_volume: np.ndarray,
+    indices: list[int],
+    title: str,
+    cmap: str,
+    vmin: float,
+    vmax: float,
+    underlay: np.ndarray | None = None,
+    colorbar_label: str | None = None,
+    alpha: float = 1.0,
+) -> Path:
+    """One row of axial slices, values over an optional greyscale underlay."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig, axes = plt.subplots(1, len(indices), figsize=(1.55 * len(indices), 2.1), constrained_layout=True)
+    axes = np.atleast_1d(axes)
+    image = None
+    for ax, index in zip(axes, indices):
+        if underlay is not None:
+            under = np.rot90(underlay[:, :, min(index, underlay.shape[2] - 1)])
+            ax.imshow(under, cmap="gray", interpolation="nearest")
+        plane = np.rot90(value_volume[:, :, index])
+        image = ax.imshow(
+            np.ma.masked_invalid(np.ma.masked_equal(plane, 0.0)),
+            cmap=cmap, vmin=vmin, vmax=vmax, interpolation="nearest", alpha=alpha,
+        )
+        ax.set_title(f"z={index}", fontsize=7)
+        ax.axis("off")
+    if colorbar_label and image is not None:
+        fig.colorbar(image, ax=axes.tolist(), shrink=0.75, label=colorbar_label)
+    fig.suptitle(title, fontsize=9)
+    fig.savefig(out_path, dpi=110)
+    plt.close(fig)
+    return out_path
+
+
+def _render_axial_grid(
+    out_path: Path,
+    rows: list,
+    indices: list,
+    title: str,
+    cmap: str,
+    vmin: float,
+    vmax: float,
+    underlay: np.ndarray | None = None,
+    alpha: float = 1.0,
+    colorbar_label: str | None = None,
+) -> Path:
+    """One figure, one row per label, the same slices across every row.
+
+    A row per metabolite rather than a separate figure each: the point of the
+    panel is to compare metabolites at identical anatomy, which side-by-side
+    figures squeezed into a flex row cannot show.
+
+    ``colorbar_label``, when given, adds one shared colorbar for the whole
+    grid rather than one per row: every row already shares the same
+    ``vmin``/``vmax``, so a per-row bar would repeat the same scale N times.
+    Omit it for a categorical overlay (e.g. green/red pass-fail), where a
+    continuous bar would misrepresent a two-valued quantity.
+    """
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    n_rows, n_cols = len(rows), len(indices)
+    fig, axes = plt.subplots(
+        n_rows, n_cols, figsize=(1.5 * n_cols, 1.7 * n_rows), squeeze=False, constrained_layout=True
+    )
+    image = None
+    for row_index, (label, volume) in enumerate(rows):
+        for col_index, index in enumerate(indices):
+            ax = axes[row_index][col_index]
+            if underlay is not None:
+                ax.imshow(
+                    np.rot90(underlay[:, :, min(index, underlay.shape[2] - 1)]),
+                    cmap="gray", interpolation="nearest",
+                )
+            plane = np.rot90(volume[:, :, index])
+            image = ax.imshow(
+                np.ma.masked_invalid(np.ma.masked_equal(plane, 0.0)),
+                cmap=cmap, vmin=vmin, vmax=vmax, interpolation="nearest", alpha=alpha,
+            )
+            ax.axis("off")
+            if row_index == 0:
+                ax.set_title(f"z={index}", fontsize=7)
+        axes[row_index][0].axis("on")
+        axes[row_index][0].set_xticks([])
+        axes[row_index][0].set_yticks([])
+        axes[row_index][0].set_ylabel(label, fontsize=8)
+    if colorbar_label and image is not None:
+        # ravel(), not a bare .tolist(): axes here is the 2D (n_rows, n_cols)
+        # array from squeeze=False, and matplotlib's colorbar rejects a
+        # list-of-lists -- it wants one flat list of axes. Caught by actually
+        # running this end to end (write_parcel_crlb_figures is the one
+        # caller that passes colorbar_label, and every unit test for it mocks
+        # this function out, so nothing else exercised the real matplotlib
+        # call).
+        fig.colorbar(image, ax=axes.ravel().tolist(), shrink=0.75, label=colorbar_label)
+    fig.suptitle(title, fontsize=10)
+    fig.savefig(out_path, dpi=110)
+    plt.close(fig)
+    return out_path
+
+
+def write_parcel_coverage_figure(config, subject: str, session: str | None, atlas_mrsi: Path, parcel_qc_tsv: Path) -> Path | None:
+    """Triplanar (coronal/axial/sagittal) heatmap of per-parcel MRSI anatomical coverage %.
+
+    Rendered on the native MRSI acquisition grid (``atlas_mrsi``, the T1w
+    atlas already warped into MRSI space for the coverage QC table) rather
+    than the T1w grid: the T1w grid is typically much larger than, and
+    asymmetrically padded around, the brain, which previously made the
+    geometric array midpoint (and thus the coronal/axial slice) land outside
+    the cerebrum even though most parcels had near-100% coverage.
+    """
     df = pd.read_csv(parcel_qc_tsv, sep="\t")
     if df.empty or "anatomical_coverage_percent" not in df:
         return None
     per_parcel = df.groupby("parcel_id")["anatomical_coverage_percent"].first().to_dict()
-    atlas = _atlas_canonical(atlas_t1)
+    atlas = _atlas_canonical(atlas_mrsi)
     coverage = _value_volume(atlas, per_parcel)
 
-    slices = triplanar_slices(coverage)
-    masked = {plane: np.ma.masked_less_equal(data, 0.0) for plane, data in slices.items()}
     out = coverage_figure_derivative(config.derivative_dir, subject, session, desc="parcelcoverage")
-    return render_triplanar_png(
-        background_slices=masked,
-        out_path=out,
+    return _render_axial_montage(
+        out,
+        coverage,
+        _axial_slice_indices(coverage),
+        title="MRSI anatomical coverage (%)",
         cmap="viridis",
-        colorbar_label="MRSI anatomical coverage (%)",
+        # Pinned to the metric's real 0-100% range: coverage is often uniform,
+        # and autoscaling a zero-variance field pads an arbitrary margin around
+        # it (e.g. 90-110%), which reads as a bug at a glance.
+        vmin=0.0,
+        vmax=100.0,
+        colorbar_label="coverage (%)",
     )
 
 
 def _resample_atlas_to_mni(config, subject: str, session: str | None, atlas_t1: Path, t1_to_mni, mrsi_reference: Path | None = None) -> tuple[np.ndarray, "object"]:
     """Resample the (subject-space) T1w atlas into MNI space via the same
-    T1w->MNI transform used for MRSI outputs, so glass-brain projection (which
-    assumes MNI space) is actually aligned with its silhouette."""
+    T1w->MNI transform used for MRSI outputs, so it is on the same grid as
+    the resampled CRLB maps written by that same transform."""
     import nibabel as nib
-    from nilearn import datasets
 
     from mrsiprep.registration.transforms import apply_image_transform
-    from mrsiprep.utils.images import resolve_mni_resolution
+    from mrsiprep.config.templates import template_t1w
 
-    resolution = resolve_mni_resolution(config.mni_resolution, atlas_t1, mrsi_reference)
-    template = datasets.load_mni152_template(resolution)
+    resolution = config.resolution_for("MNI152NLin2009cAsym", atlas_t1, mrsi_reference)
+    template = template_t1w(resolution)
     # Subject/session-specific filename: this used to be one shared
     # `coverage_mni_atlas.nii.gz` path written by every recording, which
     # under `--nproc > 1` let two workers race on the same file mid-write
@@ -80,66 +229,146 @@ def _resample_atlas_to_mni(config, subject: str, session: str | None, atlas_t1: 
     return np.rint(img.get_fdata()).astype(np.int32).squeeze(), img.affine
 
 
-def write_parcel_crlb_figures(config, subject: str, session: str | None, atlas_t1: Path, parcel_qc_tsv: Path, t1_to_mni=None, mrsi_reference: Path | None = None) -> list[Path]:
-    """One nilearn glass-brain per metabolite: parcels green where mean CRLB <
-    threshold (reliable), red where >= threshold (unreliable).
+def write_parcel_crlb_figures(
+    config,
+    subject: str,
+    session: str | None,
+    atlas_t1: Path,
+    parcel_qc_tsv: Path,
+    t1_to_mni=None,
+    mrsi_reference: Path | None = None,
+    crlb_maps: dict[str, Path] | None = None,
+) -> list[Path]:
+    """One axial montage per metabolite, showing the voxelwise CRLB (%) map
+    itself rather than a per-parcel pass/fail summary.
 
-    Glass-brain projection assumes MNI space, so the atlas is resampled into
-    MNI space first (when a T1w->MNI transform is available); otherwise the
-    figure is skipped rather than silently mis-aligned.
+    Parcel-level reliability is still reported -- as a table, in the Coverage
+    tab -- from the same ``parcel_qc_tsv`` this used to render as a green/red
+    overlay. Averaging into one number per parcel is exactly what a table is
+    for; folding it back into a two-colour image on top of that hid the
+    within-parcel spread a continuous map shows for free (a parcel dragged
+    below threshold by one noisy corner looks identical here to one that is
+    uniformly poor).
+
+    ``crlb_maps`` are the metabolite CRLB volumes already resampled to
+    MNI152NLin2009cAsym by the resampling step -- reused rather than
+    resampled again here, since resampling runs earlier in STEP_SEQUENCE and
+    already wrote exactly this file at exactly this resolution.
+
+    The template the run normalized into is drawn underneath, so the map can
+    be read against anatomy. The atlas is resampled into template space (when
+    a T1w->template transform is available) only to pick matching slice
+    indices; otherwise the figure is skipped rather than mis-aligned.
     """
-    import matplotlib
-
-    matplotlib.use("Agg")
     import nibabel as nib
-    from nilearn import plotting
 
     df = pd.read_csv(parcel_qc_tsv, sep="\t")
-    if df.empty or "mean_crlb" not in df or "metabolite" not in df:
+    if df.empty or "metabolite" not in df:
         return []
-    if not t1_to_mni:
+    if not t1_to_mni or not crlb_maps:
         return []
 
-    atlas, affine = _resample_atlas_to_mni(config, subject, session, atlas_t1, t1_to_mni, mrsi_reference=mrsi_reference)
-    outputs: list[Path] = []
-    for metabolite, met_df in df.groupby("metabolite"):
-        if not str(metabolite):
+    atlas, _affine = _resample_atlas_to_mni(config, subject, session, atlas_t1, t1_to_mni, mrsi_reference=mrsi_reference)
+    resolution = config.resolution_for("MNI152NLin2009cAsym", atlas_t1, mrsi_reference)
+
+    underlay = None
+    try:
+        from mrsiprep.config.templates import template_t1w
+
+        template_img = nib.as_closest_canonical(template_t1w(resolution))
+        candidate = np.squeeze(np.asarray(template_img.dataobj, dtype=float))
+        # Only usable as an underlay if it is on the same grid as the atlas;
+        # a mismatched template would misregister the overlay silently.
+        if candidate.shape == atlas.shape:
+            underlay = candidate
+    except Exception:
+        # The underlay is decoration: if the template cannot be fetched or
+        # loaded for any reason, the CRLB map is still the point of the
+        # figure, so draw it on black rather than failing the report.
+        underlay = None
+
+    indices = _axial_slice_indices(atlas)
+    metabolites = sorted(str(m) for m in df["metabolite"].unique() if str(m))
+    rows = []
+    for metabolite in metabolites:
+        crlb_path = crlb_maps.get(metabolite)
+        if crlb_path is None or not Path(crlb_path).exists():
             continue
-        # +1 reliable (green), -1 unreliable (red); parcels without a CRLB estimate stay 0.
-        quality = {
-            int(row.parcel_id): (1.0 if row.mean_crlb < CRLB_QUALITY_THRESHOLD else -1.0)
-            for row in met_df.itertuples()
-            if not (isinstance(row.mean_crlb, float) and np.isnan(row.mean_crlb))
-        }
-        if not quality:
+        crlb_img = nib.as_closest_canonical(nib.load(str(crlb_path)))
+        crlb_volume = np.squeeze(np.asarray(crlb_img.dataobj, dtype=np.float32))
+        if crlb_volume.shape != atlas.shape:
+            # A grid mismatch here means resampling and this figure disagree
+            # on the resolution they used; skip this metabolite rather than
+            # silently draw misaligned voxels.
             continue
-        volume = _value_volume(atlas, quality)
-        img = nib.Nifti1Image(volume, affine)
-        out = coverage_figure_derivative(config.derivative_dir, subject, session, desc="parcelcrlbquality", met=str(metabolite))
-        out.parent.mkdir(parents=True, exist_ok=True)
-        display = plotting.plot_glass_brain(
-            img,
-            cmap="RdYlGn",
-            vmin=-1.0,
-            vmax=1.0,
-            plot_abs=False,
-            threshold=0.5,
-            colorbar=False,
-            title=f"{metabolite}: CRLB quality (green<{int(CRLB_QUALITY_THRESHOLD)}%)",
+        rows.append((metabolite, crlb_volume))
+
+    if not rows:
+        return []
+    out = coverage_figure_derivative(config.derivative_dir, subject, session, desc="parcelcrlbquality")
+    # This function used to write one figure per metabolite, then a single
+    # green/red grid. Both are this function's own output from earlier
+    # versions; leaving them in figures/ means the report embeds a stale
+    # generation alongside the current one, so clear them when the current
+    # figure is written.
+    for superseded in out.parent.glob("*_met-*_desc-parcelcrlbquality.png"):
+        try:
+            superseded.unlink()
+        except OSError:
+            # Best-effort cleanup: a file that cannot be removed (read-only
+            # mount, concurrent run holding it) is not a reason to fail the
+            # figure it is being replaced by. The narrowed glob in
+            # _parcel_figures_html keeps a survivor out of the report anyway.
+            continue
+    return [
+        _render_axial_grid(
+            out,
+            rows,
+            indices,
+            title="Voxelwise CRLB (%)",
+            cmap="viridis_r",
+            vmin=0.0,
+            # The run's own quality threshold, not an arbitrary display cap:
+            # it ties the colour scale to the same number that decided which
+            # voxels passed QC, rather than to whatever this run's own CRLB
+            # range happened to be.
+            vmax=float(getattr(config, "crlb_max", CRLB_QUALITY_THRESHOLD)),
+            underlay=underlay,
+            alpha=0.75,
+            colorbar_label="CRLB (%)",
         )
-        display.savefig(str(out))
-        display.close()
-        outputs.append(out)
-    return outputs
+    ]
 
 
-def write_parcel_qc_figures(config, subject: str, session: str | None, atlas_t1: Path | None, parcel_qc_tsv: Path | None, t1_to_mni=None, mrsi_reference: Path | None = None) -> list[Path]:
-    """Generate both parcelwise figures; returns the list of written paths."""
+def write_parcel_qc_figures(
+    config,
+    subject: str,
+    session: str | None,
+    atlas_t1: Path | None,
+    parcel_qc_tsv: Path | None,
+    atlas_mrsi: Path | None = None,
+    t1_to_mni=None,
+    mrsi_reference: Path | None = None,
+    crlb_maps: dict[str, Path] | None = None,
+) -> list[Path]:
+    """Generate both parcelwise figures; returns the list of written paths.
+
+    ``crlb_maps``: metabolite -> MNI152NLin2009cAsym-space CRLB map, as
+    already written by the resampling step (see
+    :func:`write_parcel_crlb_figures`). ``None`` when template output was not
+    requested; the CRLB figure is then skipped rather than resampled again
+    here for a space nothing else in the run produced.
+    """
     if atlas_t1 is None or parcel_qc_tsv is None or not Path(parcel_qc_tsv).exists():
         return []
     figures: list[Path] = []
-    coverage = write_parcel_coverage_figure(config, subject, session, atlas_t1, parcel_qc_tsv)
+    coverage = write_parcel_coverage_figure(config, subject, session, atlas_mrsi or atlas_t1, parcel_qc_tsv)
     if coverage is not None:
         figures.append(coverage)
-    figures.extend(write_parcel_crlb_figures(config, subject, session, atlas_t1, parcel_qc_tsv, t1_to_mni=t1_to_mni, mrsi_reference=mrsi_reference))
+    figures.extend(
+        write_parcel_crlb_figures(
+            config, subject, session, atlas_t1, parcel_qc_tsv,
+            t1_to_mni=t1_to_mni, mrsi_reference=mrsi_reference, crlb_maps=crlb_maps,
+        )
+    )
     return figures
