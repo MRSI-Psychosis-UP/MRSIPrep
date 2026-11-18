@@ -7,6 +7,8 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
+import numpy as np
+
 from mrsiprep.io.loaders import MRSIInputs
 from mrsiprep.io.mrsinmrs import resolve_mrsinmrs
 from mrsiprep.io.naming import mrsi_derivative
@@ -14,6 +16,8 @@ from mrsiprep.mrsi.filtering import filter_metabolite_maps
 from mrsiprep.mrsi.masks import ensure_brainmask
 from mrsiprep.mrsi.orientation import correct_mrsi_orientation
 from mrsiprep.mrsi.quality import make_quality_masks
+from mrsiprep.mrsi.quantification_tools import normalize_crlb_to_percent
+from mrsiprep.utils.images import load_3d_data, save_nifti
 from mrsiprep.mrsi.reference import generate_reference
 from mrsiprep.mrsi.t1_correction import apply_t1_correction, apply_t1_correction_voxelwise, resolve_acquisition_params
 
@@ -163,6 +167,11 @@ def _same_file(a: Path, b: Path) -> bool:
         return False
 
 
+def _crlb_unit(config) -> str:
+    # Resolved (mandatory) in MRSIPrepConfig; bare test configs may omit it.
+    return getattr(config, "crlb_unit", None) or "percent"
+
+
 def _copy_native_maps(config, subject: str, session: str | None, inputs: MRSIInputs) -> None:
     """Copy (not symlink) raw/quality maps into the mrsi/orig derivatives tree.
 
@@ -182,11 +191,21 @@ def _copy_native_maps(config, subject: str, session: str | None, inputs: MRSIInp
         links.append((path, {"met": met, "desc": "crlb"}, "orig"))
     for met, path in inputs.metabolite_maps.items():
         links.append((path, {"met": met, "desc": "signal"}, "mrsi"))
+    crlb_unit = _crlb_unit(config)
     for source, entities, space in links:
         if source is None or not source.exists():
             continue
+        convert_crlb = entities.get("desc") == "crlb" and crlb_unit != "percent"
         target = mrsi_derivative(config.derivative_dir, subject, session, space=space, suffix_override="mrsi", **entities)
         if target.exists() and _same_file(source, target):
+            if convert_crlb:
+                # Converting in place would overwrite the only copy of the
+                # input, and a rerun would convert it a second time.
+                raise ValueError(
+                    f"CRLBUnit '{crlb_unit}' needs converting to percent, but the CRLB input {source} is the "
+                    "derivative copy itself (raw MRSI read from mrsiprep's own output tree). Place the raw "
+                    "maps under derivatives/mrsi-orig/ or convert them to percent beforehand."
+                )
             # BIDSLayout's mrsi-<space> fallback (see
             # BIDSLayout._mrsi_input_roots) can read raw inputs straight out
             # of mrsiprep's own output tree (mrsi/<space>/) when no separate
@@ -201,9 +220,15 @@ def _copy_native_maps(config, subject: str, session: str | None, inputs: MRSIInp
             # that, so it's checked instead/first.
             continue
         target.parent.mkdir(parents=True, exist_ok=True)
-        tmp_target = target.with_name(f".{target.name}.tmp-{os.getpid()}")
+        # Extension kept last: nibabel picks the output format from it when
+        # writing a converted CRLB map.
+        tmp_target = target.with_name(f".tmp-{os.getpid()}-{target.name}")
         try:
-            shutil.copy2(source, tmp_target)
+            if convert_crlb:
+                img, data = load_3d_data(source, dtype=np.float32, label="CRLB map")
+                save_nifti(normalize_crlb_to_percent(data, crlb_unit).astype(np.float32), img, tmp_target, dtype=np.float32)
+            else:
+                shutil.copy2(source, tmp_target)
         except FileNotFoundError:
             # Source vanished between the exists() check above and the copy
             # (e.g. concurrent regeneration of the input dataset) -- this is
@@ -276,7 +301,7 @@ def run_mrsi_load_workflow(config, subject: str, session: str | None, inputs: MR
     (deriving one from the water/metabolite maps if the input layout didn't
     provide one). Spike filtering, T1-saturation correction, and reference-
     image/quality-mask generation are separate steps (see
-    :func:`run_spike_filter_workflow`/:func:`run_t1_water_correction_workflow`/
+    :func:`run_spike_filter_workflow`/:func:`run_t1_saturation_correction_workflow`/
     :func:`run_mrsi_reference_workflow`/:func:`run_mrsi_quality_workflow`).
 
     :param config: Run-wide :class:`mrsiprep.config.settings.MRSIPrepConfig`.
@@ -319,6 +344,10 @@ def run_mrsi_load_workflow(config, subject: str, session: str | None, inputs: MR
         inputs.linewidth_map = linewidth_map
         inputs.water_map = water_map
         inputs.flip_angle_map = flip_angle_map
+    elif _crlb_unit(config) != "percent":
+        # The raw inputs are still in the declared non-percent unit; only the
+        # derivative copies were converted, so every later step must read those.
+        inputs.crlb_maps = _derivative_map_paths(config, subject, session, inputs)[1]
     brainmask = ensure_brainmask(config, subject, session, inputs.brainmask, inputs.water_map, inputs.metabolite_maps)
     return MRSILoadResult(
         raw_maps=inputs.metabolite_maps,
@@ -349,7 +378,7 @@ def run_spike_filter_workflow(config, subject: str, session: str | None, load: M
     return SpikeFilterResult(preproc_maps=preproc)
 
 
-def run_t1_water_correction_workflow(
+def run_t1_saturation_correction_workflow(
     config, subject: str, session: str | None, load: MRSILoadResult, filtered: SpikeFilterResult
 ) -> WaterCorrectionResult:
     """Apply (or skip) T1-saturation ("water") correction to ``filtered``'s
@@ -415,7 +444,7 @@ def run_mrsi_reference_workflow(
         ``None`` for session-less datasets.
     :param load: This recording's :func:`run_mrsi_load_workflow` output.
     :param filtered: This recording's :func:`run_spike_filter_workflow` output.
-    :param water: This recording's :func:`run_t1_water_correction_workflow` output.
+    :param water: This recording's :func:`run_t1_saturation_correction_workflow` output.
     :param inputs: The same :class:`MRSIInputs` passed to
         :func:`run_mrsi_load_workflow` (``crlb_maps``/``snr_map``/
         ``linewidth_map`` may have been rebound there by orientation
@@ -450,7 +479,7 @@ def run_mrsi_quality_workflow(
     :param subject: BIDS subject label, without the ``sub-`` prefix.
     :param session: BIDS session label without the ``ses-`` prefix, or
         ``None`` for session-less datasets.
-    :param water: This recording's :func:`run_t1_water_correction_workflow` output.
+    :param water: This recording's :func:`run_t1_saturation_correction_workflow` output.
     :param inputs: The same :class:`MRSIInputs` passed to
         :func:`run_mrsi_load_workflow` (``crlb_maps``/``snr_map``/
         ``linewidth_map`` may have been rebound there by orientation

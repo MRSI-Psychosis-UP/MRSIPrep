@@ -20,7 +20,9 @@ from mrsiprep.reports.slices import (
     axial_slices_center_weighted,
     center_weighted_slice_indices,
     compose_flicker_svg,
+    compose_layered_crossfade_svg,
     render_axial_before_after_svg_flicker,
+    render_axial_overlay_montage,
     render_multi_slice_triplanar_png,
     render_multi_slice_triplanar_svg_flicker,
     render_triplanar_svg_flicker,
@@ -157,6 +159,50 @@ class RenderMultiSliceTriplanarPngTests(unittest.TestCase):
         self.assertTrue(self.out.exists())
 
 
+class RenderAxialOverlayMontageTests(unittest.TestCase):
+    def setUp(self):
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmpdir.cleanup)
+        self.out = Path(self._tmpdir.name) / "fig.png"
+
+    def _volumes(self, shape=(12, 14, 16)):
+        rng = np.random.default_rng(0)
+        background = rng.uniform(0, 1, size=shape)
+        overlay = np.zeros(shape)
+        overlay[4:8, 5:9, 4:12] = rng.uniform(1, 100, size=(4, 4, 8))
+        return background, overlay
+
+    def test_writes_a_single_row_axial_montage(self):
+        background, overlay = self._volumes()
+        render_axial_overlay_montage(background, overlay, self.out, label="CrPCr", n_slices=5)
+        self.assertTrue(self.out.exists())
+        self.assertGreater(self.out.stat().st_size, 0)
+
+    def test_slices_are_chosen_from_the_overlay_extent(self):
+        """Mirrors render_multi_slice_triplanar_png's own slice-selection
+        rationale: the background (full-head) is nonzero almost everywhere,
+        so slices must be chosen from where the overlay actually lands."""
+        shape = (20, 20, 20)
+        background = np.ones(shape)
+        overlay = np.zeros(shape)
+        overlay[9:11, 9:11, 9:11] = 5.0
+
+        import mrsiprep.reports.slices as slices_module
+
+        original = slices_module.axial_slices_center_weighted
+        seen = []
+
+        def _capture(volume_data, n_slices, reference=None):
+            seen.append(volume_data)
+            return original(volume_data, n_slices, reference=reference)
+
+        with unittest.mock.patch.object(slices_module, "axial_slices_center_weighted", side_effect=_capture):
+            render_axial_overlay_montage(background, overlay, self.out, label="CrPCr", n_slices=3)
+
+        for volume in seen:
+            self.assertTrue(np.array_equal(volume, overlay))
+
+
 _SIMPLE_SVG = (
     '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" '
     'version="1.1" viewBox="0 0 10 10" width="10pt" height="10pt">'
@@ -223,6 +269,81 @@ class ComposeFlickerSvgTests(unittest.TestCase):
         compose_flicker_svg(_SIMPLE_SVG, _SIMPLE_SVG, out2, flicker_id="two")
         self.assertNotIn("flicker-two", self.out.read_text())
         self.assertNotIn("flicker-one", out2.read_text())
+
+
+class ComposeLayeredCrossfadeSvgTests(unittest.TestCase):
+    def setUp(self):
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmpdir.cleanup)
+        self.out = Path(self._tmpdir.name) / "crossfaded.svg"
+
+    def test_writes_well_formed_xml_with_a_base_group_and_one_group_per_layer(self):
+        compose_layered_crossfade_svg(
+            _SIMPLE_SVG, [(_SIMPLE_SVG, [(0, 0), (100, 1)]), (_SIMPLE_SVG, [(0, 1), (100, 0)])], self.out, "abc123", total_seconds=2.0
+        )
+        tree = ET.parse(self.out)  # raises on malformed XML / duplicate attrs
+        root = tree.getroot()
+        ns = "{http://www.w3.org/2000/svg}"
+        hover_root = root.find(f"{ns}g")
+        self.assertEqual(hover_root.get("class"), "cycle-hover-root-abc123")
+        classes = [g.get("class") for g in hover_root.findall(f"{ns}g")]
+        self.assertIn("cycle-base", classes)
+        self.assertIn("cycle-layer-abc123-0", classes)
+        self.assertIn("cycle-layer-abc123-1", classes)
+
+        ids = [el.get("id") for el in root.iter() if el.get("id")]
+        self.assertEqual(len(ids), len(set(ids)), "merged document must not contain duplicate ids")
+
+    def test_each_layer_gets_its_own_named_keyframes_animation_with_its_given_stops(self):
+        compose_layered_crossfade_svg(
+            _SIMPLE_SVG,
+            [(_SIMPLE_SVG, [(0, 0), (50, 1), (100, 0)]), (_SIMPLE_SVG, [(0, 1), (100, 0.5)])],
+            self.out,
+            "unique123",
+            total_seconds=3.0,
+        )
+        content = self.out.read_text()
+        self.assertIn("@keyframes cycle-unique123-0", content)
+        self.assertIn("0.0000% {opacity: 0;}", content)
+        self.assertIn("50.0000% {opacity: 1;}", content)
+        self.assertIn("@keyframes cycle-unique123-1", content)
+        self.assertIn("100.0000% {opacity: 0.5;}", content)
+
+    def test_different_cycle_ids_do_not_share_an_animation_name(self):
+        out2 = Path(self._tmpdir.name) / "crossfaded2.svg"
+        compose_layered_crossfade_svg(_SIMPLE_SVG, [(_SIMPLE_SVG, [(0, 0), (100, 1)])], self.out, "one", total_seconds=1.0)
+        compose_layered_crossfade_svg(_SIMPLE_SVG, [(_SIMPLE_SVG, [(0, 0), (100, 1)])], out2, "two", total_seconds=1.0)
+        self.assertNotIn("cycle-two", self.out.read_text())
+        self.assertNotIn("cycle-one", out2.read_text())
+
+    def test_every_layer_animation_is_paused_by_default(self):
+        """Matches compose_flicker_svg's interaction model: nothing animates
+        on page load -- only hovering the whole-figure wrapper resumes it."""
+        compose_layered_crossfade_svg(
+            _SIMPLE_SVG, [(_SIMPLE_SVG, [(0, 0), (100, 1)])], self.out, "pausedtest", total_seconds=1.0
+        )
+        content = self.out.read_text()
+        self.assertIn("paused cycle-pausedtest-0", content)
+
+    def test_hover_on_the_shared_wrapper_resumes_every_layer(self):
+        """One hover region covers the whole figure (the base + every
+        layer), not a separate :hover per layer -- hovering anywhere over
+        the image must resume all layers together."""
+        compose_layered_crossfade_svg(
+            _SIMPLE_SVG,
+            [(_SIMPLE_SVG, [(0, 0), (100, 1)]), (_SIMPLE_SVG, [(0, 1), (100, 0)])],
+            self.out,
+            "hovertest",
+            total_seconds=2.0,
+        )
+        content = self.out.read_text()
+        self.assertIn(".cycle-hover-root-hovertest:hover .cycle-layer-hovertest-0", content)
+        self.assertIn(".cycle-hover-root-hovertest:hover .cycle-layer-hovertest-1", content)
+        self.assertIn("animation-play-state: running", content)
+
+    def test_rejects_zero_layers(self):
+        with self.assertRaises(ValueError):
+            compose_layered_crossfade_svg(_SIMPLE_SVG, [], self.out, "toofew", total_seconds=1.0)
 
 
 class VoxelIndexToMmTests(unittest.TestCase):
@@ -381,6 +502,194 @@ class RenderMultiSliceTriplanarSvgFlickerTests(unittest.TestCase):
         )
         self.assertTrue(self.out.exists())
         ET.parse(self.out)
+
+    def test_wm_mask_produces_a_three_state_crossfade_not_a_hover_flicker(self):
+        """With wm_mask given, the composed document must be the
+        base+2-fading-layer crossfade reportlet (compose_layered_crossfade_svg:
+        a permanent anatomy base, plus independently-fading contour and
+        MRSI-overlay layers), not the plain 2-layer hover-flicker
+        (compose_flicker_svg) used when there's no mask -- the crossfade
+        adds the third "no contour" state the flicker has no slot for (see
+        build_t1w_alignment_sections/build_mni_alignment_sections, which
+        switched to this to let the anat/MRSI alignment be judged without
+        the contour drawing attention away from it)."""
+        background, overlay = self._volumes()
+        wm_mask = np.zeros_like(background)
+        wm_mask[5:11, 6:12, 5:11] = 1.0
+        render_multi_slice_triplanar_svg_flicker(
+            background, self.out, overlay, flicker_id="m6", overlay_mode="solid", colorbar_label="Y", n_slices=3, wm_mask=wm_mask
+        )
+        content = self.out.read_text()
+        self.assertIn("cycle-hover-root-m6", content)
+        self.assertIn("cycle-m6-0", content)
+        self.assertIn("cycle-m6-1", content)
+        self.assertNotIn("flicker-m6", content)
+
+    def test_three_states_each_get_a_real_hold_not_an_instant(self):
+        """State 3 ("anat+MRSI, no contour") must hold for a real fraction
+        of the cycle, not just exist as a single instant between two
+        fades -- otherwise a viewer who stops hovering at an unlucky moment
+        would only ever see states 1 and 2. Guards the keyframe-stop
+        geometry in render_multi_slice_triplanar_svg_flicker against a
+        future change accidentally shrinking or removing state 3's hold
+        window (e.g. by making the loop-closing fade share its window with
+        the segment-2-entering fade)."""
+        import re
+
+        background, overlay = self._volumes()
+        wm_mask = np.zeros_like(background)
+        wm_mask[5:11, 6:12, 5:11] = 1.0
+        render_multi_slice_triplanar_svg_flicker(
+            background, self.out, overlay, flicker_id="hold3", overlay_mode="solid", colorbar_label="Y", n_slices=3, wm_mask=wm_mask
+        )
+        content = self.out.read_text()
+
+        def _stops(layer_index):
+            match = re.search(rf"@keyframes cycle-hold3-{layer_index} {{ (.*?) }}@keyframes", content)
+            if match is None:
+                # last @keyframes block in the stylesheet has no trailing "@keyframes" to anchor on
+                match = re.search(rf"@keyframes cycle-hold3-{layer_index} {{ (.*?) }}\.cycle-layer", content)
+            self.assertIsNotNone(match, f"no keyframes found for layer {layer_index}")
+            return [(float(pct), float(op)) for pct, op in re.findall(r"([\d.]+)% \{opacity: ([\d.]+);\}", match.group(1))]
+
+        def _opacity_at(stops, pct):
+            stops = sorted(stops)
+            for (p0, o0), (p1, o1) in zip(stops, stops[1:]):
+                if p0 <= pct <= p1:
+                    return o0 if p1 == p0 else o0 + (pct - p0) / (p1 - p0) * (o1 - o0)
+            return stops[-1][1]
+
+        overlay_stops, contour_stops = _stops(0), _stops(1)
+        all_percents = sorted(p for p, _ in overlay_stops + contour_stops)
+        total = max(all_percents)
+
+        # State 3 ("anat+MRSI, no contour": contour==0, overlay==1) starts
+        # at the stop where contour first fully reaches 0. Measure how far
+        # past that point the state actually stays stable (both opacities
+        # still exactly 0/1) before either track starts moving again --
+        # this should be a real fraction of the cycle (hold_seconds), not
+        # ~0 (which would mean state 3 only ever exists for an instant).
+        contour_off_pct = next(pct for pct, op in sorted(contour_stops) if op == 0.0)
+        self.assertAlmostEqual(_opacity_at(overlay_stops, contour_off_pct), 1.0, places=6)
+        # Sample densely (not just at the listed stops) since opacity
+        # interpolates continuously between consecutive stops -- checking
+        # only the stops themselves would miss a long continuous drift
+        # happening entirely between two stops that are each individually
+        # exactly 0/1.
+        sample_step = total / 1000
+        next_moving_pct = contour_off_pct
+        pct = contour_off_pct
+        while pct <= total:
+            if _opacity_at(contour_stops, pct) != 0.0 or _opacity_at(overlay_stops, pct) != 1.0:
+                next_moving_pct = pct
+                break
+            pct += sample_step
+        else:
+            next_moving_pct = total
+        state3_hold_width = next_moving_pct - contour_off_pct
+        self.assertGreater(
+            state3_hold_width,
+            total * 0.1,
+            f"state 3 (contour=0, overlay=1) only holds for {state3_hold_width:.2f}% of the cycle "
+            f"(from {contour_off_pct:.2f}% to {next_moving_pct:.2f}%) -- too close to an instant; "
+            "a viewer who stops hovering anywhere before it will only ever see states 1 and 2",
+        )
+
+    def test_contour_layer_is_stacked_above_the_overlay_layer(self):
+        """The contour must stay visible over the MRSI overlay wherever
+        they overlap (the anat+contour+MRSI state) rather than being
+        painted over and hidden by it -- in SVG, later document order
+        paints on top, so the contour layer's <g> must come after the
+        overlay layer's <g>."""
+        background, overlay = self._volumes()
+        wm_mask = np.zeros_like(background)
+        wm_mask[5:11, 6:12, 5:11] = 1.0
+        render_multi_slice_triplanar_svg_flicker(
+            background, self.out, overlay, flicker_id="zorder", overlay_mode="solid", colorbar_label="Y", n_slices=3, wm_mask=wm_mask
+        )
+        content = self.out.read_text()
+        overlay_index = content.index("cycle-layer-zorder-0")
+        contour_index = content.index("cycle-layer-zorder-1")
+        self.assertLess(
+            overlay_index,
+            contour_index,
+            "overlay layer (index 0) must appear before the contour layer (index 1) in document order",
+        )
+
+    def test_no_wm_mask_still_produces_the_plain_two_layer_hover_flicker(self):
+        """Without a mask there's no third state to add, so this must stay
+        the existing hover-to-fade behavior rather than unconditionally
+        switching to the crossfade reportlet."""
+        background, overlay = self._volumes()
+        render_multi_slice_triplanar_svg_flicker(
+            background, self.out, overlay, flicker_id="m7", overlay_mode="solid", colorbar_label="Y", n_slices=3, wm_mask=None
+        )
+        content = self.out.read_text()
+        self.assertIn("flicker-fg-m7", content)
+        self.assertNotIn("cycle-m7", content)
+
+    def test_contour_only_layer_draws_no_phantom_colorbar(self):
+        """Regression guard: the contour-only pass (one of the two fading
+        layers compose_layered_crossfade_svg composites onto the anatomy
+        base, when wm_mask is given) never calls imshow with a real image,
+        so colorbar_label's "pick a mappable, else hide the reserved cell"
+        logic used to fall through with neither -- leaving that pass's
+        colorbar cell as a bare, default-visible Axes (confirmed
+        empirically: a visible axes border/box showed up composited over
+        the anatomy base once rendered, since this pass's own render was
+        never shown "alone" the way it was in the old 2-layer design). Each
+        of the 3 passes' dedicated colorbar-column cell (the middle row's
+        last column -- see the cax= comment in the source) must end up
+        either fully turned off or rendering no visible content."""
+        import matplotlib
+
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
+        background, overlay = self._volumes(shape=(16, 18, 16))
+        wm_mask = np.zeros_like(background)
+        wm_mask[5:11, 6:12, 5:11] = 1.0
+        captured_cbar_axes = []
+        orig_savefig = plt.Figure.savefig
+
+        def spy_savefig(self, *args, **kwargs):
+            axes_grid = self.get_axes()
+            n_slices = 3
+            # 3 planes x (n_slices + 1) cells, row-major: the colorbar
+            # column is the last cell of each row; the middle plane row
+            # (index 1 of 3) is the one actually used as cax (see source).
+            middle_row_cbar_index = 1 * (n_slices + 1) + n_slices
+            if len(axes_grid) > middle_row_cbar_index:
+                captured_cbar_axes.append(axes_grid[middle_row_cbar_index])
+            return orig_savefig(self, *args, **kwargs)
+
+        plt.Figure.savefig = spy_savefig
+        try:
+            render_multi_slice_triplanar_svg_flicker(
+                background, self.out, overlay, flicker_id="nocbar1", overlay_mode="solid", colorbar_label="Y", n_slices=3, wm_mask=wm_mask
+            )
+        finally:
+            plt.Figure.savefig = orig_savefig
+
+        # Render order is anatomy, then contour, then overlay (see the
+        # source's assembly block) -- only the overlay pass has a real
+        # mappable and should show real colorbar content; the other two
+        # must show none.
+        self.assertEqual(len(captured_cbar_axes), 3, "expected one cax per render pass (anatomy, contour, overlay)")
+        anatomy_ax, contour_ax, overlay_ax = captured_cbar_axes
+
+        def _visible_artists(ax):
+            if not ax.axison:
+                return []
+            return [
+                artist
+                for artist in (*ax.collections, *ax.images, *ax.get_yticklabels(), ax.yaxis.label)
+                if artist.get_alpha() != 0 and artist.get_visible()
+            ]
+
+        self.assertEqual(_visible_artists(anatomy_ax), [], "anatomy pass must not show a colorbar")
+        self.assertEqual(_visible_artists(contour_ax), [], "contour-only pass must not show a colorbar")
+        self.assertNotEqual(_visible_artists(overlay_ax), [], "overlay pass should show a real colorbar")
 
     def test_size_scale_grows_the_composed_svg_dimensions(self):
         background, overlay = self._volumes()

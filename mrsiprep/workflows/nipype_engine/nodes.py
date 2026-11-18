@@ -94,10 +94,10 @@ def step_spike_filter(config, subject, session, ctx):
 
 def step_t1_saturation_correction(config, subject, session, ctx):
     from mrsiprep.utils.debug import Debug
-    from mrsiprep.workflows.participant import _step_t1_water_correction
+    from mrsiprep.workflows.participant import _step_t1_saturation_correction
 
     debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""))
-    water, qc_sections_t1_correction = _step_t1_water_correction(config, subject, session, ctx["mrsi_load"], ctx["spike_filter"], debug)
+    water, qc_sections_t1_correction = _step_t1_saturation_correction(config, subject, session, ctx["mrsi_load"], ctx["spike_filter"], debug)
     ctx = dict(ctx)
     ctx.update(t1_saturation_correction=water, qc_sections_t1_correction=qc_sections_t1_correction)
     return ctx

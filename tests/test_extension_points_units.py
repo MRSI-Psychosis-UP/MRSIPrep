@@ -83,7 +83,7 @@ class ParticipantImportSurfaceTests(unittest.TestCase):
 
         for name in (
             "_step_tissue_segmentation", "_step_anatomical_prep", "_step_mrsi_load", "_step_spike_filter",
-            "_step_t1_water_correction", "_step_mrsi_reference", "_step_mrsi_quality",
+            "_step_t1_saturation_correction", "_step_mrsi_reference", "_step_mrsi_quality",
             "_step_registration", "_step_tissue_probmaps", "_step_pvc", "_step_resampling",
             "_step_leakage_qc", "_step_synthseg_parcellation_qc", "_step_parcellation",
             "_step_regional_extraction", "_step_connectivity", "_step_metprofiles",

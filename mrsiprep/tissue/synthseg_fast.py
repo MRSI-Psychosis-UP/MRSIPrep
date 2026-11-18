@@ -155,7 +155,13 @@ def _run_or_load_synthseg(config, t1_path: Path, work_dir: Path, subject: str, s
     if not synthseg_labels.exists() or config.overwrite_seg or config.overwrite:
         synthseg_cmd = _find_mri_synthseg()
         command = _synthseg_command(config, synthseg_cmd, t1_path, synthseg_labels)
-        run_checked(command, verbose=config.verbose >= 3, env=_synthseg_env(synthseg_cmd), error_prefix="mri_synthseg")
+        run_checked(
+            command,
+            verbose=config.verbose >= 3,
+            env=_synthseg_env(synthseg_cmd),
+            cpu_affinity=config.nthreads,
+            error_prefix="mri_synthseg",
+        )
 
     labels_img = nib.load(str(synthseg_labels))
     t1_img = nib.load(str(t1_path))

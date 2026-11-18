@@ -218,6 +218,28 @@ class RegistrationAlignmentSectionsTests(unittest.TestCase):
             sections = build_mni_alignment_sections(config, "S001", "V1", None)
             self.assertIn("not available for this configuration", _sections_text(sections))
 
+    def test_mni_alignment_adds_a_montage_section_per_metabolite_when_mni_maps_given(self):
+        with tempfile.TemporaryDirectory() as td:
+            tmp_path = Path(td)
+            config = _make_config(tmp_path)
+            config.metabolites = ["CrPCr", "NAANAAG"]
+            mni_ref = _save_volume(tmp_path / "mni_ref.nii.gz", np.random.rand(6, 6, 6))
+            naa_map = _save_volume(tmp_path / "naa_mni.nii.gz", np.random.rand(6, 6, 6))
+            fake_template = nib.Nifti1Image(np.random.rand(6, 6, 6).astype("float32"), np.eye(4))
+
+            from mrsiprep.reports import registration_overview as reg_module
+
+            with mock.patch.object(reg_module, "_load_mni152_head_template", return_value=fake_template), mock.patch.object(
+                reg_module, "render_multi_slice_triplanar_svg_flicker"
+            ):
+                sections = build_mni_alignment_sections(
+                    config, "S001", "V1", mni_ref, mni_resolution=5, mni_maps={"CrPCr": mni_ref, "NAANAAG": naa_map}
+                )
+
+            text = _sections_text(sections)
+            self.assertIn("Metabolite: CrPCr", text)
+            self.assertIn("Metabolite: NAANAAG", text)
+
     def test_mni_alignment_uses_the_multi_slice_renderer(self):
         """The figure is a multi-slice-per-plane montage, not the single
         center slice every other alignment tab still uses -- a single center
@@ -265,6 +287,40 @@ class RegistrationAlignmentSectionsTests(unittest.TestCase):
             sections = build_t1w_alignment_sections(config, "S001", "V1", raw_t1, None)
             self.assertIn("No T1w-space reference metabolite map available", _sections_text(sections))
 
+    def test_t1w_alignment_adds_a_montage_section_per_metabolite_when_t1_maps_given(self):
+        with tempfile.TemporaryDirectory() as td:
+            tmp_path = Path(td)
+            config = _make_config(tmp_path)
+            config.metabolites = ["CrPCr", "NAANAAG"]
+            raw_t1 = _save_volume(tmp_path / "raw_t1.nii.gz", np.random.rand(8, 8, 8))
+            t1_ref = _save_volume(tmp_path / "ref_t1.nii.gz", np.random.rand(8, 8, 8))
+            naa_map = _save_volume(tmp_path / "naa_t1.nii.gz", np.random.rand(8, 8, 8))
+
+            from mrsiprep.reports import registration_overview as reg_module
+
+            with mock.patch.object(reg_module, "render_multi_slice_triplanar_svg_flicker"):
+                sections = build_t1w_alignment_sections(
+                    config, "S001", "V1", raw_t1, t1_ref, t1_maps={"CrPCr": t1_ref, "NAANAAG": naa_map}
+                )
+
+            text = _sections_text(sections)
+            self.assertIn("Metabolite: CrPCr", text)
+            self.assertIn("Metabolite: NAANAAG", text)
+
+    def test_t1w_alignment_omits_metabolite_montages_without_t1_maps(self):
+        with tempfile.TemporaryDirectory() as td:
+            tmp_path = Path(td)
+            config = _make_config(tmp_path)
+            raw_t1 = _save_volume(tmp_path / "raw_t1.nii.gz", np.random.rand(8, 8, 8))
+            t1_ref = _save_volume(tmp_path / "ref_t1.nii.gz", np.random.rand(8, 8, 8))
+
+            from mrsiprep.reports import registration_overview as reg_module
+
+            with mock.patch.object(reg_module, "render_multi_slice_triplanar_svg_flicker"):
+                sections = build_t1w_alignment_sections(config, "S001", "V1", raw_t1, t1_ref)
+
+            self.assertNotIn("Metabolite:", _sections_text(sections))
+
     def test_t1w_alignment_uses_the_multi_slice_renderer(self):
         """Same montage style as the Template-space tab, not a single
         center slice per plane -- see test_mni_alignment_uses_the_multi_slice_renderer."""
@@ -298,8 +354,10 @@ class RegistrationAlignmentSectionsTests(unittest.TestCase):
             with mock.patch.object(reg_module, "render_multi_slice_triplanar_svg_flicker") as render:
                 sections = build_t1w_alignment_sections(config, "S001", "V1", raw_t1, t1_ref)
 
+            self.assertEqual(render.call_count, 1)
             self.assertIsNotNone(render.call_args.kwargs["wm_mask"])
             self.assertIn("white-matter boundary", _sections_text(sections))
+            self.assertIn("Hover over the figure to cycle", _sections_text(sections))
 
     def test_t1w_alignment_omits_wm_contour_when_no_probseg_derivative(self):
         with tempfile.TemporaryDirectory() as td:
@@ -313,8 +371,10 @@ class RegistrationAlignmentSectionsTests(unittest.TestCase):
             with mock.patch.object(reg_module, "render_multi_slice_triplanar_svg_flicker") as render:
                 sections = build_t1w_alignment_sections(config, "S001", "V1", raw_t1, t1_ref)
 
+            self.assertEqual(render.call_count, 1)
             self.assertIsNone(render.call_args.kwargs["wm_mask"])
             self.assertNotIn("white-matter boundary", _sections_text(sections))
+            self.assertNotIn("Hover over the figure to cycle", _sections_text(sections))
 
     def test_mni_alignment_resamples_and_draws_wm_contour_when_transforms_given(self):
         with tempfile.TemporaryDirectory() as td:
@@ -342,8 +402,10 @@ class RegistrationAlignmentSectionsTests(unittest.TestCase):
                     config, "S001", "V1", mni_ref, mni_resolution=5, t1_to_mni_transforms=[tmp_path / "fake.h5"]
                 )
 
+            self.assertEqual(render.call_count, 1)
             self.assertIsNotNone(render.call_args.kwargs["wm_mask"])
             self.assertIn("white-matter boundary", _sections_text(sections))
+            self.assertIn("Hover over the figure to cycle", _sections_text(sections))
 
     def test_mni_alignment_omits_wm_contour_without_transforms(self):
         with tempfile.TemporaryDirectory() as td:
