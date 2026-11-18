@@ -60,6 +60,37 @@ class RunCheckedPipingTests(unittest.TestCase):
         self.assertEqual(run.call_args.kwargs["env"], env)
 
 
+class RunCheckedCpuAffinityTests(unittest.TestCase):
+    def test_cpu_affinity_prefixes_command_with_taskset(self):
+        with patch("mrsiprep.utils.subprocess_utils.shutil.which", return_value="/usr/bin/taskset"), patch(
+            "mrsiprep.utils.subprocess_utils.subprocess.run", return_value=_completed()
+        ) as run:
+            run_checked(["mri_synthseg", "--i", "x.nii"], cpu_affinity=16)
+        self.assertEqual(run.call_args.args[0], ["taskset", "-c", "0-15", "mri_synthseg", "--i", "x.nii"])
+
+    def test_cpu_affinity_none_leaves_command_untouched(self):
+        with patch("mrsiprep.utils.subprocess_utils.subprocess.run", return_value=_completed()) as run:
+            run_checked(["tool"])
+        self.assertEqual(run.call_args.args[0], ["tool"])
+
+    def test_cpu_affinity_skipped_silently_when_taskset_is_not_on_path(self):
+        with patch("mrsiprep.utils.subprocess_utils.shutil.which", return_value=None), patch(
+            "mrsiprep.utils.subprocess_utils.subprocess.run", return_value=_completed()
+        ) as run:
+            run_checked(["tool"], cpu_affinity=16)
+        self.assertEqual(run.call_args.args[0], ["tool"])
+
+    def test_error_prefix_still_names_the_real_tool_when_pinned(self):
+        # taskset prepended to argv must not shift cmd[0] in the default
+        # error-message prefix for callers that rely on it (error_prefix is
+        # given explicitly here, same as every real call site does).
+        with patch("mrsiprep.utils.subprocess_utils.shutil.which", return_value="/usr/bin/taskset"), patch(
+            "mrsiprep.utils.subprocess_utils.subprocess.run", return_value=_completed(returncode=1)
+        ):
+            with self.assertRaisesRegex(RuntimeError, r"^mri_synthseg exited with status 1"):
+                run_checked(["mri_synthseg"], cpu_affinity=4, error_prefix="mri_synthseg")
+
+
 class RunCheckedSuccessTests(unittest.TestCase):
     def test_returns_the_completed_process_untouched_on_success(self):
         completed = _completed(stdout="all good")

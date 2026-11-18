@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-10-30T08:37:13.458657+00:00",
-  "mrsiprep_version": "2.0.5",
+  "generated_at": "2026-11-18T11:17:04.278574+00:00",
+  "mrsiprep_version": "2.2.2",
   "python": "3.11.15 (main, Mar  3 2026, 09:26:23) [GCC 11.4.0]",
   "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.35",
   "config": {
@@ -15,6 +15,11 @@
     ],
     "participants_file": null,
     "bids_filter_file": null,
+    "mrsinmrs_file": "/data/mrsinmrs.json",
+    "mrsi_input_dir": "/data",
+    "quantification_tool": "lcmodel",
+    "linewidth_unit": "Hz",
+    "crlb_unit": "percent",
     "metabolites": [
       "NAANAAG",
       "GPCPCh",
@@ -22,6 +27,7 @@
       "GluGln",
       "Ins"
     ],
+    "steps": null,
     "quality_metrics": [
       "snr",
       "linewidth",
@@ -47,13 +53,14 @@
     "output_spaces": [
       "MNI152NLin2009cAsym"
     ],
-    "output_mrsi_t1w": false,
+    "output_mrsi_t1w": true,
     "space_resolutions": {
       "MNI152NLin2009cAsym": "origres"
     },
     "registration_t1_target": "brain",
     "csf_pv_threshold": 0.95,
     "parcellation_mode": "synthseg",
+    "fs_license": null,
     "synthseg_mode": "robust",
     "chimera_scheme": "LFMIHIFIFF",
     "chimera_scale": "3",
@@ -70,8 +77,8 @@
     "connectivity_exclude_parcels": null,
     "connectivity_max_parcel_id": null,
     "regional_summary": "mean",
-    "nthreads": 16,
-    "nproc": 1,
+    "nthreads": 8,
+    "nproc": 2,
     "ref_met": "CrPCr",
     "t1_pattern": "acq-mprage_T1w",
     "transform": "",
@@ -86,7 +93,7 @@
     "overwrite_t1corr": false,
     "longitudinal": false,
     "transform_spikemask": false,
-    "overwrite": false,
+    "overwrite": true,
     "overwrite_filt": false,
     "overwrite_seg": false,
     "overwrite_pve": false,
@@ -95,7 +102,7 @@
     "overwrite_transform": false,
     "overwrite_chimera": false,
     "work_dir": "/out/work",
-    "verbose": 1,
+    "verbose": 2,
     "validate_only": false,
     "reports_only": false,
     "skip_file_integrity_check": false,
@@ -232,6 +239,20 @@
       "edges": "/out/mrsiprep/sub-01/ses-01/connectivity/sub-01_ses-01_atlas-synthseg_npert-50_filt-biharmonic_pvcorr_GM_desc-edges_mrsi.tsv"
     },
     "transformed_maps": {
+      "T1w": {
+        "NAANAAG": "/out/mrsiprep/sub-01/ses-01/mrsi/t1w/sub-01_ses-01_space-T1w_met-NAANAAG_desc-signal_mrsi.nii.gz",
+        "GPCPCh": "/out/mrsiprep/sub-01/ses-01/mrsi/t1w/sub-01_ses-01_space-T1w_met-GPCPCh_desc-signal_mrsi.nii.gz",
+        "CrPCr": "/out/mrsiprep/sub-01/ses-01/mrsi/t1w/sub-01_ses-01_space-T1w_met-CrPCr_desc-signal_mrsi.nii.gz",
+        "GluGln": "/out/mrsiprep/sub-01/ses-01/mrsi/t1w/sub-01_ses-01_space-T1w_met-GluGln_desc-signal_mrsi.nii.gz",
+        "Ins": "/out/mrsiprep/sub-01/ses-01/mrsi/t1w/sub-01_ses-01_space-T1w_met-Ins_desc-signal_mrsi.nii.gz",
+        "crlb-NAANAAG": "/out/mrsiprep/sub-01/ses-01/confounds/sub-01_ses-01_space-T1w_met-NAANAAG_desc-crlb_mrsi.nii.gz",
+        "crlb-GPCPCh": "/out/mrsiprep/sub-01/ses-01/confounds/sub-01_ses-01_space-T1w_met-GPCPCh_desc-crlb_mrsi.nii.gz",
+        "crlb-CrPCr": "/out/mrsiprep/sub-01/ses-01/confounds/sub-01_ses-01_space-T1w_met-CrPCr_desc-crlb_mrsi.nii.gz",
+        "crlb-GluGln": "/out/mrsiprep/sub-01/ses-01/confounds/sub-01_ses-01_space-T1w_met-GluGln_desc-crlb_mrsi.nii.gz",
+        "crlb-Ins": "/out/mrsiprep/sub-01/ses-01/confounds/sub-01_ses-01_space-T1w_met-Ins_desc-crlb_mrsi.nii.gz",
+        "snr": "/out/mrsiprep/sub-01/ses-01/confounds/sub-01_ses-01_space-T1w_desc-snr_mrsi.nii.gz",
+        "fwhm": "/out/mrsiprep/sub-01/ses-01/confounds/sub-01_ses-01_space-T1w_desc-fwhm_mrsi.nii.gz"
+      },
       "MNI152NLin2009cAsym": {
         "NAANAAG": "/out/mrsiprep/sub-01/ses-01/mrsi/mni/sub-01_ses-01_space-MNI152NLin2009cAsym_res-5_met-NAANAAG_desc-signal_mrsi.nii.gz",
         "GPCPCh": "/out/mrsiprep/sub-01/ses-01/mrsi/mni/sub-01_ses-01_space-MNI152NLin2009cAsym_res-5_met-GPCPCh_desc-signal_mrsi.nii.gz",

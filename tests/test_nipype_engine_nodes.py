@@ -123,7 +123,7 @@ class StepT1SaturationCorrectionTests(unittest.TestCase):
     def test_wires_ctx_in_and_out(self):
         ctx = {"mrsi_load": "load_obj", "spike_filter": "filtered_obj"}
         with patch(
-            "mrsiprep.workflows.participant._step_t1_water_correction", return_value=("water_obj", "t1corr_qc")
+            "mrsiprep.workflows.participant._step_t1_saturation_correction", return_value=("water_obj", "t1corr_qc")
         ) as step:
             result = N.step_t1_saturation_correction(_fake_config(), _SUBJECT, _SESSION, ctx)
 

@@ -3,7 +3,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from mrsiprep.workflows.mrsi import MRSILoadResult, SpikeFilterResult, run_t1_water_correction_workflow
+from mrsiprep.workflows.mrsi import MRSILoadResult, SpikeFilterResult, run_t1_saturation_correction_workflow
 
 
 def _config(**overrides):
@@ -44,7 +44,7 @@ def _filtered(**overrides):
 class RunT1WaterCorrectionWorkflowVoxelwiseTests(unittest.TestCase):
     def test_raises_a_clear_error_without_a_flip_angle_map(self):
         with self.assertRaisesRegex(ValueError, "--t1-correction voxelwise requires"):
-            run_t1_water_correction_workflow(
+            run_t1_saturation_correction_workflow(
                 _config(t1_correction="voxelwise"), "S001", "V1", _load(flip_angle_map=None), _filtered()
             )
 
@@ -54,7 +54,7 @@ class RunT1WaterCorrectionWorkflowVoxelwiseTests(unittest.TestCase):
         ), patch("mrsiprep.workflows.mrsi.apply_t1_correction_voxelwise", return_value=({"CrPCr": Path("corrected.nii.gz")}, ["row"], Path("summary.tsv"))) as apply_voxelwise, patch(
             "mrsiprep.workflows.mrsi.apply_t1_correction"
         ) as apply_literature:
-            result = run_t1_water_correction_workflow(
+            result = run_t1_saturation_correction_workflow(
                 _config(t1_correction="voxelwise"), "S001", "V1", _load(flip_angle_map=Path("b1map.nii.gz")), _filtered()
             )
 
@@ -70,7 +70,7 @@ class RunT1WaterCorrectionWorkflowVoxelwiseTests(unittest.TestCase):
         ), patch("mrsiprep.workflows.mrsi.apply_t1_correction", return_value=({"CrPCr": Path("corrected.nii.gz")}, ["row"], Path("summary.tsv"))) as apply_literature, patch(
             "mrsiprep.workflows.mrsi.apply_t1_correction_voxelwise"
         ) as apply_voxelwise:
-            run_t1_water_correction_workflow(
+            run_t1_saturation_correction_workflow(
                 _config(t1_correction="literature"), "S001", "V1", _load(flip_angle_map=None), _filtered()
             )
 
@@ -83,7 +83,7 @@ class RunT1WaterCorrectionWorkflowVoxelwiseTests(unittest.TestCase):
         ) as apply_voxelwise:
             load = _load()
             filtered = _filtered()
-            result = run_t1_water_correction_workflow(_config(t1_correction="none"), "S001", "V1", load, filtered)
+            result = run_t1_saturation_correction_workflow(_config(t1_correction="none"), "S001", "V1", load, filtered)
 
         apply_literature.assert_not_called()
         apply_voxelwise.assert_not_called()

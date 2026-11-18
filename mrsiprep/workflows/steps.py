@@ -43,7 +43,7 @@ from mrsiprep.workflows.mrsi import (
     run_mrsi_quality_workflow,
     run_mrsi_reference_workflow,
     run_spike_filter_workflow,
-    run_t1_water_correction_workflow,
+    run_t1_saturation_correction_workflow,
 )
 from mrsiprep.workflows.parcellation import run_parcellation_workflow
 from mrsiprep.workflows.registration import run_registration_workflow
@@ -104,9 +104,9 @@ def _step_spike_filter(config, subject, session, load, debug):
     return filtered, qc_sections_mrsi_raw, qc_sections_mrsi_preproc
 
 
-def _step_t1_water_correction(config, subject, session, load, filtered, debug):
-    with debug.step("T1 water correction"):
-        water = run_t1_water_correction_workflow(config, subject, session, load, filtered)
+def _step_t1_saturation_correction(config, subject, session, load, filtered, debug):
+    with debug.step("T1 saturation correction"):
+        water = run_t1_saturation_correction_workflow(config, subject, session, load, filtered)
         qc_sections_t1_correction = None
         if water.provenance is not None:
             qc_sections_t1_correction = build_t1_correction_qc_sections(
@@ -217,6 +217,7 @@ def _step_resampling(config, subject, session, anat, mrsi_reference, registratio
             transformed.get("T1w", {}).get(config.ref_met),
             orig_ref_map_path=corrected_maps.get(config.ref_met),
             mrsi_to_t1_transforms=registration.mrsi_to_t1.forward,
+            t1_maps=transformed.get("T1w"),
         )
         qc_sections_mni_alignment = build_mni_alignment_sections(
             config,
@@ -225,6 +226,7 @@ def _step_resampling(config, subject, session, anat, mrsi_reference, registratio
             transformed.get("MNI152NLin2009cAsym", {}).get(config.ref_met),
             mni_resolution=mni_resolution,
             t1_to_mni_transforms=registration.t1_to_mni.forward if registration.t1_to_mni else None,
+            mni_maps=transformed.get("MNI152NLin2009cAsym"),
         )
     return transformed, qc_sections_t1w_alignment, qc_sections_mni_alignment
 

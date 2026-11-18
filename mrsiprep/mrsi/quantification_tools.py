@@ -44,7 +44,13 @@ import numpy as np
 _GYROMAGNETIC_MHZ_PER_T = {"1H": 42.577478}
 
 SUPPORTED_LINEWIDTH_UNITS = ("Hz", "ppm")
-SUPPORTED_CRLB_UNITS = ("percent",)
+SUPPORTED_CRLB_UNITS = ("percent", "permille")
+
+# Multiply a CRLB map stored in the given unit by this factor to get percent.
+# "permille" (tenths of a percent) covers exports that store %SD as an
+# integer with one implied decimal, e.g. MRSQUARE's UNC_* maps (99 -> 9.9%,
+# out-of-fit voxels capped at 9999 -> 999.9%, LCModel's 999% ceiling).
+_CRLB_TO_PERCENT = {"percent": 1.0, "permille": 0.1}
 
 
 def _identity(values: np.ndarray) -> np.ndarray:
@@ -80,11 +86,13 @@ def resolve_linewidth_unit(cli_value: str | None, mrsinmrs: dict | None) -> str:
 def resolve_crlb_unit(cli_value: str | None, mrsinmrs: dict | None) -> str:
     """Resolve the declared CRLB unit: CLI flag, then mrsinmrs.json.
 
-    Mandatory for the same reason as :func:`resolve_linewidth_unit`. Only
-    "percent" is currently supported -- ``--crlb-max`` is defined as a
-    percentage of the fitted amplitude -- but the declaration is still
-    required rather than assumed, so an export in absolute units fails
-    loudly instead of being thresholded as if it were already a percentage.
+    Mandatory for the same reason as :func:`resolve_linewidth_unit`.
+    ``--crlb-max`` is defined as a percentage of the fitted amplitude;
+    "permille" maps are converted to percent (see
+    :func:`normalize_crlb_to_percent`) before any thresholding. The
+    declaration is required rather than assumed, so an export in absolute
+    units fails loudly instead of being thresholded as if it were already a
+    percentage.
     """
     if cli_value is not None:
         if cli_value not in SUPPORTED_CRLB_UNITS:
@@ -94,7 +102,7 @@ def resolve_crlb_unit(cli_value: str | None, mrsinmrs: dict | None) -> str:
     if declared is None:
         raise QuantificationToolError(
             "No CRLB unit specified. Add \"CRLBUnit\" "
-            f"(currently only {', '.join(SUPPORTED_CRLB_UNITS)} is supported) to CommonMetadata in "
+            f"(one of {', '.join(SUPPORTED_CRLB_UNITS)}) to CommonMetadata in "
             "mrsinmrs.json, or pass --crlb-unit explicitly. This is required because --crlb-max is "
             "defined as a percentage, and thresholding an absolute-unit map against it unconverted "
             "would silently misjudge voxel quality."
@@ -102,6 +110,18 @@ def resolve_crlb_unit(cli_value: str | None, mrsinmrs: dict | None) -> str:
     if declared not in SUPPORTED_CRLB_UNITS:
         raise QuantificationToolError(f"Unsupported CRLBUnit '{declared}' in mrsinmrs.json. Supported values: {', '.join(SUPPORTED_CRLB_UNITS)}.")
     return declared
+
+
+def normalize_crlb_to_percent(values: np.ndarray, unit: str) -> np.ndarray:
+    """Convert a loaded CRLB map to percent, MRSIPrep's internal convention.
+
+    :param unit: As resolved by :func:`resolve_crlb_unit`.
+    """
+    try:
+        factor = _CRLB_TO_PERCENT[unit]
+    except KeyError:
+        raise QuantificationToolError(f"Unsupported CRLB unit '{unit}'. Supported values: {', '.join(SUPPORTED_CRLB_UNITS)}.") from None
+    return values if factor == 1.0 else values * factor
 
 
 def normalize_linewidth_to_hz(values: np.ndarray, unit: str, nucleus: str, field_strength_t: float | None) -> np.ndarray:

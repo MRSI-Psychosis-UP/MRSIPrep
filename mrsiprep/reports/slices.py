@@ -159,7 +159,7 @@ def label_outline_overlay(ax, label_slice: np.ndarray, colors=OUTLINE_COLORS, li
             ax.plot(contour[:, 1], contour[:, 0], color=color, linewidth=linewidth)
 
 
-def mask_contour_overlay(ax, mask_slice: np.ndarray, color: str = "#00e5ff", level: float = 0.5, linewidth: float = 1.23) -> None:
+def mask_contour_overlay(ax, mask_slice: np.ndarray, color: str = "#00e5ff", level: float = 0.5, linewidth: float = 0.8) -> None:
     """Single-colour contour of one binary/probabilistic mask slice (e.g. a
     white-matter probseg thresholded at ``level``) -- unlike
     :func:`label_outline_overlay`, which rainbow-colours each distinct label
@@ -318,6 +318,53 @@ def render_multi_slice_triplanar_png(
     return out_path
 
 
+def render_axial_overlay_montage(
+    background: np.ndarray,
+    overlay: np.ndarray,
+    out_path: str | Path,
+    label: str,
+    overlay_cmap: str = "magma",
+    n_slices: int = 10,
+) -> Path:
+    """Single-row axial montage of ``overlay`` (solid, zeros masked out) on
+    ``background``, at equally-spaced slices chosen from ``overlay``'s own
+    extent (see :func:`axial_slices_center_weighted`) -- same presentation
+    as the MRSI Raw/PVC tabs' per-metabolite montages
+    (:mod:`mrsiprep.reports.mrsi_raw_overview`), reused here for the
+    per-metabolite alignment montages in the T1w-space/Template-space tabs.
+    """
+    import matplotlib.pyplot as plt
+
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    background = np.squeeze(background)
+    overlay_arr = np.squeeze(overlay)
+
+    finite = overlay_arr[np.isfinite(overlay_arr) & (overlay_arr != 0)]
+    vmin = 0.0
+    vmax = float(np.percentile(finite, 99)) if finite.size else 1.0
+    vmax = max(vmax, vmin + 1e-6)
+
+    slices = axial_slices_center_weighted(overlay_arr, n_slices)
+    n = len(slices)
+    fig, axes = plt.subplots(1, n, figsize=(1.8 * n, 2.2), constrained_layout=True)
+    if n == 1:
+        axes = [axes]
+    overlay_image = None
+    for ax, (index, _) in zip(axes, slices):
+        bg_slice = np.rot90(np.take(background, index, axis=2))
+        ov_slice = np.rot90(np.take(overlay_arr, index, axis=2))
+        ax.imshow(bg_slice, cmap="gray")
+        overlay_image = ax.imshow(np.ma.masked_equal(ov_slice, 0), cmap=overlay_cmap, vmin=vmin, vmax=vmax)
+        ax.set_title(f"z={index}", fontsize=8)
+        ax.axis("off")
+    if overlay_image is not None:
+        fig.colorbar(overlay_image, ax=axes, fraction=0.02, pad=0.02, label=label)
+    fig.savefig(out_path)
+    plt.close(fig)
+    return out_path
+
+
 _SVG_ID_REF_ATTRS = ("clip-path", "fill", "stroke", "mask", "filter", "marker-start", "marker-mid", "marker-end")
 _XLINK_HREF = "{http://www.w3.org/1999/xlink}href"
 _SVG_HREF = "{http://www.w3.org/2000/svg}href"
@@ -438,6 +485,120 @@ def compose_flicker_svg(background_svg: str, foreground_svg: str, out_path: str 
 
     fg_group = ET.SubElement(composed, f"{svg_ns}g", {"class": f"foreground-svg flicker-fg-{flicker_id}"})
     fg_group.extend(list(fg_root))
+
+    ET.ElementTree(composed).write(out_path, encoding="unicode", xml_declaration=False)
+    return out_path
+
+
+def compose_layered_crossfade_svg(
+    base_svg: str,
+    layers: list[tuple[str, list[tuple[float, float]]]],
+    out_path: str | Path,
+    cycle_id: str,
+    total_seconds: float,
+) -> Path:
+    """Merge one permanently-opaque base document with N independently-
+    fading transparent layers into one hover-to-cycle, smoothly-crossfading
+    reportlet -- same interaction model as :func:`compose_flicker_svg`
+    (paused until :hover, nothing animates on page load), just with a
+    multi-stop crossfade instead of a single two-layer fade.
+
+    Each layer in ``layers`` fades in/out on its own CSS ``@keyframes``
+    opacity track -- plain (non-``steps()``) percentage keyframes, so the
+    browser interpolates between consecutive stops and the transitions
+    genuinely crossfade rather than jumping between discrete frames.
+    Opacity only ever *adds* a transparent layer's content on
+    top of what's already visible; it can never subtract something the
+    base already drew. So anything one state of the cycle must NOT show
+    that an earlier state did (e.g. a contour drawn in the base) cannot be
+    hidden this way -- the base must be the state every frame has in
+    common (typically the plain anatomy alone), with every difference
+    between frames expressed as a separate fading layer on top of it.
+
+    All layers pause/resume together on a single hover region covering the
+    whole composed figure (a wrapping ``<g>``, not each layer's own,
+    possibly-transparent-at-that-instant area) -- hovering anywhere over
+    the image starts every layer's animation in sync, and leaving freezes
+    all of them wherever they were, same as :func:`compose_flicker_svg`
+    (no special reset-on-leave logic; `animation-play-state: paused` holds
+    the current computed frame, it does not rewind to 0%).
+
+    :param base_svg: Raw SVG document text for the permanent, fully-opaque
+        base layer (rendered non-transparent).
+    :param layers: ``(layer_svg, keyframe_stops)`` pairs, each rendered
+        with a transparent background. ``keyframe_stops`` is a list of
+        ``(percent, opacity)`` tuples (0-100, 0.0-1.0); CSS linearly
+        interpolates opacity between consecutive stops. Must include a
+        ``(0, ...)`` and a ``(100, ...)`` stop (not enforced here -- an
+        incomplete track just holds its first/last given value past the
+        ends, which is almost certainly not the intended animation).
+    :param out_path: Where to write the composed SVG.
+    :param cycle_id: Unique suffix for the CSS animation name (same
+        uniqueness requirement as ``flicker_id`` in :func:`compose_flicker_svg`).
+    :param total_seconds: Duration of one full cycle before it loops.
+    :returns: ``out_path``.
+    """
+    import xml.etree.ElementTree as ET
+
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if not layers:
+        raise ValueError("compose_layered_crossfade_svg needs at least 1 fading layer")
+
+    ET.register_namespace("", "http://www.w3.org/2000/svg")
+    ET.register_namespace("xlink", "http://www.w3.org/1999/xlink")
+
+    base_root = ET.fromstring(base_svg)
+    _prefix_svg_ids(base_root, "base-")
+    layer_roots = [ET.fromstring(svg) for svg, _ in layers]
+    for index, root in enumerate(layer_roots):
+        _prefix_svg_ids(root, f"l{index}-")
+
+    view_box = base_root.get("viewBox", "0 0 100 100")
+    width, height = base_root.get("width"), base_root.get("height")
+
+    svg_ns = "{http://www.w3.org/2000/svg}"
+    composed = ET.Element(
+        f"{svg_ns}svg",
+        {"version": "1.1", "viewBox": view_box, "preserveAspectRatio": "xMidYMid meet"},
+    )
+    if width:
+        composed.set("width", width)
+    if height:
+        composed.set("height", height)
+
+    style = ET.SubElement(composed, f"{svg_ns}style")
+    style.set("type", "text/css")
+    hover_root_class = f"cycle-hover-root-{cycle_id}"
+    keyframes_css = ""
+    layer_css = ""
+    for index, (_, stops) in enumerate(layers):
+        stop_rules = " ".join(f"{pct:.4f}% {{opacity: {opacity};}}" for pct, opacity in stops)
+        keyframes_css += f"@keyframes cycle-{cycle_id}-{index} {{ {stop_rules} }}"
+        # paused by default (nothing animates on page load, matching
+        # compose_flicker_svg) -- the whole-figure hover rule below is what
+        # starts every layer's animation together.
+        layer_css += (
+            f".cycle-layer-{cycle_id}-{index} {{ "
+            f"animation: {total_seconds:.3f}s linear 0s infinite paused cycle-{cycle_id}-{index}; }}"
+        )
+    # One hover rule, scoped to the whole-figure wrapper (not each layer's
+    # own, possibly near-transparent-at-that-instant area) resumes every
+    # layer's animation in sync -- see the docstring for why this must be
+    # a single shared hover region rather than one :hover per layer.
+    hover_selectors = ", ".join(f".{hover_root_class}:hover .cycle-layer-{cycle_id}-{i}" for i in range(len(layers)))
+    layer_css += f"{hover_selectors} {{ animation-play-state: running; }}"
+    style.text = keyframes_css + layer_css
+
+    hover_root = ET.SubElement(composed, f"{svg_ns}g", {"class": hover_root_class})
+
+    base_group = ET.SubElement(hover_root, f"{svg_ns}g", {"class": "cycle-base"})
+    base_group.extend(list(base_root))
+
+    for index, root in enumerate(layer_roots):
+        group = ET.SubElement(hover_root, f"{svg_ns}g", {"class": f"cycle-layer-{cycle_id}-{index}"})
+        group.extend(list(root))
 
     ET.ElementTree(composed).write(out_path, encoding="unicode", xml_declaration=False)
     return out_path
@@ -586,9 +747,16 @@ def render_multi_slice_triplanar_svg_flicker(
     ``wm_mask``, when given, must be on the same grid as ``background``/
     ``overlay`` -- its contour (see :func:`mask_contour_overlay`; light blue,
     not fMRIPrep's own red, since the overlay colormap here is red/orange-
-    heavy) is drawn identically on every panel of both layers, independent
-    of ``show_overlay``, so it stays pixel-aligned across the flicker like
-    the L/R markers and titles do.
+    heavy) is drawn at the same pixel position on every panel it appears on,
+    like the L/R markers and titles. With a mask, the reportlet becomes a
+    hover-to-cycle, smoothly crossfading figure (via
+    :func:`compose_layered_crossfade_svg`, not the 2-layer hover-flicker
+    used otherwise): anatomy+contour, then anatomy+contour+MRSI, then
+    anatomy+MRSI alone with no contour, looping back to the first while
+    hovered. The third state exists because the contour can distract from
+    judging the anat/MRSI alignment on its own. Without a mask, there's
+    nothing to add a third state between, so this falls back to the plain
+    2-layer hover-to-flicker (anatomy <-> anatomy+MRSI) as before.
 
     The colorbar is drawn directly into its own dedicated grid column (via
     ``cax=``, not ``fig.colorbar(..., ax=...)``) -- the latter steals space
@@ -621,7 +789,19 @@ def render_multi_slice_triplanar_svg_flicker(
     cbar_col_width = 0.3
     width_ratios = [1.0] * n_slices + [cbar_col_width]
 
-    def _render(*, show_overlay: bool, transparent: bool, fixed_positions: list | None) -> tuple[str, list]:
+    def _render(
+        *,
+        layer_content: str,
+        transparent: bool,
+        fixed_positions: list | None,
+    ) -> tuple[str, list]:
+        """``layer_content``: "anatomy" (background only), "overlay" (MRSI
+        overlay only -- plus anatomy underneath when not ``transparent``,
+        i.e. when this is the plain 2-layer flicker's foreground, not a
+        fading layer meant to composite onto a separate base), or
+        "contour" (the WM mask contour alone, nothing else -- always on a
+        transparent background, used only as one of the 3-frame cycle's
+        independently-fading layers)."""
         fig, axes = plt.subplots(
             len(planes),
             n_slices + 1,
@@ -650,20 +830,31 @@ def render_multi_slice_triplanar_svg_flicker(
                     ax.axis("off")
                     continue
                 index = indices[col]
-                if not show_overlay:
+                if layer_content == "anatomy":
                     bg_slice = np.rot90(np.take(background, index, axis=axis))
                     background_image = ax.imshow(bg_slice, cmap=cmap)
-                else:
+                elif layer_content == "overlay":
+                    bg_slice = np.rot90(np.take(background, index, axis=axis))
                     ov_slice = np.rot90(np.take(overlay_arr, index, axis=axis))
+                    # transparent=False here means this overlay layer is
+                    # the plain 2-layer flicker's foreground, composited
+                    # directly onto a separately-rendered opaque background
+                    # layer by the caller -- draw a transparent placeholder,
+                    # not real anatomy, so that background still shows
+                    # through underneath once the two are merged.
+                    if not transparent and overlay_mode != "outline":
+                        ax.imshow(bg_slice, cmap=cmap)
                     if overlay_mode == "outline":
-                        bg_slice = np.rot90(np.take(background, index, axis=axis))
                         ax.imshow(np.zeros_like(bg_slice), cmap="gray", alpha=0.0)
                         label_outline_overlay(ax, ov_slice)
                     elif overlay_mode == "alpha":
                         overlay_image = ax.imshow(ov_slice, cmap=overlay_cmap, alpha=1.0, vmin=vmin, vmax=vmax)
                     elif overlay_mode == "solid":
                         overlay_image = ax.imshow(np.ma.masked_equal(ov_slice, 0), cmap=overlay_cmap, vmin=vmin, vmax=vmax)
-                if wm_mask_arr is not None:
+                else:  # "contour": nothing but a transparent placeholder + the contour itself
+                    bg_slice = np.rot90(np.take(background, index, axis=axis))
+                    ax.imshow(np.zeros_like(bg_slice), cmap="gray", alpha=0.0)
+                if layer_content == "contour" and wm_mask_arr is not None:
                     wm_slice = np.rot90(np.take(wm_mask_arr, index, axis=axis))
                     mask_contour_overlay(ax, wm_slice)
                 ax.set_title(_panel_title(affine, plane, index), fontsize=7)
@@ -721,8 +912,30 @@ def render_multi_slice_triplanar_svg_flicker(
                     # as a real colorbar while rendering nothing visible.
                     for artist in (cbar.ax.yaxis.label, cbar.outline, *cbar.ax.get_yticklabels(), *cbar.ax.yaxis.get_ticklines()):
                         artist.set_alpha(0)
+                    # The gradient itself is a QuadMesh (cbar.ax.collections),
+                    # not an AxesImage in current matplotlib -- cbar.ax.images
+                    # is always empty here, so hiding only that silently no-ops
+                    # and leaves the gradient fully visible (confirmed
+                    # empirically: this is what let a hidden background-layer
+                    # colorbar show through once composited as this
+                    # function's own permanent base layer rather than only
+                    # ever appearing underneath an identically-positioned
+                    # real colorbar). Hide both, whichever matplotlib used.
                     if cbar.ax.images:
                         cbar.ax.images[0].set_alpha(0)
+                    for collection in cbar.ax.collections:
+                        collection.set_alpha(0)
+            else:
+                # Neither an overlay nor a background image was drawn this
+                # pass (the "contour"-only layer: nothing in its loop body
+                # ever sets overlay_image/background_image) -- there is
+                # nothing to put a colorbar on, so the cell would otherwise
+                # be left as a bare Axes with its default visible border.
+                # This pass's positions are always pinned from an earlier
+                # pass (never solved here), so turning the axes fully off
+                # can't desync the geometry the way it would for a pass
+                # that still needs to solve its own layout.
+                cbar_ax.axis("off")
         else:
             cbar_ax.axis("off")
         # The colorbar axis is pinned too (not just the slice panels): its
@@ -753,9 +966,58 @@ def render_multi_slice_triplanar_svg_flicker(
         plt.close(fig)
         return buf.getvalue().decode(), positions
 
-    background_doc, positions = _render(show_overlay=False, transparent=False, fixed_positions=None)
-    foreground_doc, _ = _render(show_overlay=True, transparent=True, fixed_positions=positions)
-    return compose_flicker_svg(background_doc, foreground_doc, out_path, flicker_id)
+    if wm_mask_arr is None:
+        background_doc, positions = _render(layer_content="anatomy", transparent=False, fixed_positions=None)
+        foreground_doc, _ = _render(layer_content="overlay", transparent=True, fixed_positions=positions)
+        return compose_flicker_svg(background_doc, foreground_doc, out_path, flicker_id)
+
+    # Hover-to-cycle, smoothly crossfading between 3 states: anat+contour
+    # -> anat+contour+MRSI -> anat+MRSI (no contour) -> back to anat+contour.
+    # The anatomy-only pass is the permanently-opaque base (every state
+    # shows it); the contour and the MRSI overlay are two independently-
+    # fading transparent layers on top, each on its own opacity track, so
+    # the transitions genuinely crossfade instead of jumping between
+    # discrete frames. Positions are solved once on the base and pinned on
+    # the other two so all three stay pixel-aligned, same reasoning as the
+    # two-layer flicker case above.
+    anatomy_doc, positions = _render(layer_content="anatomy", transparent=False, fixed_positions=None)
+    contour_doc, _ = _render(layer_content="contour", transparent=True, fixed_positions=positions)
+    overlay_doc, _ = _render(layer_content="overlay", transparent=True, fixed_positions=positions)
+
+    hold_seconds, fade_seconds = 1.0, 0.4
+    segment = hold_seconds + fade_seconds
+    total = 3 * segment
+
+    def _pct(t: float) -> float:
+        return 100 * (t % total) / total
+
+    # Segment 0 [0, segment): contour on, overlay off ("anat+contour").
+    # Segment 1 [segment, 2*segment): contour on, overlay on ("+MRSI").
+    # Segment 2 [2*segment, total): contour off, overlay on ("anat+MRSI").
+    # Each segment holds for hold_seconds then crossfades for fade_seconds
+    # into the next -- the two tracks only ever move during the fade
+    # windows between segments, each other's "hold" value elsewhere.
+    contour_stops = [
+        (_pct(0), 1), (_pct(hold_seconds), 1),  # segment 0 hold
+        (_pct(2 * segment - fade_seconds), 1), (_pct(2 * segment), 0),  # fades out at the end of segment 1
+        (_pct(total - fade_seconds), 0), (100.0, 1),  # fades back in at the end of segment 2 (loop point)
+    ]
+    overlay_stops = [
+        (_pct(0), 0), (_pct(hold_seconds), 0),  # segment 0 hold
+        (_pct(segment), 1),  # fades in at the end of segment 0
+        (_pct(total - fade_seconds), 1), (100.0, 0),  # fades back out at the end of segment 2 (loop point)
+    ]
+    # Layer order matters: later layers paint on top in the composed SVG,
+    # and the contour must stay visible over the MRSI overlay wherever
+    # they overlap (frame 2's anat+contour+MRSI state) rather than being
+    # occluded by it -- so overlay is added first, contour last.
+    return compose_layered_crossfade_svg(
+        anatomy_doc,
+        [(overlay_doc, overlay_stops), (contour_doc, contour_stops)],
+        out_path,
+        flicker_id,
+        total_seconds=total,
+    )
 
 
 def render_axial_before_after_svg_flicker(

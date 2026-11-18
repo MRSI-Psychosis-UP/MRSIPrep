@@ -85,7 +85,7 @@ if it were Hz (or vice versa) would silently pass or fail the wrong voxels.
 | Field | Accepted values | Notes |
 |---|---|---|
 | `LinewidthUnit` | `Hz`, `ppm` | `ppm` is converted to Hz using `MagneticFieldStrength` (mandatory in `CommonMetadata` when `LinewidthUnit` is `ppm`) and the declared nucleus's Larmor frequency. Conversion is currently curated for `1H` only. |
-| `CRLBUnit` | `percent` | Declared explicitly rather than assumed; only `percent` is supported today. |
+| `CRLBUnit` | `percent`, `permille` | Declared explicitly rather than assumed. `permille` (tenths of a percent, e.g. MRSQUARE `UNC_*` maps where `99` means 9.9%) is divided by 10 when the maps are copied into the derivatives tree; every later step reads those percent copies. |
 
 `SNRUnit` is optional and not currently used for conversion — SNR is
 treated as unitless regardless of what, if anything, is declared.
