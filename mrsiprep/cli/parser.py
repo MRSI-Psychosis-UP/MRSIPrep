@@ -65,10 +65,10 @@ def build_parser() -> argparse.ArgumentParser:
     selection.add_argument(
         "--t1",
         dest="t1_pattern",
-        default="desc-brain_T1w",
+        default="acq-mprage_T1w",
         help="BIDS entity/suffix pattern used to locate the skull-stripped T1w derivative for each "
-        "recording (e.g. 'desc-brain_T1w', or 'acq-mprage_T1w' to select among multiple raw T1w "
-        "acquisitions -- see --bids-filter-file for finer-grained disambiguation). Also determines what "
+        "recording (e.g. 'acq-mprage_T1w', or 'desc-brain_T1w' to select a skull-stripped derivative "
+        "instead -- see --bids-filter-file for finer-grained disambiguation). Also determines what "
         "the anatprep and registration steps operate on.",
     )
     selection.add_argument(

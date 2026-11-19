@@ -43,6 +43,7 @@ class BIDSInputTests(unittest.TestCase):
                 session_label=["V1"],
                 metabolites=["CrPCr"],
                 ref_met="CrPCr",
+                t1_pattern="desc-brain_T1w",
                 # parcellation_mode chimera/atlas derives registration_t1_target
                 # to brain-csf by default, which is what this test needs.
                 parcellation_mode="chimera",
@@ -59,6 +60,7 @@ class BIDSInputTests(unittest.TestCase):
                 session_label=["V1"],
                 metabolites=["CrPCr"],
                 ref_met="CrPCr",
+                t1_pattern="desc-brain_T1w",
                 parcellation_mode="chimera",
                 tissue_backend="synthseg-fast",
             )

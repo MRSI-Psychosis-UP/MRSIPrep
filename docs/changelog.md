@@ -1,5 +1,36 @@
 # Changelog
 
+## 2.2.4
+
+### Command Builder GUI
+
+- The Analysis step's two outcome cards ("Normalize metabolite maps" /
+  "Parcellation and connectivity") now show a thumbnail image.
+- "Raw MRSI data location" (Data step) now shows a caption with the
+  actual effective path: `<root>/derivatives/mrsi-<space>/` in Standard
+  location mode, or the exact text entered in Specify-a-path mode. Fixed
+  a bug where specifying a custom `--mrsi-input-dir` could change the
+  suggested `--mrsinmrs-file` default in a confusing way: it previously
+  ran the custom path through `_normalize_mrsi_input_dir` (which strips
+  trailing `derivatives`/`mrsi-*`/`sub-*`/`ses-*` segments, intended for
+  `BIDSLayout`'s own lenient folder lookup) before re-appending
+  `derivatives/mrsi-orig/mrsinmrs.json`, so a custom path already
+  pointing near or past that convention got silently altered. The
+  suggested `--mrsinmrs-file` default is now built by appending
+  `derivatives/mrsi-orig/mrsinmrs.json` directly onto the effective
+  `--mrsi-input-dir` value, exactly matching
+  `MRSIPrepConfig._resolve_paths`'s own real default-resolution rule.
+  `--mrsi-input-dir` itself was never affected -- it was always emitted
+  to the generated command exactly as typed.
+
+### CLI
+
+- `--t1`'s default pattern changed from `desc-brain_T1w` to
+  `acq-mprage_T1w` (`MRSIPrepConfig.t1_pattern`'s dataclass default
+  changed to match) -- `acq-mprage_T1w` is the more common raw-T1w
+  acquisition pattern; `desc-brain_T1w` (a skull-stripped derivative)
+  remains available by passing `--t1 desc-brain_T1w` explicitly.
+
 ## 2.2.3
 
 ### CLI

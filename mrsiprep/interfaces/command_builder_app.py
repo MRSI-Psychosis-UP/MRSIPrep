@@ -31,7 +31,6 @@ import pandas as pd
 import streamlit as st
 
 from mrsiprep.cli.parser import build_parser
-from mrsiprep.io.bids import _normalize_mrsi_input_dir
 from mrsiprep.utils.version import mrsiprep_version
 from mrsiprep.config.chimera_schemes import (
     SUPRA_REGION_LABELS,
@@ -44,6 +43,11 @@ from mrsiprep.workflows.nipype_engine.steps_registry import STEP_DEPENDENCIES, v
 
 # Debug/internal flags not useful in a user-facing form.
 EXCLUDED_FLAGS = {"--hello-world", "--help", "-h"}
+
+# Analysis-step outcome-card thumbnails (see _render_wizard_analysis_step).
+WIZARD_ASSETS_DIR = Path(__file__).parent / "assets"
+WIZARD_NORMALIZE_THUMBNAIL = WIZARD_ASSETS_DIR / "wizard_normalize_thumbnail.svg"
+WIZARD_PARCELLATION_THUMBNAIL = WIZARD_ASSETS_DIR / "wizard_parcellation_thumbnail.png"
 
 # store_true/store_false flag pairs sharing one dest (e.g. --fsl-deformable /
 # --no-fsl-deformable): only the positive flag gets a widget; the negative
@@ -1427,6 +1431,8 @@ def _render_wizard_analysis_step() -> None:
     col1, col2 = st.columns(2)
     with col1:
         with st.container(border=True):
+            if WIZARD_NORMALIZE_THUMBNAIL.exists():
+                st.image(str(WIZARD_NORMALIZE_THUMBNAIL), width="stretch")
             st.subheader("Normalize metabolite maps")
             st.write(
                 "Prepare and register metabolite maps into standard space, with the full quality "
@@ -1441,6 +1447,8 @@ def _render_wizard_analysis_step() -> None:
                 st.rerun()
     with col2:
         with st.container(border=True):
+            if WIZARD_PARCELLATION_THUMBNAIL.exists():
+                st.image(str(WIZARD_PARCELLATION_THUMBNAIL), width="stretch")
             st.subheader("Parcellation and connectivity")
             st.write(
                 "Same underlying pipeline, plus a guided choice of parcellation method (including "
@@ -1543,18 +1551,28 @@ def _render_wizard_data_step(optionals: list[argparse.Action], positionals: list
     t1_pattern = st.text_input(f"{t1_label} (--t1)", help=t1_help, key=t1_key)
     _wizard_shadow_set("t1_pattern", t1_pattern)
 
-    normalized_mrsi_root = str(_normalize_mrsi_input_dir(bids_dir)) if bids_dir else ""
     st.subheader("Raw MRSI data location")
     mrsi_input_label, mrsi_input_help = _wizard_label_help(
         "mrsi_input_dir", "--mrsi-input-dir", (action_lookup["--mrsi-input-dir"].help or "").strip()
     )
+    # Standard-location default mirrors MRSIPrepConfig._resolve_paths exactly:
+    # bare bids_dir, used verbatim -- never normalized/stripped, so a custom
+    # path the user types is never silently altered either (see
+    # default_mrsinmrs_file below, which appends to this same value as-is).
     effective_mrsi_input_dir, mrsi_input_custom = _render_path_mode_field(
         "mrsi_input_dir", "--mrsi-input-dir", bids_dir, f"{mrsi_input_label}. {mrsi_input_help}"
     )
-    normalized_effective_root = (
-        str(_normalize_mrsi_input_dir(effective_mrsi_input_dir)) if effective_mrsi_input_dir else normalized_mrsi_root
+    if effective_mrsi_input_dir:
+        if mrsi_input_custom:
+            st.caption(f"Raw MRSI data read from: `{effective_mrsi_input_dir}` (used exactly as entered).")
+        else:
+            st.caption(
+                f"Raw MRSI data expected under: `{effective_mrsi_input_dir.rstrip('/')}/derivatives/mrsi-<space>/` "
+                "(e.g. `derivatives/mrsi-orig/`) -- same root as your BIDS dataset."
+            )
+    default_mrsinmrs_file = (
+        f"{effective_mrsi_input_dir.rstrip('/')}/derivatives/mrsi-orig/mrsinmrs.json" if effective_mrsi_input_dir else ""
     )
-    default_mrsinmrs_file = f"{normalized_effective_root}/derivatives/mrsi-orig/mrsinmrs.json" if normalized_effective_root else ""
 
     mrsinmrs_label, mrsinmrs_help = _wizard_label_help(
         "mrsinmrs_file", "--mrsinmrs-file", (action_lookup["--mrsinmrs-file"].help or "").strip()

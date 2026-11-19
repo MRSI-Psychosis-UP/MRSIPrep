@@ -84,7 +84,7 @@ class MRSIPrepConfig:
     nthreads: int = 16
     nproc: int = 1
     ref_met: str | None = None
-    t1_pattern: str = "desc-brain_T1w"
+    t1_pattern: str = "acq-mprage_T1w"
     transform: str = ""
     filter_biharmonic: bool = True
     filter_fwhm_mm: float | None = None
