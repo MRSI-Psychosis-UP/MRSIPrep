@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### mrsiprep-docker wrapper (v1.1.0)
+
+- Added `mrsiprep-docker --update`: pulls the latest `--image` (default
+  `mrsiup/mrsiprep:cpu`) from Docker Hub and exits, without needing
+  `bids_dir`/`output_dir` or processing anything. Equivalent to
+  `docker pull mrsiup/mrsiprep:cpu` run directly, but matches the rest of
+  the wrapper's `mrsiprep-docker ...` invocation style and reuses its
+  existing Docker-availability checks/error messages.
+
 ## 2.2.5
 
 ### CLI

@@ -18,6 +18,14 @@ download it; accepting runs `docker pull mrsiup/mrsiprep:cpu`. An existing
 local image is reused. Processing commands also pull a missing image
 automatically.
 
+Once installed, `mrsiprep-docker --update` pulls the latest published image
+on demand -- useful after a new MRSIPrep release, without needing a dataset
+or re-running `pip install`:
+
+```bash
+mrsiprep-docker --update
+```
+
 ## Verify the pull: `--hello-world`
 
 Check that the container runs, without a dataset or licence:

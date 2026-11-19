@@ -71,6 +71,7 @@ def get_parser() -> argparse.ArgumentParser:
 
     g_wrap = parser.add_argument_group("Wrapper (Docker-only) options")
     g_wrap.add_argument("--image", default="mrsiup/mrsiprep:cpu", help="Docker image to use")
+    g_wrap.add_argument("--update", action="store_true", help="pull the latest --image from Docker Hub, then exit (no bids_dir/output_dir needed)")
     g_wrap.add_argument("--fs-license-file", metavar="PATH", type=os.path.abspath, help="path to a FreeSurfer license.txt, mounted and exported as FS_LICENSE")
     g_wrap.add_argument("--fs-subjects-dir", metavar="PATH", type=os.path.abspath, help="existing FreeSurfer SUBJECTS_DIR to mount and reuse")
     g_wrap.add_argument("--work-dir", metavar="PATH", type=os.path.abspath, help="scratch directory, mounted at /scratch")
@@ -88,7 +89,7 @@ def main() -> int:
     parser = get_parser()
     opts, unknown_args = parser.parse_known_args()
 
-    if (opts.bids_dir, opts.output_dir, opts.version, opts.help) == ("", "", False, False):
+    if (opts.bids_dir, opts.output_dir, opts.version, opts.help, opts.update) == ("", "", False, False, False):
         opts.help = True
 
     # mrsiprep's own CLI has no --version flag to query inside the container,
@@ -97,6 +98,24 @@ def main() -> int:
     if opts.version:
         print(f"mrsiprep-docker wrapper {__version__}")
         print(f"image: {opts.image}")
+        return 0
+
+    if opts.update:
+        check = check_docker()
+        if check < 1:
+            if check == -1:
+                print("mrsiprep-docker: could not find the docker command. Is Docker installed?")
+            else:
+                print("mrsiprep-docker: make sure you have permission to run 'docker' (is the daemon running?)")
+            return 1
+        print(f"Pulling the latest '{opts.image}'...")
+        # nosemgrep: dangerous-subprocess-use-audit,avoid-execution-of-untrusted-input-in-subprocess-calls,python.exec.rule-subprocess-call-array
+        # nosec B603 B607 -- opts.image is a CLI argument passed as a discrete list element, never
+        # through a shell; "docker" is resolved via PATH by design.
+        pull = subprocess.run(["docker", "pull", opts.image])
+        if pull.returncode:
+            return pull.returncode
+        print(f"mrsiprep-docker: '{opts.image}' is up to date.")
         return 0
 
     if opts.mrsinmrs_file and not opts.help and not Path(opts.mrsinmrs_file).is_file():

@@ -24,6 +24,16 @@ To download the image directly:
 docker pull mrsiup/mrsiprep:cpu
 ```
 
+To update an already-installed image to the latest published version:
+
+```bash
+mrsiprep-docker --update
+```
+
+This is equivalent to `docker pull mrsiup/mrsiprep:cpu` (or whichever
+`--image` you pass) and exits immediately afterward -- it never touches
+`bids_dir`/`output_dir` and does not process anything.
+
 ## Use
 
 ```bash
