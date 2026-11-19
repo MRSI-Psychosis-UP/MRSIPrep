@@ -22,7 +22,10 @@ Run with:
 from __future__ import annotations
 
 import argparse
+import base64
 import html
+import mimetypes
+import re
 import shlex
 import sys
 from pathlib import Path
@@ -48,6 +51,24 @@ EXCLUDED_FLAGS = {"--hello-world", "--help", "-h"}
 WIZARD_ASSETS_DIR = Path(__file__).parent / "assets"
 WIZARD_NORMALIZE_THUMBNAIL = WIZARD_ASSETS_DIR / "wizard_normalize_thumbnail.svg"
 WIZARD_PARCELLATION_THUMBNAIL = WIZARD_ASSETS_DIR / "wizard_parcellation_thumbnail.png"
+WIZARD_THUMBNAIL_HEIGHT_PX = 220
+
+
+def _render_wizard_thumbnail(path: Path, height_px: int = WIZARD_THUMBNAIL_HEIGHT_PX) -> None:
+    """Render `path` into a fixed-height, full-width box, cropping (not
+    stretching) to fill it -- st.image alone has no crop mode, and the two
+    outcome-card source images have very different native aspect ratios
+    (a wide/short metabolite-map montage vs. a near-square brain render),
+    so stretching each to the column width independently made them look
+    wildly disproportionate next to each other."""
+    mime = mimetypes.guess_type(path.name)[0] or "image/png"
+    encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+    st.markdown(
+        f"<div style='width:100%;height:{height_px}px;border-radius:0.5rem;overflow:hidden;'>"
+        f"<img src='data:{mime};base64,{encoded}' "
+        f"style='width:100%;height:100%;object-fit:cover;display:block;'></div>",
+        unsafe_allow_html=True,
+    )
 
 # store_true/store_false flag pairs sharing one dest (e.g. --fsl-deformable /
 # --no-fsl-deformable): only the positive flag gets a widget; the negative
@@ -1118,7 +1139,31 @@ def _wizard_label_help_args(dest: str, action: argparse.Action) -> tuple[str, st
     return label, help_text
 
 
-def _render_metabolites_widget(metabolites_action: argparse.Action, nucleus: str = DEFAULT_NUCLEUS) -> list[str]:
+_MET_TOKEN_RE = re.compile(r"_met-([^_.]+)")
+
+
+def _scan_metabolites_from_filenames(mrsi_input_dir: str | Path) -> list[str]:
+    """Scan `<mrsi_input_dir>/derivatives/mrsi-*/**/*.nii*` filenames for
+    every `met-<NAME>` BIDS entity (see BIDSLayout._mrsi_filename's own
+    "met-{met}" token in mrsiprep/io/bids.py) and return the distinct names
+    found, sorted. Used by the "Scan for metabolites" button so a user
+    pointed at real data doesn't have to already know which metabolite
+    spellings their own files use."""
+    root = Path(mrsi_input_dir)
+    if not root.is_dir():
+        return []
+    found: set[str] = set()
+    for pattern in ("derivatives/mrsi-*/**/*.nii.gz", "derivatives/mrsi-*/**/*.nii"):
+        for path in root.glob(pattern):
+            match = _MET_TOKEN_RE.search(path.name)
+            if match:
+                found.add(match.group(1))
+    return sorted(found)
+
+
+def _render_metabolites_widget(
+    metabolites_action: argparse.Action, nucleus: str = DEFAULT_NUCLEUS, mrsi_input_dir: str | None = None
+) -> list[str]:
     """Multiselect "chip" widget (Streamlit's native multi-select) populated
     from the real nucleus-aware alias table (mrsiprep.config.nuclei.
     metabolite_aliases), replacing the old bare comma-separated text input.
@@ -1135,11 +1180,29 @@ def _render_metabolites_widget(metabolites_action: argparse.Action, nucleus: str
         aliases = metabolite_aliases(nucleus)
     except NucleusError:
         aliases = metabolite_aliases(DEFAULT_NUCLEUS)
-    options = sorted(aliases)
+    options = set(aliases)
     key = f"{WIZARD_KEY_PREFIX}metabolites"
     label, help_text = _wizard_label_help(
         "metabolites", _dest_label(metabolites_action), (metabolites_action.help or "").strip()
     )
+
+    scanned = _wizard_shadow_get("metabolites_scanned", [])
+    col_label, col_button = st.columns([3, 1])
+    with col_button:
+        st.write("")  # vertical-align the button with the label row above.
+        if st.button("Scan for metabolites", key="wizard_scan_metabolites", disabled=not mrsi_input_dir):
+            found = _scan_metabolites_from_filenames(mrsi_input_dir) if mrsi_input_dir else []
+            scanned = found
+            _wizard_shadow_set("metabolites_scanned", scanned)
+            if found:
+                merged = sorted(set(st.session_state.get(key, [])) | set(found))
+                st.session_state[key] = merged
+                _wizard_shadow_set("metabolites", merged)
+                st.toast(f"Found {len(found)} metabolite(s): {', '.join(found)}")
+            else:
+                st.toast("No met-<name> filenames found under that MRSI input directory.", icon="⚠️")
+    options |= set(scanned)
+    options = sorted(options)
     # Streamlit deletes this widget's session_state entry once this step
     # stops being rendered (see WIZARD_SHADOW_PREFIX's module comment) --
     # reseed from the shadow copy (which custom entries typed via
@@ -1148,14 +1211,17 @@ def _render_metabolites_widget(metabolites_action: argparse.Action, nucleus: str
     # resetting to empty.
     if key not in st.session_state:
         st.session_state[key] = _wizard_shadow_get("metabolites", [])
-    selected = st.multiselect(
-        f"{label} (--metabolites)",
-        options,
-        help=f"{help_text} Type a name and press Enter to add one not in this list.",
-        key=key,
-        accept_new_options=True,
-        placeholder="Choose one or more metabolites...",
-    )
+    with col_label:
+        selected = st.multiselect(
+            f"{label} (--metabolites)",
+            options,
+            help=f"{help_text} Type a name and press Enter to add one not in this list, or use "
+            "\"Scan for metabolites\" to discover them from the met-<name> BIDS entity in your "
+            "raw MRSI filenames.",
+            key=key,
+            accept_new_options=True,
+            placeholder="Choose one or more metabolites...",
+        )
     _wizard_shadow_set("metabolites", list(selected))
     return list(selected)
 
@@ -1432,12 +1498,11 @@ def _render_wizard_analysis_step() -> None:
     with col1:
         with st.container(border=True):
             if WIZARD_NORMALIZE_THUMBNAIL.exists():
-                st.image(str(WIZARD_NORMALIZE_THUMBNAIL), width="stretch")
+                _render_wizard_thumbnail(WIZARD_NORMALIZE_THUMBNAIL)
             st.subheader("Normalize metabolite maps")
             st.write(
-                "Prepare and register metabolite maps into standard space, with the full quality "
-                "control report. A lightweight parcellation (SynthSeg) runs automatically, but no "
-                "FreeSurfer and no connectivity analysis unless you ask for it later."
+                "Prepare and coregister metabolite maps into standard space, with the full quality "
+                "control report. A lightweight parcellation runs automatically for QC."
             )
             if st.button("Choose this", key="wizard_outcome_normalize", type=(
                 "primary" if st.session_state[outcome_key] == "normalize" else "secondary"
@@ -1448,7 +1513,7 @@ def _render_wizard_analysis_step() -> None:
     with col2:
         with st.container(border=True):
             if WIZARD_PARCELLATION_THUMBNAIL.exists():
-                st.image(str(WIZARD_PARCELLATION_THUMBNAIL), width="stretch")
+                _render_wizard_thumbnail(WIZARD_PARCELLATION_THUMBNAIL)
             st.subheader("Parcellation and connectivity")
             st.write(
                 "Same underlying pipeline, plus a guided choice of parcellation method (including "
@@ -1563,6 +1628,7 @@ def _render_wizard_data_step(optionals: list[argparse.Action], positionals: list
         "mrsi_input_dir", "--mrsi-input-dir", bids_dir, f"{mrsi_input_label}. {mrsi_input_help}"
     )
     if effective_mrsi_input_dir:
+        mrsi_space_dirs = sorted(Path(effective_mrsi_input_dir).joinpath("derivatives").glob("mrsi-*"))
         if mrsi_input_custom:
             st.caption(f"Raw MRSI data read from: `{effective_mrsi_input_dir}` (used exactly as entered).")
         else:
@@ -1570,6 +1636,10 @@ def _render_wizard_data_step(optionals: list[argparse.Action], positionals: list
                 f"Raw MRSI data expected under: `{effective_mrsi_input_dir.rstrip('/')}/derivatives/mrsi-<space>/` "
                 "(e.g. `derivatives/mrsi-orig/`) -- same root as your BIDS dataset."
             )
+        if mrsi_space_dirs:
+            st.caption(":green[✓ Found:] " + ", ".join(f"`{p.name}`" for p in mrsi_space_dirs))
+        else:
+            st.caption(f":red[No derivatives/mrsi-* folder found under {effective_mrsi_input_dir}]")
     default_mrsinmrs_file = (
         f"{effective_mrsi_input_dir.rstrip('/')}/derivatives/mrsi-orig/mrsinmrs.json" if effective_mrsi_input_dir else ""
     )
@@ -1582,6 +1652,10 @@ def _render_wizard_data_step(optionals: list[argparse.Action], positionals: list
     )
     if effective_mrsinmrs_file:
         st.caption(f"Acquisition metadata: `{effective_mrsinmrs_file}`")
+        if Path(effective_mrsinmrs_file).is_file():
+            st.caption(":green[✓ Found.]")
+        else:
+            st.caption(f":red[Not found yet: {effective_mrsinmrs_file}]")
 
     st.subheader("Which participants?")
     _render_participant_selection(
@@ -1591,7 +1665,9 @@ def _render_wizard_data_step(optionals: list[argparse.Action], positionals: list
 
     st.subheader("Metabolites")
     nucleus = _wizard_shadow_get("nucleus") or DEFAULT_NUCLEUS
-    metabolites = _render_metabolites_widget(action_lookup["--metabolites"], nucleus=nucleus)
+    metabolites = _render_metabolites_widget(
+        action_lookup["--metabolites"], nucleus=nucleus, mrsi_input_dir=effective_mrsi_input_dir
+    )
     if not metabolites:
         st.warning("Choose at least one metabolite to continue.")
 

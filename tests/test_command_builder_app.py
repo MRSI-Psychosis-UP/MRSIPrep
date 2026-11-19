@@ -18,6 +18,7 @@ test_both_outcomes_emit_no_steps_flag below.
 
 from __future__ import annotations
 
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -26,6 +27,7 @@ from streamlit.testing.v1 import AppTest
 from mrsiprep.interfaces.command_builder_app import (
     CUSTOM_STEP_FLAGS,
     _build_command,
+    _scan_metabolites_from_filenames,
 )
 from mrsiprep.cli.parser import build_parser
 
@@ -231,6 +233,72 @@ class WizardValidationGatingTests(unittest.TestCase):
         self.assertEqual(len(codes), 1)
         self.assertIn("--parcellation-mode chimera", codes[0].value)
         self.assertIn("--fs-license /tmp/license.txt", codes[0].value)
+
+
+class ScanMetabolitesFromFilenamesTests(unittest.TestCase):
+    def test_extracts_the_met_bids_entity_from_real_filenames(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            mrsi = root / "derivatives" / "mrsi-orig" / "sub-01" / "ses-01"
+            mrsi.mkdir(parents=True)
+            for met in ("CrPCr", "GluGln", "NAANAAG"):
+                (mrsi / f"sub-01_ses-01_space-orig_met-{met}_desc-signal_mrsi.nii.gz").touch()
+            # Non-metabolite files (no met- token, e.g. SNR/FWHM maps) must
+            # not show up as spurious "metabolite" options.
+            (mrsi / "sub-01_ses-01_space-orig_desc-snr_mrsi.nii.gz").touch()
+
+            found = _scan_metabolites_from_filenames(root)
+
+            self.assertEqual(found, ["CrPCr", "GluGln", "NAANAAG"])
+
+    def test_returns_empty_list_when_directory_does_not_exist(self):
+        self.assertEqual(_scan_metabolites_from_filenames("/no/such/directory"), [])
+
+    def test_returns_empty_list_when_no_met_filenames_present(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "derivatives" / "mrsi-orig").mkdir(parents=True)
+            self.assertEqual(_scan_metabolites_from_filenames(root), [])
+
+    def test_deduplicates_across_subjects_and_sessions(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            for sub, ses in (("01", "01"), ("01", "02"), ("02", "01")):
+                mrsi = root / "derivatives" / "mrsi-orig" / f"sub-{sub}" / f"ses-{ses}"
+                mrsi.mkdir(parents=True)
+                (mrsi / f"sub-{sub}_ses-{ses}_space-orig_met-CrPCr_desc-signal_mrsi.nii.gz").touch()
+
+            self.assertEqual(_scan_metabolites_from_filenames(root), ["CrPCr"])
+
+
+class WizardScanMetabolitesButtonTests(unittest.TestCase):
+    def test_scan_button_discovers_and_selects_metabolites_from_real_filenames(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            mrsi = root / "derivatives" / "mrsi-orig" / "sub-01" / "ses-01"
+            mrsi.mkdir(parents=True)
+            for met in ("CrPCr", "GluGln"):
+                (mrsi / f"sub-01_ses-01_space-orig_met-{met}_desc-signal_mrsi.nii.gz").touch()
+
+            at = _new_app()
+            _choose_outcome(at, "normalize")
+            at.text_input(key="wizard_field_bids_dir").set_value(str(root)).run()
+            at.text_input(key="wizard_field_output_dir").set_value(str(root / "out")).run()
+
+            at.button(key="wizard_scan_metabolites").click().run()
+
+            self.assertEqual(len(at.exception), 0)
+            metabolites_box = at.multiselect(key="wizard_field_metabolites")
+            self.assertEqual(sorted(metabolites_box.value), ["CrPCr", "GluGln"])
+            self.assertIn("CrPCr", metabolites_box.options)
+            self.assertIn("GluGln", metabolites_box.options)
+
+    def test_scan_button_disabled_when_no_mrsi_input_dir_resolved_yet(self):
+        at = _new_app()
+        _choose_outcome(at, "normalize")
+        scan_buttons = [b for b in at.button if b.key == "wizard_scan_metabolites"]
+        self.assertEqual(len(scan_buttons), 1)
+        self.assertTrue(scan_buttons[0].disabled)
 
 
 class WizardRefMetDropdownTests(unittest.TestCase):

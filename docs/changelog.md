@@ -22,6 +22,20 @@
   `MRSIPrepConfig._resolve_paths`'s own real default-resolution rule.
   `--mrsi-input-dir` itself was never affected -- it was always emitted
   to the generated command exactly as typed.
+- Both outcome-card thumbnails now render in a fixed-height, cropped box
+  (`object-fit: cover`) instead of being stretched to the column width
+  independently -- the two source images have very different native
+  aspect ratios, which made them look disproportionate side by side.
+- The Data step's "Raw MRSI data location" and acquisition-metadata
+  fields now show a green checkmark (or a red warning) reflecting
+  whether the resolved folder/file actually exists on disk, matching
+  the dataset-folder field's existing style.
+- Added a "Scan for metabolites" button next to the Metabolites field:
+  it scans `<mrsi-input-dir>/derivatives/mrsi-*/**/*.nii*` filenames for
+  the `met-<name>` BIDS entity and adds every distinct name found to
+  the multiselect's options and current selection, so a user pointed
+  at real data doesn't have to already know which metabolite spellings
+  their own files use.
 
 ### CLI
 
