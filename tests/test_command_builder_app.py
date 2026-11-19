@@ -21,6 +21,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 from streamlit.testing.v1 import AppTest
 
@@ -233,6 +234,52 @@ class WizardValidationGatingTests(unittest.TestCase):
         self.assertEqual(len(codes), 1)
         self.assertIn("--parcellation-mode chimera", codes[0].value)
         self.assertIn("--fs-license /tmp/license.txt", codes[0].value)
+
+
+class VersionBarUpdateButtonTests(unittest.TestCase):
+    """The page header no longer carries the old "Builds a runnable..."
+    caption, and now offers an Update button next to the version line that
+    runs `mrsiprep-docker --update` and refreshes the displayed Docker image
+    version on success."""
+
+    def test_old_explanatory_caption_is_removed(self):
+        at = _new_app()
+        captions = " ".join(c.value for c in at.caption)
+        self.assertNotIn("Builds a runnable", captions)
+
+    def test_version_caption_includes_all_three_versions(self):
+        at = _new_app()
+        captions = " ".join(c.value for c in at.caption)
+        self.assertIn("Command builder (mrsiprep) version:", captions)
+        self.assertIn("mrsiprep-docker wrapper version:", captions)
+        self.assertIn("Docker image (`mrsiup/mrsiprep:cpu`) version:", captions)
+
+    def test_update_button_runs_mrsiprep_docker_update_and_refreshes_version(self):
+        at = _new_app()
+        fake_result = MagicMock(returncode=0, stdout="", stderr="")
+        with patch("subprocess.run", return_value=fake_result):
+            at.button(key=None)  # no-op; ensures widgets are enumerated
+            [b for b in at.button if b.label == "Update"][0].click().run()
+        self.assertEqual(list(at.exception), [])
+        successes = " ".join(s.value for s in at.success)
+        self.assertIn("Docker image updated", successes)
+
+    def test_update_button_surfaces_a_failed_pull(self):
+        at = _new_app()
+        fake_result = MagicMock(returncode=1, stdout="", stderr="network error")
+        with patch("subprocess.run", return_value=fake_result):
+            [b for b in at.button if b.label == "Update"][0].click().run()
+        self.assertEqual(list(at.exception), [])
+        errors = " ".join(e.value for e in at.error)
+        self.assertIn("network error", errors)
+
+    def test_update_button_reports_missing_wrapper(self):
+        at = _new_app()
+        with patch("subprocess.run", side_effect=FileNotFoundError()):
+            [b for b in at.button if b.label == "Update"][0].click().run()
+        self.assertEqual(list(at.exception), [])
+        errors = " ".join(e.value for e in at.error)
+        self.assertIn("pip install mrsiprep-docker", errors)
 
 
 class ParticipantSelectionCombinedLabelTests(unittest.TestCase):

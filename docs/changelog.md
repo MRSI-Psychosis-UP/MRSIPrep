@@ -1,8 +1,19 @@
 # Changelog
 
-## Unreleased
+## 2.2.6
 
-### mrsiprep-docker wrapper (v1.1.0)
+### Command Builder GUI
+
+- Removed the generic "Builds a runnable `mrsiprep-docker` command..."
+  explanatory caption from the page header.
+- Added an "Update" button next to the version caption that runs
+  `mrsiprep-docker --update` (pulling the latest Docker image) and, on
+  success, refreshes the displayed Docker image version. The version
+  caption now also shows the locally pulled Docker image's own `mrsiprep`
+  version (queried by briefly running the image), alongside the existing
+  command-builder package and `mrsiprep-docker` wrapper versions.
+
+### mrsiprep-docker wrapper (v1.1.0, published to PyPI)
 
 - Added `mrsiprep-docker --update`: pulls the latest `--image` (default
   `mrsiup/mrsiprep:cpu`) from Docker Hub and exits, without needing

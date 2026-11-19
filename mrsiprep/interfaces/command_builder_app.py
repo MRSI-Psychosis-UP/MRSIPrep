@@ -1031,6 +1031,94 @@ def _mrsiprep_docker_version() -> str:
         return "not installed (pip install mrsiprep-docker)"
 
 
+# Must match mrsiprep_docker.__main__'s own --image default -- this app has
+# no way to read that package's argparse defaults directly (it's a separate,
+# optional pip package; see _mrsiprep_docker_version's own docstring), so the
+# value is duplicated here rather than imported.
+DEFAULT_DOCKER_IMAGE = "mrsiup/mrsiprep:cpu"
+
+
+def _docker_image_version(image: str = DEFAULT_DOCKER_IMAGE) -> str:
+    """The installed `mrsiprep` package version *inside* the local Docker
+    image `image` -- distinct from this Streamlit app's own `mrsiprep_version()`
+    (the pip package driving this page) and from `_mrsiprep_docker_version()`
+    (the host-side wrapper script). Runs a short-lived container rather than
+    `docker inspect`, since the version isn't exposed as image metadata.
+    Returns a short, human-readable status string rather than raising --
+    Docker may not be installed/running, or the image may not be pulled yet,
+    and this is cosmetic, not fatal to the rest of the page."""
+    import subprocess  # nosec B404 -- all calls below use list args with no shell=True
+
+    try:
+        # nosemgrep: dangerous-subprocess-use-audit,avoid-execution-of-untrusted-input-in-subprocess-calls,python.exec.rule-subprocess-call-array
+        # nosec B603 B607 -- image/command are fixed list elements, never a shell string
+        result = subprocess.run(
+            ["docker", "run", "--rm", "--entrypoint", "python3", image, "-c",
+             "from importlib.metadata import version; print(version('mrsiprep'))"],
+            capture_output=True, text=True, timeout=30,
+        )
+    except FileNotFoundError:
+        return "Docker not found"
+    except subprocess.TimeoutExpired:
+        return "timed out"
+    if result.returncode != 0:
+        return "not pulled yet"
+    return result.stdout.strip() or "unknown"
+
+
+def _render_version_bar() -> None:
+    """The version caption row: this app's own package version, the
+    mrsiprep-docker wrapper's version, and the locally pulled Docker image's
+    mrsiprep version -- plus an Update button that runs
+    `mrsiprep-docker --update` (pulling the latest image) and refreshes the
+    displayed image version once the pull finishes."""
+    image_version_key = "wizard_docker_image_version"
+    update_message_key = "wizard_docker_update_message"
+    if image_version_key not in st.session_state:
+        st.session_state[image_version_key] = _docker_image_version()
+
+    col_versions, col_button = st.columns([5, 1])
+    with col_button:
+        if st.button("Update", help="Runs `mrsiprep-docker --update` to pull the latest Docker image."):
+            import subprocess  # nosec B404 -- all calls below use list args with no shell=True
+
+            with st.spinner(f"Pulling the latest {DEFAULT_DOCKER_IMAGE}..."):
+                try:
+                    # nosemgrep: dangerous-subprocess-use-audit,avoid-execution-of-untrusted-input-in-subprocess-calls,python.exec.rule-subprocess-call-array
+                    # nosec B603 B607 -- fixed argv, no shell=True
+                    result = subprocess.run(
+                        ["mrsiprep-docker", "--update"], capture_output=True, text=True, timeout=1800,
+                    )
+                except FileNotFoundError:
+                    st.session_state[update_message_key] = (
+                        "error", "mrsiprep-docker: command not found. Install it with `pip install mrsiprep-docker`."
+                    )
+                except subprocess.TimeoutExpired:
+                    st.session_state[update_message_key] = ("error", "mrsiprep-docker --update timed out after 30 minutes.")
+                else:
+                    if result.returncode == 0:
+                        st.session_state[image_version_key] = _docker_image_version()
+                        st.session_state[update_message_key] = ("success", "Docker image updated.")
+                    else:
+                        st.session_state[update_message_key] = (
+                            "error", f"mrsiprep-docker --update failed:\n\n{result.stderr or result.stdout}"
+                        )
+            st.rerun()
+
+    with col_versions:
+        st.caption(
+            f"Command builder (mrsiprep) version: `{mrsiprep_version()}` &nbsp;|&nbsp; "
+            f"mrsiprep-docker wrapper version: `{_mrsiprep_docker_version()}` &nbsp;|&nbsp; "
+            f"Docker image (`{DEFAULT_DOCKER_IMAGE}`) version: `{st.session_state[image_version_key]}`",
+            unsafe_allow_html=True,
+        )
+
+    update_message = st.session_state.pop(update_message_key, None)
+    if update_message is not None:
+        level, text = update_message
+        getattr(st, level)(text)
+
+
 def _flag_action_lookup(optionals: list[argparse.Action]) -> dict[str, argparse.Action]:
     """One-time `--flag` -> argparse.Action index, built once in main() and
     shared by both tabs so neither re-scans `optionals` repeatedly."""
@@ -2000,15 +2088,7 @@ def _render_wizard_sidebar_summary(statuses: dict[str, tuple[str, str]]) -> None
 
 def _render_wizard_page() -> None:
     st.title("MRSIPrep Command Builder")
-    st.caption(
-        "Builds a runnable `mrsiprep-docker` command from the actual CLI definition. "
-        "This page does not execute anything -- copy the generated command and run it yourself."
-    )
-    st.caption(
-        f"Command builder (mrsiprep) version: `{mrsiprep_version()}` &nbsp;|&nbsp; "
-        f"mrsiprep-docker wrapper version: `{_mrsiprep_docker_version()}`",
-        unsafe_allow_html=True,
-    )
+    _render_version_bar()
 
     parser = build_parser()
     positionals = [a for a in parser._actions if not a.option_strings and a.dest != "help"]
