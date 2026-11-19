@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.2.8
+
+### Import helpers
+
+- `mrsiprep-import`/`mrsiprep-import-gui` no longer silently overwrite one
+  T1w file with another when a source folder has more than one anatomical
+  scan. All anatomical files are migrated; when two or more share the same
+  inferred acquisition type, each gets a `run-01`, `run-02`, ... suffix
+  (assigned in filename-sorted order) instead of colliding on the same
+  destination path. A single file of a given acquisition type keeps its
+  previous unsuffixed name.
+- Anatomical-file detection and acquisition-type inference now also
+  recognize `ptx` and a bare `t1`/`t1w` token, in addition to the existing
+  `mprage`/`memprage`/`mp2rage`.
+
 ## 2.2.7
 
 ### Command Builder GUI

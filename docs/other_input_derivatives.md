@@ -223,9 +223,20 @@ MRSI filenames are recognized by a small token vocabulary (`conc`, `crlb`,
 `snr`, `fwhm`, `brainmask`, `WaterSignal`, plus a default metabolite-name
 list); an unrecognized acquisition token fails loudly for that file rather
 than guessing. CAT12 files are recognized by their standard `p1`/`p2`/`p3`/
-`wp*`/`mwp*` filename prefixes. Anatomical files are recognized by `t1` or
-`mprage` appearing in the filename, with the acquisition type
-(`mprage`/`mp2rage`/`memprage`/`unknown`) inferred from the filename too.
+`wp*`/`mwp*` filename prefixes. Anatomical files are recognized by `t1`,
+`t1w`, `mprage`, or `ptx` appearing in the filename, with the acquisition
+type (`mprage`/`mp2rage`/`memprage`/`ptx`/`t1w`/`t1`/`unknown`) inferred
+from the filename too.
+
+When more than one anatomical file shares the same inferred acquisition
+type for a given subject/session, all of them are imported side by side
+instead of one overwriting another: each gets a `run-01`, `run-02`, ...
+suffix (assigned in filename-sorted order), e.g.
+`sub-S001_ses-V1_acq-mprage_run-01_T1w.nii.gz` and
+`..._acq-mprage_run-02_T1w.nii.gz`. Pick a specific one at processing time
+with `--t1 "acq-mprage_run-02_T1w"`, or via `--bids-filter-file` with
+`{"t1w": {"acquisition": "mprage", "run": "02"}}`; a single file of a given
+acquisition type keeps its unsuffixed name as before.
 
 Run with no arguments beyond `-h` for the full flag list:
 

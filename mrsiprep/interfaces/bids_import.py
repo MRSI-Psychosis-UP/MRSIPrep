@@ -43,11 +43,22 @@ def infer_anat_acq(filename: str) -> str:
     lower = filename.lower()
     if "mp2rage" in lower:
         return "mp2rage"
-    if "mprage" in lower:
-        return "mprage"
     if "memprage" in lower:
         return "memprage"
+    if "mprage" in lower:
+        return "mprage"
+    if "ptx" in lower:
+        return "ptx"
+    if re.search(r"t1w", lower):
+        return "t1w"
+    if re.search(r"(?:^|[_\-])t1(?:[_\-]|$)", lower):
+        return "t1"
     return "unknown"
+
+
+def is_t1w_candidate(filename: str) -> bool:
+    lower = filename.lower()
+    return any(token in lower for token in ("t1", "mprage", "ptx"))
 
 
 def find_mrsi_nifti_dir(folder_path: str | Path, input_subdir: str | None = None) -> Path | None:
@@ -139,12 +150,21 @@ def migrate_mrsi_file(path: str | Path, bids_dir: str | Path, subject: str, sess
     return out, "copied"
 
 
-def migrate_anatomical_file(path: str | Path, bids_dir: str | Path, subject: str, session: str, overwrite: bool = False, acq: str | None = None) -> tuple[Path, str]:
+def migrate_anatomical_file(
+    path: str | Path,
+    bids_dir: str | Path,
+    subject: str,
+    session: str,
+    overwrite: bool = False,
+    acq: str | None = None,
+    run: str | None = None,
+) -> tuple[Path, str]:
     path = Path(path)
     acq = acq or infer_anat_acq(path.name)
     ses = normalize_session(session)
     out_dir = Path(bids_dir) / f"sub-{subject}" / f"ses-{ses}" / "anat"
-    out = out_dir / f"sub-{subject}_ses-{ses}_acq-{acq}_T1w.nii.gz"
+    run_part = f"_run-{run}" if run else ""
+    out = out_dir / f"sub-{subject}_ses-{ses}_acq-{acq}{run_part}_T1w.nii.gz"
     out_dir.mkdir(parents=True, exist_ok=True)
     if out.exists() and not overwrite:
         return out, "skipped"
@@ -227,6 +247,7 @@ def migrate_session_folder(
             except Exception as exc:
                 summary["errors"].append(f"{path}: {exc}")
 
+    t1_candidates: list[Path] = []
     for path in sorted(source.rglob("*.nii*")):
         if "MRSI_NIFTI" in path.parts:
             continue
@@ -237,11 +258,25 @@ def migrate_session_folder(
                 cat["ses"] = session
                 out, status = migrate_cat12_file(cat, bids_dir, overwrite=overwrite)
                 summary["cat12"].append(str(out)) if status != "skipped" else summary["skipped"].append(str(out))
-            elif "t1" in path.name.lower() or "mprage" in path.name.lower():
-                out, status = migrate_anatomical_file(path, bids_dir, subject, session, overwrite=overwrite)
-                summary["t1"].append(str(out)) if status != "skipped" else summary["skipped"].append(str(out))
+            elif is_t1w_candidate(path.name):
+                t1_candidates.append(path)
         except Exception as exc:
             summary["errors"].append(f"{path}: {exc}")
+
+    runs_by_acq: dict[str, list[Path]] = {}
+    for path in t1_candidates:
+        runs_by_acq.setdefault(infer_anat_acq(path.name), []).append(path)
+    for acq, paths in runs_by_acq.items():
+        needs_run = len(paths) > 1
+        for index, path in enumerate(paths, start=1):
+            run = f"{index:02d}" if needs_run else None
+            try:
+                out, status = migrate_anatomical_file(
+                    path, bids_dir, subject, session, overwrite=overwrite, acq=acq, run=run
+                )
+                summary["t1"].append(str(out)) if status != "skipped" else summary["skipped"].append(str(out))
+            except Exception as exc:
+                summary["errors"].append(f"{path}: {exc}")
     return summary
 
 
