@@ -1,5 +1,24 @@
 # Changelog
 
+## 2.2.7
+
+### Command Builder GUI
+
+- Added a third Analysis card, "Create MRSIprep inputs", alongside the
+  two existing processing outcomes. Routes to its own self-contained
+  2-step mini-flow (source/destination, then Review) that generates a
+  `mrsiprep-import` command instead of a `mrsiprep-docker` one -- a
+  separate, lightweight, host-side tool (no Docker) for migrating a raw
+  export folder's MRSI/T1w/CAT12 files into the BIDS/derivatives layout
+  MRSIPrep expects, whether starting a brand-new project or adding a new
+  subject/session to an existing one. Subject/session labels are
+  auto-guessed from the source folder's name (editable). Since
+  `mrsiprep-import` deliberately does not touch `dataset_description.json`
+  or `mrsinmrs.json`, Review also shows copyable starter snippets for
+  both (the latter always, the former only when "brand-new project" is
+  checked) as a reminder that they still need to exist before any actual
+  processing run.
+
 ## 2.2.6
 
 ### Command Builder GUI

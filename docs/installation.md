@@ -41,7 +41,11 @@ SynthSeg workflow runs without one.
 
 Use the **Command builder** to configure a run in a browser form. Choose
 your dataset, subjects, metabolites, and processing settings, then copy the
-generated command into a terminal to run MRSIPrep.
+generated command into a terminal to run MRSIPrep. A third "Create MRSIprep
+inputs" mode generates a separate `mrsiprep-import` command instead, for
+migrating a raw export folder into the BIDS layout MRSIPrep expects --
+useful before a first run, or whenever a new subject/session arrives for an
+existing project (see [Import helpers](other_input_derivatives.md#import-helpers)).
 
 With the wrapper installed above, install and launch the form:
 

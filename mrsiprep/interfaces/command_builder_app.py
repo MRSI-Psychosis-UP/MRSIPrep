@@ -34,6 +34,7 @@ import pandas as pd
 import streamlit as st
 
 from mrsiprep.cli.parser import build_parser
+from mrsiprep.interfaces.bids_import import parse_subject_session_folder
 from mrsiprep.utils.version import mrsiprep_version
 from mrsiprep.config.chimera_schemes import (
     SUPRA_REGION_LABELS,
@@ -1584,25 +1585,32 @@ def _collect_wizard_values(
 
 
 def _render_wizard_analysis_step() -> None:
-    """Step 1: two outcome cards, replacing the old Standardized/Custom top-
-    level tab choice as the first thing a user sees. Both outcomes emit
-    the exact same --steps value -- none at all, i.e. the full 20-step
-    pipeline always runs -- confirmed against STEP_DEPENDENCIES/
-    validate_step_order (see this file's module docstring context and the
-    plan). "wizard_outcome" only governs whether Processing's parcellation/
-    connectivity expander opens collapsed-light or expanded-foregrounded by
-    default; it is never read by _build_command."""
+    """Step 1: three outcome cards, replacing the old Standardized/Custom
+    top-level tab choice as the first thing a user sees. The two processing
+    outcomes ("normalize"/"parcellation") emit the exact same --steps value
+    -- none at all, i.e. the full 20-step pipeline always runs -- confirmed
+    against STEP_DEPENDENCIES/validate_step_order (see this file's module
+    docstring context and the plan). "wizard_outcome" governs whether
+    Processing's parcellation/connectivity expander opens collapsed-light or
+    expanded-foregrounded by default for those two; it is never read by
+    _build_command. The third outcome, "create_inputs", is a different kind
+    of tool entirely (mrsiprep-import, a separate host-side command with no
+    --metabolites/--ref-met/pipeline config at all) and routes to its own
+    self-contained mini-flow (_render_wizard_create_inputs_outcome) instead
+    of the shared Data/Processing/Review steps."""
     st.header("What would you like to do?")
     st.caption(
-        "Both options run the same full MRSIPrep pipeline end-to-end (loading, spike filtering, "
-        "T1 correction, registration, tissue correction, and the final QC report) -- the choice "
-        "below only decides which processing options are highlighted on the next screens."
+        "The two processing options run the same full MRSIPrep pipeline end-to-end (loading, "
+        "spike filtering, T1 correction, registration, tissue correction, and the final QC "
+        "report) -- the choice below only decides which processing options are highlighted on "
+        "the next screens. The third option is a separate, lightweight tool for getting raw data "
+        "into the layout MRSIPrep expects in the first place."
     )
 
     outcome_key = "wizard_outcome"
     st.session_state.setdefault(outcome_key, None)
 
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     with col1:
         with st.container(border=True):
             if WIZARD_NORMALIZE_THUMBNAIL.exists():
@@ -1634,11 +1642,32 @@ def _render_wizard_analysis_step() -> None:
                 st.session_state[outcome_key] = "parcellation"
                 st.session_state["wizard_step"] = 1
                 st.rerun()
+    with col3:
+        with st.container(border=True):
+            st.subheader("Create MRSIprep inputs")
+            st.write(
+                "Starting a brand-new BIDS-style project, or dropping in a subject/session that just "
+                "came off the scanner? Generates a `mrsiprep-import` command to migrate a source "
+                "export folder into the layout MRSIPrep expects -- a separate, lightweight step "
+                "before any of the processing above."
+            )
+            if st.button("Choose this", key="wizard_outcome_create_inputs", type=(
+                "primary" if st.session_state[outcome_key] == "create_inputs" else "secondary"
+            )):
+                st.session_state[outcome_key] = "create_inputs"
+                st.session_state["wizard_step"] = 1
+                st.session_state["wizard_import_step"] = 0
+                st.rerun()
 
     if st.session_state[outcome_key]:
+        outcome_titles = {
+            "normalize": "Normalize metabolite maps",
+            "parcellation": "Parcellation and connectivity",
+            "create_inputs": "Create MRSIprep inputs",
+        }
         st.success(
-            f"Selected: **{'Normalize metabolite maps' if st.session_state[outcome_key] == 'normalize' else 'Parcellation and connectivity'}**. "
-            "Click Next below, or choose the other card to switch."
+            f"Selected: **{outcome_titles[st.session_state[outcome_key]]}**. "
+            "Click Next below, or choose another card to switch."
         )
 
     st.divider()
@@ -2004,6 +2033,213 @@ def _render_wizard_review_step(optionals: list[argparse.Action], positionals: li
         _render_step_flowchart(list(CUSTOM_STEP_FLAGS), values)
 
 
+MRSINMRS_EXAMPLE_JSON = """{
+  "CommonMetadata": {
+    "QuantificationTool": "lcmodel",
+    "LinewidthUnit": "Hz",
+    "CRLBUnit": "percent",
+    "Nucleus": "1H",
+    "SequenceName": "YOUR_SEQUENCE_NAME",
+    "RepetitionTime": 0.457,
+    "EchoTime": 0.03,
+    "FlipAngle": 45,
+    "MagneticFieldStrength": 3
+  },
+  "Recordings": []
+}"""
+
+DATASET_DESCRIPTION_EXAMPLE_JSON = """{
+  "Name": "YOUR_DATASET_NAME",
+  "BIDSVersion": "1.10.0",
+  "DatasetType": "raw"
+}"""
+
+
+def _render_wizard_create_inputs_outcome() -> None:
+    """The "Create MRSIprep inputs" outcome's own self-contained 2-step
+    mini-flow, routed to by _render_wizard_page's early-return branch.
+
+    This never emits a `mrsiprep-docker ...` processing command -- it wraps
+    `mrsiprep-import` instead (mrsiprep/interfaces/bids_import.py's
+    migrate_session_folder, already used by the standalone mrsiprep-import
+    CLI/mrsiprep-import-gui), a separate, lightweight, host-side tool (no
+    Docker, no pipeline config) that migrates one source export folder's
+    MRSI/T1w/CAT12 files into the BIDS/derivatives layout MRSIPrep expects.
+    It deliberately does not touch dataset_description.json or
+    mrsinmrs.json (see docs/other_input_derivatives.md) -- this mini-flow
+    only reminds the user about both with copyable starter snippets, it
+    never writes them.
+
+    Step 0's widgets are only instantiated while step == 0; Streamlit
+    deletes a widget-backed session_state entry the instant its widget
+    isn't rendered on a rerun (see WIZARD_SHADOW_PREFIX's module comment),
+    so step 0 copies every field into the plain (non-widget) dict
+    `wizard_import_values` on every render, and step 1 (Review) reads
+    only from that dict, never from the widget keys directly."""
+    step_key = "wizard_import_step"
+    st.session_state.setdefault(step_key, 0)
+    st.session_state.setdefault("wizard_import_values", {})
+    step = st.session_state[step_key]
+
+    st.header("Create MRSIprep inputs")
+    st.caption(
+        "Generates a `mrsiprep-import` command -- a separate, host-side tool (no Docker needed) "
+        "that migrates one subject/session's raw export folder into the BIDS/derivatives layout "
+        "MRSIPrep expects. Run it once per new subject/session, whether starting a brand-new "
+        "project or adding to one that already exists."
+    )
+
+    if step == 0:
+        st.subheader("1. Source and destination")
+        saved = st.session_state["wizard_import_values"]
+
+        source_key = "wizard_import_source"
+        st.session_state.setdefault(source_key, saved.get("source", ""))
+        source = st.text_input(
+            "Source folder",
+            key=source_key,
+            help="The per-subject/session export folder to migrate from (e.g. a lab-internal "
+            "'Results_S001_V1' folder containing an MRSI_NIFTI subfolder, CAT12 outputs, and/or "
+            "a T1w anatomical).",
+        )
+
+        st.session_state.setdefault("wizard_import_is_new", saved.get("is_new_project", False))
+        is_new_project = st.checkbox(
+            "This is a brand-new project (bids_dir doesn't exist yet, or is still empty)",
+            key="wizard_import_is_new",
+            help="Shows a starter dataset_description.json snippet to create alongside your "
+            "first import -- mrsiprep-import does not write this file itself.",
+        )
+
+        st.session_state.setdefault("wizard_import_bids_dir", saved.get("bids_dir", ""))
+        bids_dir = st.text_input(
+            "BIDS root (bids_dir)",
+            key="wizard_import_bids_dir",
+            help="The BIDS dataset root to migrate into. Created automatically if it doesn't "
+            "exist yet.",
+        )
+
+        guessed = parse_subject_session_folder(Path(source).name) if source else None
+        guessed_sub = guessed["sub"] if guessed else ""
+        guessed_ses = guessed["new_session"] or "" if guessed else ""
+        if guessed:
+            st.caption(f"Guessed from the source folder name: subject `{guessed_sub}`, session `{guessed_ses}`.")
+
+        # Re-guess subject/session from the source folder name each time
+        # `source` itself changes, but only overwrite a field the user
+        # hasn't already typed something different into -- st.text_input's
+        # own `value=` kwarg only seeds a widget's *first* render; once a
+        # `key`'d widget exists, session_state[key] (not `value=`) governs
+        # every later rerun, so a freshly computed guess must be written
+        # there directly.
+        last_source_key = "wizard_import_last_guessed_source"
+        if guessed and st.session_state.get(last_source_key) != source:
+            st.session_state["wizard_import_subject"] = guessed_sub
+            st.session_state["wizard_import_session"] = guessed_ses
+            st.session_state[last_source_key] = source
+        else:
+            st.session_state.setdefault("wizard_import_subject", saved.get("subject", ""))
+            st.session_state.setdefault("wizard_import_session", saved.get("session", ""))
+
+        col_sub, col_ses = st.columns(2)
+        with col_sub:
+            subject = st.text_input("Subject label (without 'sub-')", key="wizard_import_subject")
+        with col_ses:
+            session = st.text_input("Session label (without 'ses-')", key="wizard_import_session")
+
+        with st.expander("Advanced", expanded=False):
+            st.session_state.setdefault("wizard_import_input_subdir", saved.get("input_subdir", ""))
+            input_subdir = st.text_input(
+                "--input-subdir",
+                key="wizard_import_input_subdir",
+                help="An extra subdirectory level to look for the source's own MRSI_NIFTI folder "
+                "under, for export layouts that nest it one level deeper than <source>/MRSI_NIFTI.",
+            )
+            st.session_state.setdefault("wizard_import_overwrite", saved.get("overwrite", False))
+            overwrite = st.checkbox(
+                "--overwrite (replace existing destination files instead of skipping them)",
+                key="wizard_import_overwrite",
+            )
+
+        if is_new_project:
+            st.info("New project: create `dataset_description.json` at the BIDS root alongside your first import.")
+            st.code(DATASET_DESCRIPTION_EXAMPLE_JSON, language="json")
+
+        st.session_state["wizard_import_values"] = {
+            "source": source, "bids_dir": bids_dir, "subject": subject, "session": session,
+            "input_subdir": input_subdir, "overwrite": overwrite, "is_new_project": is_new_project,
+        }
+
+        blocking = []
+        if not source:
+            blocking.append("a source folder")
+        if not bids_dir:
+            blocking.append("a BIDS root (bids_dir)")
+        if not subject:
+            blocking.append("a subject label")
+        if not session:
+            blocking.append("a session label")
+
+        st.divider()
+        col_spacer, col_next = st.columns([4, 1])
+        with col_next:
+            if st.button("Next", key="wizard_import_next_btn", disabled=bool(blocking), type="primary"):
+                st.session_state[step_key] = 1
+                st.rerun()
+        if blocking:
+            st.caption(f":red[Still need: {', '.join(blocking)}.]")
+
+    else:
+        st.subheader("2. Review")
+        saved = st.session_state["wizard_import_values"]
+
+        source = saved.get("source", "")
+        bids_dir = saved.get("bids_dir", "")
+        subject = saved.get("subject", "")
+        session = saved.get("session", "")
+        input_subdir = saved.get("input_subdir", "")
+        overwrite = saved.get("overwrite", False)
+        is_new_project = saved.get("is_new_project", False)
+
+        groups: list[list[str]] = [
+            ["mrsiprep-import"],
+            [shlex.quote(source)],
+            [shlex.quote(bids_dir)],
+            ["--subject", shlex.quote(subject)],
+            ["--session", shlex.quote(session)],
+        ]
+        if input_subdir:
+            groups.append(["--input-subdir", shlex.quote(input_subdir)])
+        if overwrite:
+            groups.append(["--overwrite"])
+        command = " \\\n    ".join(" ".join(group) for group in groups)
+
+        st.success("Ready to copy.")
+        st.code(command, language="bash")
+        st.caption(
+            "Runs on the host directly (no Docker needed) -- requires `pip install mrsiprep` "
+            "(mrsiprep-import is installed alongside the main package)."
+        )
+
+        if is_new_project:
+            with st.expander("New project: dataset_description.json", expanded=False):
+                st.caption(f"Create this file at `{bids_dir or '<bids_dir>'}/dataset_description.json`:")
+                st.code(DATASET_DESCRIPTION_EXAMPLE_JSON, language="json")
+
+        with st.expander("Acquisition metadata: mrsinmrs.json (required before processing)", expanded=False):
+            st.caption(
+                "mrsiprep-import does not touch mrsinmrs.json -- write or edit it separately. Required "
+                "at `<bids_dir>/derivatives/mrsi-orig/mrsinmrs.json` (or pass --mrsinmrs-file "
+                "elsewhere). See docs/mrsinmrs.md for the full field reference."
+            )
+            st.code(MRSINMRS_EXAMPLE_JSON, language="json")
+
+        st.divider()
+        if st.button("Back", key="wizard_import_back_btn"):
+            st.session_state[step_key] = 0
+            st.rerun()
+
+
 def _render_step_nav(num_steps: int, statuses: dict[str, tuple[str, str]]) -> None:
     """Manual button row (st.columns), not st.tabs/st.radio -- neither
     supports programmatic "jump to step N" / "Next disabled until valid"
@@ -2103,6 +2339,7 @@ def _render_wizard_page() -> None:
     st.session_state.setdefault("wizard_step", 0)
     st.session_state.setdefault("wizard_outcome", None)
     st.session_state.setdefault("wizard_advanced_steps", False)
+    st.session_state.setdefault("wizard_import_step", 0)
 
     if st.session_state["wizard_advanced_steps"]:
         st.info(
@@ -2116,6 +2353,19 @@ def _render_wizard_page() -> None:
         command = _render_custom_pipeline_tab(optionals, action_lookup, positional_values, values)
         st.header("Generated command")
         st.code(command, language="bash")
+        return
+
+    # "Create MRSIprep inputs" is a different kind of tool entirely (see
+    # _render_wizard_analysis_step's docstring) -- it never touches the
+    # shared Data/Processing/Review steps, --metabolites/--ref-met/etc., or
+    # the main pipeline's sidebar summary, so it gets its own early-return
+    # branch here, same pattern as wizard_advanced_steps above.
+    if st.session_state["wizard_outcome"] == "create_inputs" and st.session_state["wizard_step"] > 0:
+        if st.button("← Back to Analysis"):
+            st.session_state["wizard_outcome"] = None
+            st.session_state["wizard_step"] = 0
+            st.rerun()
+        _render_wizard_create_inputs_outcome()
         return
 
     # The nav row's Next-button gate and the sidebar summary both need this

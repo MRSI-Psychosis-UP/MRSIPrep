@@ -236,6 +236,107 @@ class WizardValidationGatingTests(unittest.TestCase):
         self.assertIn("--fs-license /tmp/license.txt", codes[0].value)
 
 
+class CreateInputsOutcomeTests(unittest.TestCase):
+    """The third Analysis card ("Create MRSIprep inputs") routes to its own
+    2-step mini-flow that generates a `mrsiprep-import` command -- a
+    different tool entirely from the mrsiprep-docker processing commands
+    the other two outcomes produce (see
+    _render_wizard_create_inputs_outcome's docstring)."""
+
+    def _choose_create_inputs(self, at: AppTest) -> AppTest:
+        at.button(key="wizard_outcome_create_inputs").click().run()
+        return at
+
+    def _fill_step_0(self, at: AppTest, source="/data/Results_S001_V1", bids_dir="/data/bids") -> AppTest:
+        at.text_input(key="wizard_import_source").set_value(source).run()
+        at.text_input(key="wizard_import_bids_dir").set_value(bids_dir).run()
+        return at
+
+    def test_choosing_the_card_routes_to_the_mini_flow(self):
+        at = self._choose_create_inputs(_new_app())
+        self.assertEqual(list(at.exception), [])
+        self.assertEqual(at.session_state["wizard_outcome"], "create_inputs")
+        headers = [h.value for h in at.header]
+        self.assertIn("Create MRSIprep inputs", headers)
+
+    def test_subject_session_are_guessed_from_source_folder_name(self):
+        at = self._choose_create_inputs(_new_app())
+        at.text_input(key="wizard_import_source").set_value("/data/Results_S001_V1").run()
+        self.assertEqual(at.text_input(key="wizard_import_subject").value, "S001")
+        self.assertEqual(at.text_input(key="wizard_import_session").value, "V1")
+
+    def test_next_disabled_until_required_fields_are_filled(self):
+        at = self._choose_create_inputs(_new_app())
+        next_buttons = [b for b in at.button if b.key == "wizard_import_next_btn"]
+        self.assertTrue(next_buttons[0].disabled)
+        at = self._fill_step_0(at)
+        next_buttons = [b for b in at.button if b.key == "wizard_import_next_btn"]
+        self.assertFalse(next_buttons[0].disabled)
+
+    def test_review_generates_mrsiprep_import_command_not_mrsiprep_docker(self):
+        at = self._choose_create_inputs(_new_app())
+        at = self._fill_step_0(at)
+        [b for b in at.button if b.key == "wizard_import_next_btn"][0].click().run()
+        codes = [c.value for c in at.code]
+        self.assertTrue(codes[0].startswith("mrsiprep-import"))
+        self.assertIn("/data/Results_S001_V1", codes[0])
+        self.assertIn("/data/bids", codes[0])
+        self.assertIn("--subject S001", codes[0])
+        self.assertIn("--session V1", codes[0])
+        self.assertNotIn("mrsiprep-docker", codes[0])
+
+    def test_advanced_flags_included_when_set(self):
+        at = self._choose_create_inputs(_new_app())
+        at = self._fill_step_0(at)
+        at.text_input(key="wizard_import_input_subdir").set_value("export").run()
+        at.checkbox(key="wizard_import_overwrite").set_value(True).run()
+        [b for b in at.button if b.key == "wizard_import_next_btn"][0].click().run()
+        codes = [c.value for c in at.code]
+        self.assertIn("--input-subdir export", codes[0])
+        self.assertIn("--overwrite", codes[0])
+
+    def test_new_project_shows_dataset_description_snippet(self):
+        at = self._choose_create_inputs(_new_app())
+        at = self._fill_step_0(at)
+        at.checkbox(key="wizard_import_is_new").set_value(True).run()
+        [b for b in at.button if b.key == "wizard_import_next_btn"][0].click().run()
+        codes = [c.value for c in at.code]
+        self.assertTrue(any("DatasetType" in c for c in codes))
+
+    def test_review_always_shows_mrsinmrs_reminder(self):
+        at = self._choose_create_inputs(_new_app())
+        at = self._fill_step_0(at)
+        [b for b in at.button if b.key == "wizard_import_next_btn"][0].click().run()
+        codes = [c.value for c in at.code]
+        self.assertTrue(any("QuantificationTool" in c for c in codes))
+
+    def test_back_preserves_every_field(self):
+        at = self._choose_create_inputs(_new_app())
+        at = self._fill_step_0(at)
+        at.checkbox(key="wizard_import_is_new").set_value(True).run()
+        at.checkbox(key="wizard_import_overwrite").set_value(True).run()
+        at.text_input(key="wizard_import_input_subdir").set_value("export").run()
+        [b for b in at.button if b.key == "wizard_import_next_btn"][0].click().run()
+        [b for b in at.button if b.key == "wizard_import_back_btn"][0].click().run()
+
+        self.assertEqual(at.session_state["wizard_import_step"], 0)
+        self.assertEqual(at.text_input(key="wizard_import_source").value, "/data/Results_S001_V1")
+        self.assertEqual(at.text_input(key="wizard_import_bids_dir").value, "/data/bids")
+        self.assertEqual(at.text_input(key="wizard_import_subject").value, "S001")
+        self.assertEqual(at.text_input(key="wizard_import_session").value, "V1")
+        self.assertEqual(at.text_input(key="wizard_import_input_subdir").value, "export")
+        self.assertTrue(at.checkbox(key="wizard_import_overwrite").value)
+        self.assertTrue(at.checkbox(key="wizard_import_is_new").value)
+
+    def test_back_to_analysis_resets_outcome(self):
+        at = self._choose_create_inputs(_new_app())
+        [b for b in at.button if b.label == "← Back to Analysis"][0].click().run()
+        self.assertIsNone(at.session_state["wizard_outcome"])
+        self.assertEqual(at.session_state["wizard_step"], 0)
+        headers = [h.value for h in at.header]
+        self.assertIn("What would you like to do?", headers)
+
+
 class VersionBarUpdateButtonTests(unittest.TestCase):
     """The page header no longer carries the old "Builds a runnable..."
     caption, and now offers an Update button next to the version line that
