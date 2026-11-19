@@ -16,6 +16,7 @@ def _config(**overrides):
         correct_mrsi_orientation=False,
         t1_correction="none",
         registration_backend="ants",
+        mrsinmrs=None,
     )
     base.update(overrides)
     return SimpleNamespace(**base)

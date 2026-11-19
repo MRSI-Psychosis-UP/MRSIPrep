@@ -153,16 +153,19 @@ class StepMrsiReferenceTests(unittest.TestCase):
 class StepMrsiQualityTests(unittest.TestCase):
     def test_wires_ctx_in_and_out(self):
         mrsi_reference = SimpleNamespace(brainmask="brainmask_obj")
+        mrsi_load = SimpleNamespace(mrsinmrs_resolved="mrsinmrs_obj")
         ctx = {
             "t1_saturation_correction": "water_obj",
             "inputs": "inputs_obj",
             "mrsi_reference": mrsi_reference,
+            "mrsi_load": mrsi_load,
         }
         with patch("mrsiprep.workflows.participant._step_mrsi_quality", return_value="mrsi_quality_obj") as step:
             result = N.step_mrsi_quality(_fake_config(), _SUBJECT, _SESSION, ctx)
 
         step.assert_called_once_with(
-            unittest.mock.ANY, _SUBJECT, _SESSION, "water_obj", "inputs_obj", "brainmask_obj", unittest.mock.ANY
+            unittest.mock.ANY, _SUBJECT, _SESSION, "water_obj", "inputs_obj", "brainmask_obj", "mrsinmrs_obj",
+            unittest.mock.ANY,
         )
         self.assertEqual(result["mrsi_quality"], "mrsi_quality_obj")
 

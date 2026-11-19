@@ -110,6 +110,13 @@ class MRSILoadResult:
     :ivar flip_angle_map: Measured flip-angle (B1+) map, if provided
         (``desc-b1map``); only consumed when ``config.t1_correction ==
         "voxelwise"``, otherwise carried through unused.
+    :ivar mrsinmrs_resolved: This recording's MRSinMRS acquisition metadata
+        (``mrsinmrs.json``'s ``CommonMetadata`` merged with its matching
+        ``Recordings`` entry, if any -- see
+        :func:`mrsiprep.io.mrsinmrs.resolve_mrsinmrs`), or ``None`` if no
+        file was supplied. Resolved here (not read off ``config.mrsinmrs``
+        downstream) because it describes the raw MRSI acquisition this step
+        loads.
     """
 
     raw_maps: dict[str, Path]
@@ -119,6 +126,7 @@ class MRSILoadResult:
     linewidth_map: Path | None
     water_map: Path | None
     flip_angle_map: Path | None = None
+    mrsinmrs_resolved: dict | None = None
 
 
 @dataclass
@@ -357,6 +365,7 @@ def run_mrsi_load_workflow(config, subject: str, session: str | None, inputs: MR
         linewidth_map=inputs.linewidth_map,
         water_map=inputs.water_map,
         flip_angle_map=inputs.flip_angle_map,
+        mrsinmrs_resolved=resolve_mrsinmrs(config.mrsinmrs, subject, session),
     )
 
 
@@ -409,8 +418,7 @@ def run_t1_saturation_correction_workflow(
     :returns: :class:`WaterCorrectionResult`.
     """
     if config.t1_correction == "literature":
-        mrsinmrs_resolved = resolve_mrsinmrs(config.mrsinmrs, subject, session)
-        acquisition_params = resolve_acquisition_params(mrsinmrs_resolved)
+        acquisition_params = resolve_acquisition_params(load.mrsinmrs_resolved)
         corrected, provenance, _ = apply_t1_correction(
             config, subject, session, filtered.preproc_maps, acquisition_params, config.t1_correction_water_status
         )
@@ -423,8 +431,7 @@ def run_t1_saturation_correction_workflow(
                 "Use --t1-correction literature (nominal flip angle from mrsinmrs.json) or "
                 "--t1-correction none instead."
             )
-        mrsinmrs_resolved = resolve_mrsinmrs(config.mrsinmrs, subject, session)
-        acquisition_params = resolve_acquisition_params(mrsinmrs_resolved)
+        acquisition_params = resolve_acquisition_params(load.mrsinmrs_resolved)
         corrected, provenance, _ = apply_t1_correction_voxelwise(
             config, subject, session, filtered.preproc_maps, load.flip_angle_map, acquisition_params, config.t1_correction_water_status
         )
@@ -469,7 +476,13 @@ def run_mrsi_reference_workflow(
 
 
 def run_mrsi_quality_workflow(
-    config, subject: str, session: str | None, water: WaterCorrectionResult, inputs: MRSIInputs, brainmask: Path
+    config,
+    subject: str,
+    session: str | None,
+    water: WaterCorrectionResult,
+    inputs: MRSIInputs,
+    brainmask: Path,
+    mrsinmrs_resolved: dict | None,
 ) -> MRSIQualityResult:
     """Normalize the upstream tool's CRLB/SNR/linewidth units and build
     per-metabolite voxel-quality masks from ``water``'s (possibly
@@ -485,6 +498,9 @@ def run_mrsi_quality_workflow(
         ``linewidth_map`` may have been rebound there by orientation
         correction, so this must be the same, possibly-mutated object).
     :param brainmask: This recording's :func:`run_mrsi_load_workflow` brainmask.
+    :param mrsinmrs_resolved: This recording's :func:`run_mrsi_load_workflow`
+        ``mrsinmrs_resolved`` (used to resolve the field strength for
+        linewidth-unit conversion).
     :returns: :class:`MRSIQualityResult` with all derivatives written to
         ``config.derivative_dir`` and referenced by path.
     """
@@ -497,5 +513,6 @@ def run_mrsi_quality_workflow(
         inputs.snr_map,
         inputs.linewidth_map,
         brainmask,
+        mrsinmrs_resolved,
     )
     return MRSIQualityResult(qcmasks=qcmasks, qc_summary=qc_summary)

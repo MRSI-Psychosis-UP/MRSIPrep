@@ -54,15 +54,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     selection.add_argument(
-        "--mrsinmrs-file",
-        type=Path,
-        default=None,
-        help="Custom acquisition metadata JSON file. Defaults to "
-        "<mrsi-input-dir or bids_dir>/derivatives/mrsi-orig/mrsinmrs.json. A valid, nonempty "
-        "metadata file is required; processing and --validate-only fail if it is missing. "
-        "With mrsiprep-docker, provide a host path; the wrapper mounts the file read-only.",
-    )
-    selection.add_argument(
         "--mrsi-input-dir",
         type=Path,
         default=None,
@@ -136,6 +127,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     mrsi_load = parser.add_argument_group("MRSI branch: loading")
+    mrsi_load.add_argument(
+        "--mrsinmrs-file",
+        type=Path,
+        default=None,
+        help="Custom acquisition metadata JSON file. Defaults to "
+        "<mrsi-input-dir or bids_dir>/derivatives/mrsi-orig/mrsinmrs.json. A valid, nonempty "
+        "metadata file is required; processing and --validate-only fail if it is missing. "
+        "With mrsiprep-docker, provide a host path; the wrapper mounts the file read-only.",
+    )
     mrsi_load.add_argument(
         "--correct-mrsi-orientation",
         dest="correct_mrsi_orientation",

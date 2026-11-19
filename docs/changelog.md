@@ -1,5 +1,32 @@
 # Changelog
 
+## 2.2.3
+
+### CLI
+
+- Moved `--mrsinmrs-file` from "Prepare: input selection" into "MRSI
+  branch: loading": the file describes the raw MRSI acquisition itself,
+  so it belongs with `mrsi_load`'s other flags, not the BIDS-selection
+  group. The Command Builder GUI's Custom Pipeline tab now exposes it
+  under the `mrsi_load` step card as well. No flag was renamed or had
+  its default/behavior changed.
+
+### Pipeline
+
+- Per-recording MRSinMRS acquisition-metadata resolution
+  (`resolve_mrsinmrs`) now happens inside the `mrsi_load` step and is
+  carried on its result (`MRSILoadResult.mrsinmrs_resolved`), instead of
+  being read off `config.mrsinmrs` directly by `t1_saturation_correction`
+  and `mrsi_quality`. `mrsi_quality` now declares a real dependency on
+  `mrsi_load` in the step registry, reflecting that it already needed
+  this recording's resolved acquisition metadata (field strength, for
+  linewidth-unit conversion). Run-wide, config-time defaults (nucleus,
+  quantification tool, unit conventions) are unaffected -- those still
+  come from `config.mrsinmrs`'s `CommonMetadata`, resolved once before
+  any recording is known. `--mrsinmrs-file`'s whole-batch fail-fast
+  validation (`require_mrsinmrs()`) is unchanged: a missing or malformed
+  file still aborts before any recording runs.
+
 ## 2.2.2
 
 ### CLI

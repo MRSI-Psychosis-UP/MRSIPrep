@@ -63,7 +63,7 @@ STEP_DEPENDENCIES: dict[str, StepDeps] = {
         produces=frozenset({"mrsi_reference"}),
     ),
     "mrsi_quality": StepDeps(
-        requires=frozenset({"t1_saturation_correction", "inputs", "mrsi_reference"}),
+        requires=frozenset({"t1_saturation_correction", "inputs", "mrsi_reference", "mrsi_load"}),
         produces=frozenset({"mrsi_quality"}),
     ),
     "registration": StepDeps(

@@ -30,6 +30,7 @@ def _load(**overrides):
         linewidth_map=None,
         water_map=None,
         flip_angle_map=None,
+        mrsinmrs_resolved=None,
     )
     base.update(overrides)
     return MRSILoadResult(**base)
@@ -49,13 +50,13 @@ class RunT1WaterCorrectionWorkflowVoxelwiseTests(unittest.TestCase):
             )
 
     def test_dispatches_to_voxelwise_correction_when_flip_angle_map_present(self):
+        mrsinmrs_resolved = {"RepetitionTime": 2.0, "FlipAngle": 90.0, "MagneticFieldStrength": 3.0}
         with patch(
-            "mrsiprep.workflows.mrsi.resolve_mrsinmrs", return_value={"RepetitionTime": 2.0, "FlipAngle": 90.0, "MagneticFieldStrength": 3.0}
-        ), patch("mrsiprep.workflows.mrsi.apply_t1_correction_voxelwise", return_value=({"CrPCr": Path("corrected.nii.gz")}, ["row"], Path("summary.tsv"))) as apply_voxelwise, patch(
-            "mrsiprep.workflows.mrsi.apply_t1_correction"
-        ) as apply_literature:
+            "mrsiprep.workflows.mrsi.apply_t1_correction_voxelwise", return_value=({"CrPCr": Path("corrected.nii.gz")}, ["row"], Path("summary.tsv"))
+        ) as apply_voxelwise, patch("mrsiprep.workflows.mrsi.apply_t1_correction") as apply_literature:
             result = run_t1_saturation_correction_workflow(
-                _config(t1_correction="voxelwise"), "S001", "V1", _load(flip_angle_map=Path("b1map.nii.gz")), _filtered()
+                _config(t1_correction="voxelwise"), "S001", "V1",
+                _load(flip_angle_map=Path("b1map.nii.gz"), mrsinmrs_resolved=mrsinmrs_resolved), _filtered(),
             )
 
         apply_voxelwise.assert_called_once()
@@ -65,13 +66,12 @@ class RunT1WaterCorrectionWorkflowVoxelwiseTests(unittest.TestCase):
         self.assertEqual(result.provenance, ["row"])
 
     def test_literature_mode_does_not_require_a_flip_angle_map(self):
+        mrsinmrs_resolved = {"RepetitionTime": 2.0, "FlipAngle": 90.0, "MagneticFieldStrength": 3.0}
         with patch(
-            "mrsiprep.workflows.mrsi.resolve_mrsinmrs", return_value={"RepetitionTime": 2.0, "FlipAngle": 90.0, "MagneticFieldStrength": 3.0}
-        ), patch("mrsiprep.workflows.mrsi.apply_t1_correction", return_value=({"CrPCr": Path("corrected.nii.gz")}, ["row"], Path("summary.tsv"))) as apply_literature, patch(
-            "mrsiprep.workflows.mrsi.apply_t1_correction_voxelwise"
-        ) as apply_voxelwise:
+            "mrsiprep.workflows.mrsi.apply_t1_correction", return_value=({"CrPCr": Path("corrected.nii.gz")}, ["row"], Path("summary.tsv"))
+        ) as apply_literature, patch("mrsiprep.workflows.mrsi.apply_t1_correction_voxelwise") as apply_voxelwise:
             run_t1_saturation_correction_workflow(
-                _config(t1_correction="literature"), "S001", "V1", _load(flip_angle_map=None), _filtered()
+                _config(t1_correction="literature"), "S001", "V1", _load(flip_angle_map=None, mrsinmrs_resolved=mrsinmrs_resolved), _filtered()
             )
 
         apply_literature.assert_called_once()

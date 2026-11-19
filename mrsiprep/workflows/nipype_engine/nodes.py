@@ -122,7 +122,8 @@ def step_mrsi_quality(config, subject, session, ctx):
     debug = Debug(verbose=config.verbose, tag=f"sub-{subject}" + (f" ses-{session}" if session else ""))
     ctx = dict(ctx)
     ctx["mrsi_quality"] = _step_mrsi_quality(
-        config, subject, session, ctx["t1_saturation_correction"], ctx["inputs"], ctx["mrsi_reference"].brainmask, debug
+        config, subject, session, ctx["t1_saturation_correction"], ctx["inputs"], ctx["mrsi_reference"].brainmask,
+        ctx["mrsi_load"].mrsinmrs_resolved, debug,
     )
     return ctx
 

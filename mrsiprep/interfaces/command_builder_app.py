@@ -87,7 +87,7 @@ CUSTOM_STEP_FLAGS: dict[str, list[str]] = {
     "prepare": ["--metabolites"],
     "tissue_seg": ["--tissue-backend", "--overwrite-seg"],
     "anatprep": ["--registration-t1-target", "--csf-pv-threshold", "--overwrite-t1-reg"],
-    "mrsi_load": ["--correct-mrsi-orientation", "--registration-backend", "--fsl-cost", "--ref-met"],
+    "mrsi_load": ["--mrsinmrs-file", "--correct-mrsi-orientation", "--registration-backend", "--fsl-cost", "--ref-met"],
     "spike_filter": [
         "--no-filter", "--filter-fwhm-mm", "--spikepc", "--spike-max-cluster-voxels",
         "--spike-extreme-zscore", "--overwrite-filt",

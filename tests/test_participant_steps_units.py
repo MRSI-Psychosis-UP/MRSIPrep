@@ -214,9 +214,10 @@ class StepMrsiQualityTests(unittest.TestCase):
         water = SimpleNamespace()
         inputs = SimpleNamespace()
         brainmask = Path("brainmask.nii.gz")
+        mrsinmrs_resolved = {"MagneticFieldStrength": 3.0}
         with patch("mrsiprep.workflows.steps.run_mrsi_quality_workflow", return_value="mrsi_quality_obj") as run_quality:
-            result = P._step_mrsi_quality(SimpleNamespace(), "01", "01", water, inputs, brainmask, _debug())
-        run_quality.assert_called_once_with(unittest.mock.ANY, "01", "01", water, inputs, brainmask)
+            result = P._step_mrsi_quality(SimpleNamespace(), "01", "01", water, inputs, brainmask, mrsinmrs_resolved, _debug())
+        run_quality.assert_called_once_with(unittest.mock.ANY, "01", "01", water, inputs, brainmask, mrsinmrs_resolved)
         self.assertEqual(result, "mrsi_quality_obj")
 
 

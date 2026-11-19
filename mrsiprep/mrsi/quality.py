@@ -24,7 +24,7 @@ def _field_strength(mrsinmrs: dict | None) -> float | None:
     return None
 
 
-def make_quality_masks(config, subject: str, session: str | None, metabolite_maps: dict[str, Path], crlb_maps: dict[str, Path], snr_map: Path | None, linewidth_map: Path | None, brainmask: Path) -> tuple[dict[str, Path], Path]:
+def make_quality_masks(config, subject: str, session: str | None, metabolite_maps: dict[str, Path], crlb_maps: dict[str, Path], snr_map: Path | None, linewidth_map: Path | None, brainmask: Path, mrsinmrs_resolved: dict | None) -> tuple[dict[str, Path], Path]:
     tool = get_tool(config.quantification_tool)
     _, brain_data = load_3d_data(brainmask, dtype=np.float32, label="MRSI brain mask")
     brain = brain_data.astype(bool)
@@ -32,7 +32,7 @@ def make_quality_masks(config, subject: str, session: str | None, metabolite_map
     linewidth = None
     if linewidth_map and linewidth_map.exists():
         linewidth = tool.linewidth_scale(load_3d_data(linewidth_map, dtype=np.float32, label="linewidth map")[1])
-        linewidth = normalize_linewidth_to_hz(linewidth, config.linewidth_unit, config.nucleus, _field_strength(config.mrsinmrs))
+        linewidth = normalize_linewidth_to_hz(linewidth, config.linewidth_unit, config.nucleus, _field_strength(mrsinmrs_resolved))
     qcmasks: dict[str, Path] = {}
     rows = []
 

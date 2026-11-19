@@ -123,9 +123,9 @@ def _step_mrsi_reference(config, subject, session, load, filtered, water, inputs
         return run_mrsi_reference_workflow(config, subject, session, load, filtered, water, inputs)
 
 
-def _step_mrsi_quality(config, subject, session, water, inputs, brainmask, debug):
+def _step_mrsi_quality(config, subject, session, water, inputs, brainmask, mrsinmrs_resolved, debug):
     with debug.step("MRSI voxel-quality masks"):
-        return run_mrsi_quality_workflow(config, subject, session, water, inputs, brainmask)
+        return run_mrsi_quality_workflow(config, subject, session, water, inputs, brainmask, mrsinmrs_resolved)
 
 
 def _step_ventricle_qc(config, subject, session, raw_t1, mrsi_reference, registration):

@@ -83,7 +83,7 @@ class MakeQualityMasksTests(unittest.TestCase):
             brain = _save(root / "brain.nii.gz", [1, 1, 1, 1, 0, 0, 0, 0])
             met = _save(root / "met.nii.gz", [1] * 8)
 
-            qcmasks, _ = make_quality_masks(_config(root), "S001", "V1", {"CrPCr": met}, {}, None, None, brain)
+            qcmasks, _ = make_quality_masks(_config(root), "S001", "V1", {"CrPCr": met}, {}, None, None, brain, None)
 
             np.testing.assert_array_equal(_read(qcmasks["CrPCr"]).astype(bool), _vol([1, 1, 1, 1, 0, 0, 0, 0]).astype(bool))
 
@@ -93,7 +93,7 @@ class MakeQualityMasksTests(unittest.TestCase):
             brain = _save(root / "brain.nii.gz", [1] * 8)
             met = _save(root / "met.nii.gz", [np.nan, np.inf, 1, 1, 1, 1, 1, 1])
 
-            qcmasks, _ = make_quality_masks(_config(root), "S001", "V1", {"CrPCr": met}, {}, None, None, brain)
+            qcmasks, _ = make_quality_masks(_config(root), "S001", "V1", {"CrPCr": met}, {}, None, None, brain, None)
 
             np.testing.assert_array_equal(
                 _read(qcmasks["CrPCr"]).astype(bool), _vol([0, 0, 1, 1, 1, 1, 1, 1]).astype(bool)
@@ -106,7 +106,7 @@ class MakeQualityMasksTests(unittest.TestCase):
             met = _save(root / "met.nii.gz", [1] * 8)
             snr = _save(root / "snr.nii.gz", [4.9, 5.0, 5.1, 10, 10, 10, 10, 10])
 
-            qcmasks, _ = make_quality_masks(_config(root, snr_min=5.0), "S001", "V1", {"CrPCr": met}, {}, snr, None, brain)
+            qcmasks, _ = make_quality_masks(_config(root, snr_min=5.0), "S001", "V1", {"CrPCr": met}, {}, snr, None, brain, None)
 
             np.testing.assert_array_equal(
                 _read(qcmasks["CrPCr"]).astype(bool), _vol([0, 1, 1, 1, 1, 1, 1, 1]).astype(bool)
@@ -120,7 +120,7 @@ class MakeQualityMasksTests(unittest.TestCase):
             lw = _save(root / "lw.nii.gz", [0.09, 0.10, 0.11, 0, 0, 0, 0, 0])
 
             qcmasks, _ = make_quality_masks(
-                _config(root, linewidth_max=0.10), "S001", "V1", {"CrPCr": met}, {}, None, lw, brain
+                _config(root, linewidth_max=0.10), "S001", "V1", {"CrPCr": met}, {}, None, lw, brain, None
             )
 
             np.testing.assert_array_equal(
@@ -135,7 +135,7 @@ class MakeQualityMasksTests(unittest.TestCase):
             crlb = _save(root / "crlb.nii.gz", [19, 20, 21, 0, 0, 0, 0, 0])
 
             qcmasks, _ = make_quality_masks(
-                _config(root, crlb_max=20.0), "S001", "V1", {"CrPCr": met}, {"CrPCr": crlb}, None, None, brain
+                _config(root, crlb_max=20.0), "S001", "V1", {"CrPCr": met}, {"CrPCr": crlb}, None, None, brain, None
             )
 
             np.testing.assert_array_equal(
@@ -152,7 +152,7 @@ class MakeQualityMasksTests(unittest.TestCase):
             crlb = _save(root / "crlb.nii.gz", [0, 0, 99, 0, 0, 0, 0, 0])
 
             qcmasks, _ = make_quality_masks(
-                _config(root), "S001", "V1", {"CrPCr": met}, {"CrPCr": crlb}, snr, lw, brain
+                _config(root), "S001", "V1", {"CrPCr": met}, {"CrPCr": crlb}, snr, lw, brain, None
             )
 
             # Voxel 0 fails SNR, 1 fails linewidth, 2 fails CRLB, 7 is outside
@@ -176,6 +176,7 @@ class MakeQualityMasksTests(unittest.TestCase):
                 root / "absent-snr.nii.gz",
                 root / "absent-lw.nii.gz",
                 brain,
+                None,
             )
 
             self.assertTrue(np.all(_read(qcmasks["CrPCr"]).astype(bool)))
@@ -192,7 +193,7 @@ class MakeQualityMasksTests(unittest.TestCase):
             crlb_a = _save(root / "crlb_a.nii.gz", [99, 0, 0, 0, 0, 0, 0, 0])
 
             qcmasks, _ = make_quality_masks(
-                _config(root), "S001", "V1", {"A": met_a, "B": met_b}, {"A": crlb_a}, None, None, brain
+                _config(root), "S001", "V1", {"A": met_a, "B": met_b}, {"A": crlb_a}, None, None, brain, None
             )
 
             # Only A has a CRLB map, so only A loses voxel 0.
@@ -205,7 +206,7 @@ class MakeQualityMasksTests(unittest.TestCase):
             brain = _save(root / "brain.nii.gz", [1] * 8)
             maps = {name: _save(root / f"{name}.nii.gz", [1] * 8) for name in ("CrPCr", "Ins", "NAA")}
 
-            qcmasks, _ = make_quality_masks(_config(root), "S001", "V1", maps, {}, None, None, brain)
+            qcmasks, _ = make_quality_masks(_config(root), "S001", "V1", maps, {}, None, None, brain, None)
 
             self.assertEqual(set(qcmasks), set(maps))
             for path in qcmasks.values():
@@ -218,7 +219,7 @@ class MakeQualityMasksTests(unittest.TestCase):
             brain = _save(root / "brain.nii.gz", [1] * 8)
             maps = {name: _save(root / f"{name}.nii.gz", [1] * 8) for name in ("CrPCr", "Ins", "NAA")}
 
-            _, summary = make_quality_masks(_config(root), "S001", "V1", maps, {}, None, None, brain)
+            _, summary = make_quality_masks(_config(root), "S001", "V1", maps, {}, None, None, brain, None)
 
             self.assertEqual([row["metabolite"] for row in _rows(summary)], ["CrPCr", "Ins", "NAA"])
 
@@ -232,7 +233,7 @@ class MakeQualityMasksTests(unittest.TestCase):
             crlb = _save(root / "crlb.nii.gz", [99] * 8)
 
             _, summary = make_quality_masks(
-                _config(root), "S001", "V1", {"CrPCr": met}, {"CrPCr": crlb}, None, None, brain
+                _config(root), "S001", "V1", {"CrPCr": met}, {"CrPCr": crlb}, None, None, brain, None
             )
 
             self.assertEqual(_rows(summary)[0]["n_total_voxels"], "5")
@@ -246,7 +247,7 @@ class MakeQualityMasksTests(unittest.TestCase):
             snr = _save(root / "snr.nii.gz", [1, 10, 10, 10, 10, 10, 10, 10])
 
             _, summary = make_quality_masks(
-                _config(root, snr_min=5.0), "S001", "V1", {"CrPCr": met}, {}, snr, None, brain
+                _config(root, snr_min=5.0), "S001", "V1", {"CrPCr": met}, {}, snr, None, brain, None
             )
 
             row = _rows(summary)[0]
@@ -260,7 +261,7 @@ class MakeQualityMasksTests(unittest.TestCase):
             met = _save(root / "met.nii.gz", [1] * 8)
             snr = _save(root / "snr.nii.gz", [10] * 8)
 
-            _, summary = make_quality_masks(_config(root), "S001", "V1", {"CrPCr": met}, {}, snr, None, brain)
+            _, summary = make_quality_masks(_config(root), "S001", "V1", {"CrPCr": met}, {}, snr, None, brain, None)
 
             row = _rows(summary)[0]
             self.assertEqual(row["n_total_voxels"], "0")
@@ -271,7 +272,7 @@ class MakeQualityMasksTests(unittest.TestCase):
             root = Path(tmpdir)
             brain = _save(root / "brain.nii.gz", [1] * 8)
 
-            qcmasks, summary = make_quality_masks(_config(root), "S001", "V1", {}, {}, None, None, brain)
+            qcmasks, summary = make_quality_masks(_config(root), "S001", "V1", {}, {}, None, None, brain, None)
 
             self.assertEqual(qcmasks, {})
             self.assertTrue(summary.exists())
