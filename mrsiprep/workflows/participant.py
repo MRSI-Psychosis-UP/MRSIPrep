@@ -22,7 +22,13 @@ from mrsiprep.io.bids import BIDSLayout, Recording
 from mrsiprep.io.derivatives import init_derivative
 from mrsiprep.io.validators import ValidationError, validate_recording
 from mrsiprep.utils.debug import Debug
-from mrsiprep.utils.misc import format_elapsed_hm, normalize_session, normalize_subject, read_participant_pairs
+from mrsiprep.utils.misc import (
+    format_elapsed_hm,
+    normalize_session,
+    normalize_subject,
+    parse_participant_label_entry,
+    read_participant_pairs,
+)
 from mrsiprep.workflows.base import ensure_work_dirs
 
 # Re-exported for backwards compatibility -- see the module docstring. These
@@ -77,8 +83,18 @@ def collect_recordings(config) -> list[Recording]:
 
     Resolution order: an explicit ``--participants-file`` (one
     ``sub[,ses]`` pair per line) takes precedence; otherwise
-    ``--participant-label``/``--session-label`` are combined pairwise;
-    otherwise every recording is discovered by scanning ``config.bids_dir``.
+    ``--participant-label`` is resolved (see below); otherwise every
+    recording is discovered by scanning ``config.bids_dir``.
+
+    Each ``--participant-label`` entry may be a bare subject label (e.g.
+    ``S001``) or a combined ``sub-S001_ses-V1`` pair naming one specific
+    session directly -- the latter lets a run mix several different
+    subject/session pairs (e.g. ``S001_ses-V1 S002_ses-V4``) in one argument
+    without a separate ``--session-label`` cross-product, which cannot
+    express "a different session per subject". ``--session-label``, when
+    given, still cross-products against every *bare* (session-less)
+    ``--participant-label`` entry only; it has no effect on entries that
+    already name their own session.
 
     :param config: Run-wide :class:`mrsiprep.config.settings.MRSIPrepConfig`.
     :returns: List of :class:`mrsiprep.io.bids.Recording`, not yet
@@ -87,25 +103,35 @@ def collect_recordings(config) -> list[Recording]:
     """
     if config.participants_file:
         return [Recording(sub, ses) for sub, ses in read_participant_pairs(config.participants_file)]
-    subjects = config.participant_label or []
+    labels = config.participant_label or []
     sessions = config.session_label or []
-    if subjects:
+    if labels:
+        explicit_pairs: list[tuple[str, str]] = []
+        bare_subjects: list[str] = []
+        for label in labels:
+            subject, session = parse_participant_label_entry(label)
+            if session is not None:
+                explicit_pairs.append((subject, session))
+            else:
+                bare_subjects.append(subject)
+
+        out = [Recording(subject, session) for subject, session in explicit_pairs]
+        if not bare_subjects:
+            return out
         if sessions:
-            return [Recording(normalize_subject(sub), normalize_session(ses)) for sub in subjects for ses in sessions]
-        # No --session-label given: look up each named subject's actual
-        # session(s) instead of assuming sessionless (None) -- a subject can
-        # have real session data (discover_recordings() already merges
-        # bids_dir and --mrsi-input-dir for this), and silently ignoring it
-        # here would validate against the wrong (empty) location.
-        wanted_subjects = {normalize_subject(sub) for sub in subjects}
+            out.extend(Recording(sub, normalize_session(ses)) for sub in bare_subjects for ses in sessions)
+            return out
+        # No --session-label given for the bare subjects: look up each
+        # named subject's actual session(s) instead of assuming sessionless
+        # (None) -- a subject can have real session data (discover_recordings()
+        # already merges bids_dir and --mrsi-input-dir for this), and silently
+        # ignoring it here would validate against the wrong (empty) location.
+        wanted_subjects = set(bare_subjects)
         by_subject: dict[str, list[str | None]] = {}
         for recording in BIDSLayout.from_config(config).discover_recordings():
             if recording.subject in wanted_subjects:
                 by_subject.setdefault(recording.subject, []).append(recording.session)
-        out = []
-        for sub in subjects:
-            normalized = normalize_subject(sub)
-            out.extend(Recording(normalized, ses) for ses in by_subject.get(normalized, [None]))
+        out.extend(Recording(sub, ses) for sub in bare_subjects for ses in by_subject.get(sub, [None]))
         return out
     return BIDSLayout.from_config(config).discover_recordings()
 

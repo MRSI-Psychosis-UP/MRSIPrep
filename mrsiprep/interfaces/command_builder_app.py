@@ -186,8 +186,16 @@ WIZARD_FIELD_LABELS: dict[str, tuple[str, str]] = {
     ),
     "mrsinmrs_file": ("Acquisition metadata file", "The mrsinmrs.json file describing your MRSI acquisition."),
     "mrsi_input_dir": ("Raw MRSI data folder", "Root folder containing the raw MRSI derivatives."),
-    "participant_label": ("Subjects", "Subject labels to process, without the 'sub-' prefix."),
-    "session_label": ("Sessions", "Session labels to process, without the 'ses-' prefix."),
+    "participant_label": (
+        "Subjects",
+        "Subject labels to process, without the 'sub-' prefix. To pin a specific session per subject, "
+        "name it directly, e.g. '5301_ses-V6, 5323_ses-V4' -- no need to fill in Sessions for those.",
+    ),
+    "session_label": (
+        "Sessions",
+        "Session labels to process, without the 'ses-' prefix. Only applies to Subjects entries that "
+        "don't already name their own session (e.g. plain '5301', not '5301_ses-V6').",
+    ),
     "participants": ("Participant list file", "A TSV/CSV file listing which subject/session pairs to process."),
     "metabolites": ("Metabolites", "Which metabolite maps to process."),
     "ref_met": ("Reference metabolite", "The metabolite map used to register MRSI to the T1w anatomical."),
@@ -204,6 +212,14 @@ WIZARD_FIELD_LABELS: dict[str, tuple[str, str]] = {
     "nthreads": ("Threads per recording", "ANTs/ITK thread count per subject/session process."),
     "nproc": ("Parallel recordings", "Number of subject/session recordings to process in parallel."),
     "work_dir": ("Work folder", "Scratch/intermediate files folder; safe to delete between runs."),
+    "reports_only": (
+        "Only regenerate reports",
+        "Reuse every already-computed derivative as-is (tissue segmentation, registration, parcellation, "
+        "etc. are never recomputed) and just rewrite QC tables, figures, and the HTML report. Use this "
+        "after a run already completed, e.g. to pick up a report-template change, without reprocessing. "
+        "Fails a recording with a clear error if a required upstream derivative is missing, rather than "
+        "silently recomputing it.",
+    ),
 }
 
 # Per-step flag groups shown as the Processing step's four expanders (plan
@@ -224,6 +240,7 @@ PROCESSING_EXPANDER_STEP_GROUPS: dict[str, list[str]] = {
 }
 
 RUNTIME_EXPANDER_FLAGS: list[str] = [
+    "--reports-only",
     "--nthreads", "--nproc", "--work-dir", "--overwrite",
     "--overwrite-seg", "--overwrite-t1-reg", "--overwrite-template-reg", "--overwrite-filt",
     "--overwrite-t1corr", "--overwrite-pve", "--overwrite-transform", "--overwrite-chimera",
@@ -1096,19 +1113,22 @@ def _render_participant_selection(
         ["All participants", "Select participants", "Use a participant file"],
         key=mode_key,
         help="All participants scans the dataset folder and processes everyone found there. "
-        "Select participants lets you type specific subject/session labels. Use a participant "
-        "file points at a TSV/CSV listing subject/session pairs.",
+        "Select participants lets you type specific subject/session labels -- each one can optionally "
+        "name its own session (e.g. '5301_ses-V6') to mix different subject/session pairs in one list. "
+        "Use a participant file points at a TSV/CSV listing subject/session pairs.",
     )
     _wizard_shadow_set("participant_mode", mode)
     if mode == "Select participants":
-        col1, col2 = st.columns(2)
-        with col1:
-            label, help_text = _wizard_label_help_args("participant_label", participant_label_action)
-            _widget_for(
-                participant_label_action, key_prefix=WIZARD_KEY_PREFIX,
-                label_override=label, help_override=help_text,
-            )
-        with col2:
+        label, help_text = _wizard_label_help_args("participant_label", participant_label_action)
+        _widget_for(
+            participant_label_action, key_prefix=WIZARD_KEY_PREFIX,
+            label_override=label, help_override=help_text,
+        )
+        st.caption(
+            "Need a different session per subject? Name it right in the entry, e.g. "
+            "`5301_ses-V6, 5323_ses-V4` -- then skip Sessions below for those."
+        )
+        with st.expander("Also apply the same session(s) to any plain subject entries above"):
             label, help_text = _wizard_label_help_args("session_label", session_label_action)
             _widget_for(
                 session_label_action, key_prefix=WIZARD_KEY_PREFIX,
@@ -1809,6 +1829,11 @@ def _render_wizard_processing_step(optionals: list[argparse.Action]) -> None:
         _render_wizard_flag_group(flags, action_lookup, rendered_flags)
 
     with st.expander("Runtime and existing outputs", expanded=False):
+        st.caption(
+            "Already ran this recording before? Check **Only regenerate reports** below to skip "
+            "straight to rewriting QC tables/figures/HTML from the existing derivatives, instead of "
+            "reprocessing from scratch."
+        )
         _render_wizard_flag_group(list(RUNTIME_EXPANDER_FLAGS), action_lookup, rendered_flags)
 
 

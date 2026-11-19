@@ -36,6 +36,25 @@ def normalize_session(label: str | None) -> str | None:
     return label
 
 
+def parse_participant_label_entry(label: str) -> tuple[str, str | None]:
+    """Split one ``--participant-label`` entry into ``(subject, session)``.
+
+    Accepts a combined ``sub-XXXX_ses-YYYY`` (or bare ``XXXX_YYYY``) token so a
+    specific subject/session pair can be named in one argument instead of
+    requiring a separate, order-sensitive ``--session-label`` list -- the
+    latter cross-products with *every* named subject, which breaks down once
+    more than one subject needs a different, specific session. A plain
+    subject label (no ``_ses-``) is returned with ``session=None``, meaning
+    "every session this subject has", resolved later by
+    :func:`mrsiprep.workflows.participant.collect_recordings`.
+    """
+    label = str(label).strip()
+    match = re.match(r"^(?:sub-)?(.+?)_ses-(.+)$", label)
+    if match:
+        return normalize_subject(match.group(1)), normalize_session(match.group(2))
+    return normalize_subject(label), None
+
+
 def parse_bids_entities(filename: str | Path) -> dict[str, str | None]:
     base = Path(filename).name
     entities: dict[str, str | None] = {}

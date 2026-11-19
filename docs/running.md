@@ -6,8 +6,13 @@ See [Installation](installation.md) for the memory needed per concurrent recordi
 ## Select recordings and resources
 
 Omitting participant/session filters processes the discovered recordings.
-Use `--participant-label 01 02` and `--session-label 01 02` for subsets, or
-pass `--participants /path/to/recordings.tsv` with one recording per row:
+Use `--participant-label 01 02` and `--session-label 01 02` for subsets (every
+listed subject times every listed session). To process a different, specific
+session per subject instead -- e.g. `sub-01/ses-01` together with
+`sub-02/ses-04` -- name the session directly in each `--participant-label`
+entry: `--participant-label 01_ses-01 02_ses-04` (no `--session-label` needed
+for those). Or pass `--participants /path/to/recordings.tsv` with one
+recording per row:
 
 ```text
 participant_id	session_id

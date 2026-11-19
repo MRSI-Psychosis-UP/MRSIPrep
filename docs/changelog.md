@@ -1,5 +1,43 @@
 # Changelog
 
+## 2.2.5
+
+### CLI
+
+- `--participant-label` entries can now name a specific session directly,
+  e.g. `--participant-label sub-5301_ses-V6 5323_ses-V4` (the `sub-`
+  prefix is optional), to process a different, specific subject/session
+  pair per entry in one argument. Previously, pairing specific subjects
+  with specific sessions required `--participant-label`/`--session-label`
+  to cross-product (every listed subject against every listed session),
+  which cannot express "subject A gets session X, subject B gets session
+  Y" without over- or under-selecting. A bare entry (no `_ses-...`)
+  behaves exactly as before: it cross-products against `--session-label`
+  if given, or otherwise resolves to every session that subject actually
+  has. `collect_recordings` (`mrsiprep/workflows/participant.py`) is the
+  single place this is resolved, so both the CLI and the Command Builder
+  GUI pick it up automatically.
+
+### Command Builder GUI
+
+- The Data step's "Select participants" mode now shows one full-width
+  Subjects field (which already accepted the combined `sub-XXXX_ses-YYYY`
+  form) instead of two equally-weighted Subjects/Sessions boxes side by
+  side -- the Sessions field moved into a collapsed, clearly-secondary
+  expander, since it only applies to subject entries that don't already
+  name their own session.
+- Added the missing `--reports-only` toggle ("Only regenerate reports")
+  to the Processing step's "Runtime and existing outputs" expander --
+  it previously had no widget anywhere in the wizard. Note: `--reports-only`
+  itself already skips recomputation for the heavy anatomical steps
+  (tissue segmentation, registration, parcellation, PVC all check for an
+  existing output first), but the MRSI-processing chain (load, spike
+  filter, T1-saturation correction, reference/quality masks) still
+  reprocesses the raw MRSI arrays every run, since the QC sections shown
+  in the report are built fresh from those in-memory arrays rather than
+  cached to disk -- a real recompute-skip for that chain is tracked as a
+  separate follow-up, not addressed here.
+
 ## 2.2.4
 
 ### Command Builder GUI

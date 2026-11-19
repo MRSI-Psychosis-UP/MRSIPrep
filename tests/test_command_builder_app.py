@@ -235,6 +235,75 @@ class WizardValidationGatingTests(unittest.TestCase):
         self.assertIn("--fs-license /tmp/license.txt", codes[0].value)
 
 
+class ParticipantSelectionCombinedLabelTests(unittest.TestCase):
+    """The "Select participants" mode must offer ONE full-width Subjects
+    field that accepts a combined sub-XXXX_ses-YYYY token per entry -- not
+    two equally-weighted Subjects/Sessions boxes side by side, which forced
+    a cross-product and made mixing several different subject/session pairs
+    impossible without over- or under-selecting."""
+
+    def _select_participants_mode(self, at: AppTest) -> AppTest:
+        _choose_outcome(at, "normalize")
+        at.radio(key="wizard_field_participant_mode").set_value("Select participants").run()
+        return at
+
+    def test_sessions_field_is_tucked_in_a_collapsed_expander(self):
+        at = self._select_participants_mode(_new_app())
+        self.assertEqual(list(at.exception), [])
+        session_inputs = [w for w in at.text_input if w.key == "wizard_field_session_label"]
+        self.assertEqual(len(session_inputs), 1)
+        expanders = list(at.expander)
+        self.assertEqual(len(expanders), 1)
+
+    def test_combined_sub_ses_tokens_produce_no_session_label_flag(self):
+        at = self._select_participants_mode(_new_app())
+        at.text_input(key="wizard_field_participant_label").set_value("sub-5301_ses-V6, 5323_ses-V4").run()
+        _fill_data_step(at)
+        _goto_step(at, 2)
+        at.selectbox(key="wizard_field_ref_met").set_value("CrPCr").run()
+        _goto_step(at, 3)
+        codes = list(at.code)
+        self.assertEqual(len(codes), 1)
+        self.assertIn("--participant-label sub-5301_ses-V6 5323_ses-V4", codes[0].value)
+        self.assertNotIn("--session-label", codes[0].value)
+
+
+class ReportsOnlyFlagTests(unittest.TestCase):
+    """--reports-only (skip recomputation, just rewrite QC/figures/HTML from
+    existing derivatives) must be reachable from the wizard -- it previously
+    had no widget anywhere in the app."""
+
+    def test_checkbox_is_offered_in_runtime_expander(self):
+        at = _new_app()
+        _choose_outcome(at, "normalize")
+        _goto_step(at, 2)
+        checkbox_keys = [c.key for c in at.checkbox]
+        self.assertIn("wizard_field_reports_only", checkbox_keys)
+
+    def test_checking_it_emits_reports_only_flag(self):
+        at = _new_app()
+        _choose_outcome(at, "normalize")
+        _fill_data_step(at)
+        _goto_step(at, 2)
+        at.selectbox(key="wizard_field_ref_met").set_value("CrPCr").run()
+        at.checkbox(key="wizard_field_reports_only").set_value(True).run()
+        _goto_step(at, 3)
+        codes = list(at.code)
+        self.assertEqual(len(codes), 1)
+        self.assertIn("--reports-only", codes[0].value)
+
+    def test_left_unchecked_by_default(self):
+        at = _new_app()
+        _choose_outcome(at, "normalize")
+        _fill_data_step(at)
+        _goto_step(at, 2)
+        at.selectbox(key="wizard_field_ref_met").set_value("CrPCr").run()
+        _goto_step(at, 3)
+        codes = list(at.code)
+        self.assertEqual(len(codes), 1)
+        self.assertNotIn("--reports-only", codes[0].value)
+
+
 class ScanMetabolitesFromFilenamesTests(unittest.TestCase):
     def test_extracts_the_met_bids_entity_from_real_filenames(self):
         with tempfile.TemporaryDirectory() as td:

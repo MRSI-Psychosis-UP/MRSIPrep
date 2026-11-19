@@ -331,6 +331,31 @@ class CollectRecordingsTests(unittest.TestCase):
             recordings = P.collect_recordings(config)
         self.assertEqual(recordings, discovered)
 
+    def test_combined_sub_ses_labels_mix_different_pairs(self):
+        # The motivating case: naming a different, specific session per
+        # subject in one --participant-label list, instead of a cross-product
+        # with --session-label (which cannot express this at all).
+        config = make_config(
+            ["/tmp/bids", "/tmp/out", "participant"],
+            participants_file=None,
+            participant_label=["sub-5301_ses-V6", "5323_ses-V4"],
+            session_label=[],
+        )
+        recordings = P.collect_recordings(config)
+        self.assertEqual([(r.subject, r.session) for r in recordings], [("5301", "V6"), ("5323", "V4")])
+
+    def test_combined_and_bare_labels_mix_in_one_list(self):
+        config = make_config(
+            ["/tmp/bids", "/tmp/out", "participant"],
+            participants_file=None,
+            participant_label=["5301_ses-V6", "02"],
+            session_label=["01"],
+        )
+        recordings = P.collect_recordings(config)
+        self.assertEqual(
+            {(r.subject, r.session) for r in recordings}, {("5301", "V6"), ("02", "01")}
+        )
+
 
 class ValidateBackendInputsTests(unittest.TestCase):
     def test_synthseg_fast_backend_requires_raw_t1(self):

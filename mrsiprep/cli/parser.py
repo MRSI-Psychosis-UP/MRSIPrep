@@ -34,13 +34,17 @@ def build_parser() -> argparse.ArgumentParser:
         nargs="+",
         default=[],
         help="One or more subject labels to process, without the 'sub-' prefix (e.g. 'S001 S002'). "
-        "Default: process every subject found under --bids-dir.",
+        "An entry may also name one specific session directly as 'sub-S001_ses-V1' (or bare "
+        "'S001_ses-V1'), letting a run mix several different subject/session pairs in one argument "
+        "(e.g. '--participant-label S001_ses-V1 S002_ses-V4') instead of cross-producting against "
+        "--session-label. Default: process every subject found under --bids-dir.",
     )
     selection.add_argument(
         "--session-label",
         nargs="+",
         default=[],
-        help="One or more session labels to process, without the 'ses-' prefix (e.g. 'V1 V2'). "
+        help="One or more session labels to process, without the 'ses-' prefix (e.g. 'V1 V2'). Cross-products "
+        "against every --participant-label entry that does not already name its own session. "
         "Default: process every session found for each selected subject.",
     )
     selection.add_argument("--participants", type=Path, default=None, help="TSV/CSV subject-session list.")
