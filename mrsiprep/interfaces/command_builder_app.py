@@ -67,6 +67,7 @@ EXCLUDED_FLAGS = {"--hello-world", "--help", "-h"}
 WIZARD_ASSETS_DIR = Path(__file__).parent / "assets"
 WIZARD_NORMALIZE_THUMBNAIL = WIZARD_ASSETS_DIR / "wizard_normalize_thumbnail.svg"
 WIZARD_PARCELLATION_THUMBNAIL = WIZARD_ASSETS_DIR / "wizard_parcellation_thumbnail.png"
+WIZARD_CREATE_INPUTS_THUMBNAIL = WIZARD_ASSETS_DIR / "wizard_create_inputs_thumbnail.png"
 WIZARD_THUMBNAIL_HEIGHT_PX = 220
 
 
@@ -1659,6 +1660,8 @@ def _render_wizard_analysis_step() -> None:
                 st.rerun()
     with col3:
         with st.container(border=True):
+            if WIZARD_CREATE_INPUTS_THUMBNAIL.exists():
+                _render_wizard_thumbnail(WIZARD_CREATE_INPUTS_THUMBNAIL)
             st.subheader("Create MRSIprep inputs")
             st.write(
                 "Starting a brand-new BIDS-style project, or importing a batch of subjects/sessions "
@@ -2921,8 +2924,12 @@ def _render_wizard_page() -> None:
     positional_values, values = _collect_wizard_values(optionals, positionals)
     statuses = _compute_field_statuses(values, positional_values)
     _render_wizard_sidebar_summary(statuses)
-    with nav_slot.container():
-        _render_step_nav(len(WIZARD_STEP_TITLES), statuses)
+    # Analysis (step 0) has no nav/Back-Next footer: choosing a card already
+    # advances wizard_step on its own, and "2. Data / 3. Processing /
+    # 4. Review" mean nothing before that choice is made.
+    if step > 0:
+        with nav_slot.container():
+            _render_step_nav(len(WIZARD_STEP_TITLES), statuses)
 
 
 def _branch_badge(step_name: str) -> str:

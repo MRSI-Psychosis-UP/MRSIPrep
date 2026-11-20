@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.2.11
+
+### Command Builder GUI
+
+- The top step bar (1. Analysis / 2. Data / 3. Processing / 4. Review) and
+  its Back/Next footer no longer render on the Analysis step itself --
+  choosing one of the three outcome cards already advances past it, and
+  "2. Data / 3. Processing / 4. Review" meant nothing before that choice.
+  Still renders on Data/Processing/Review as before.
+- "Create MRSIprep inputs" now has its own thumbnail image on the
+  Analysis step, matching the other two outcome cards.
+
 ## 2.2.10
 
 ### Command Builder GUI
