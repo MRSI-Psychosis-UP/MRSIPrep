@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.2.12
+
+### Command Builder GUI
+
+- Removed the explanatory caption above the Analysis step's three outcome
+  cards.
+- The three outcome cards now stack vertically instead of sitting
+  side-by-side in three columns.
+- Shortened "Create MRSIprep inputs"'s card description to one line.
+
 ## 2.2.11
 
 ### Command Builder GUI

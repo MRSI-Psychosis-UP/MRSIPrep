@@ -1615,67 +1615,51 @@ def _render_wizard_analysis_step() -> None:
     self-contained mini-flow (_render_wizard_create_inputs_outcome) instead
     of the shared Data/Processing/Review steps."""
     st.header("What would you like to do?")
-    st.caption(
-        "The two processing options run the same full MRSIPrep pipeline end-to-end (loading, "
-        "spike filtering, T1 correction, registration, tissue correction, and the final QC "
-        "report) -- the choice below only decides which processing options are highlighted on "
-        "the next screens. The third option is a separate, lightweight tool for scanning, naming, "
-        "and migrating raw data into the layout MRSIPrep expects in the first place."
-    )
 
     outcome_key = "wizard_outcome"
     st.session_state.setdefault(outcome_key, None)
 
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        with st.container(border=True):
-            if WIZARD_NORMALIZE_THUMBNAIL.exists():
-                _render_wizard_thumbnail(WIZARD_NORMALIZE_THUMBNAIL)
-            st.subheader("Normalize metabolite maps")
-            st.write(
-                "Prepare and coregister metabolite maps into standard space, with the full quality "
-                "control report. A lightweight parcellation runs automatically for QC."
-            )
-            if st.button("Choose this", key="wizard_outcome_normalize", type=(
-                "primary" if st.session_state[outcome_key] == "normalize" else "secondary"
-            )):
-                st.session_state[outcome_key] = "normalize"
-                st.session_state["wizard_step"] = 1
-                st.rerun()
-    with col2:
-        with st.container(border=True):
-            if WIZARD_PARCELLATION_THUMBNAIL.exists():
-                _render_wizard_thumbnail(WIZARD_PARCELLATION_THUMBNAIL)
-            st.subheader("Parcellation and connectivity")
-            st.write(
-                "Same underlying pipeline, plus a guided choice of parcellation method (including "
-                "the heavier FreeSurfer-based Chimera parcellation) and metabolic connectivity "
-                "output, foregrounded as an active decision in Processing."
-            )
-            if st.button("Choose this", key="wizard_outcome_parcellation", type=(
-                "primary" if st.session_state[outcome_key] == "parcellation" else "secondary"
-            )):
-                st.session_state[outcome_key] = "parcellation"
-                st.session_state["wizard_step"] = 1
-                st.rerun()
-    with col3:
-        with st.container(border=True):
-            if WIZARD_CREATE_INPUTS_THUMBNAIL.exists():
-                _render_wizard_thumbnail(WIZARD_CREATE_INPUTS_THUMBNAIL)
-            st.subheader("Create MRSIprep inputs")
-            st.write(
-                "Starting a brand-new BIDS-style project, or importing a batch of subjects/sessions "
-                "that just came off the scanner? Scans your raw T1w and MRSI export folders, guides "
-                "you through BIDS-compliant naming, acquisition metadata, and matching, then migrates "
-                "everything for real -- a separate, lightweight step before any of the processing above."
-            )
-            if st.button("Choose this", key="wizard_outcome_create_inputs", type=(
-                "primary" if st.session_state[outcome_key] == "create_inputs" else "secondary"
-            )):
-                st.session_state[outcome_key] = "create_inputs"
-                st.session_state["wizard_step"] = 1
-                st.session_state["wizard_import_step"] = 0
-                st.rerun()
+    with st.container(border=True):
+        if WIZARD_NORMALIZE_THUMBNAIL.exists():
+            _render_wizard_thumbnail(WIZARD_NORMALIZE_THUMBNAIL)
+        st.subheader("Normalize metabolite maps")
+        st.write(
+            "Prepare and coregister metabolite maps into standard space, with the full quality "
+            "control report. A lightweight parcellation runs automatically for QC."
+        )
+        if st.button("Choose this", key="wizard_outcome_normalize", type=(
+            "primary" if st.session_state[outcome_key] == "normalize" else "secondary"
+        )):
+            st.session_state[outcome_key] = "normalize"
+            st.session_state["wizard_step"] = 1
+            st.rerun()
+    with st.container(border=True):
+        if WIZARD_PARCELLATION_THUMBNAIL.exists():
+            _render_wizard_thumbnail(WIZARD_PARCELLATION_THUMBNAIL)
+        st.subheader("Parcellation and connectivity")
+        st.write(
+            "Same underlying pipeline, plus a guided choice of parcellation method (including "
+            "the heavier FreeSurfer-based Chimera parcellation) and metabolic connectivity "
+            "output, foregrounded as an active decision in Processing."
+        )
+        if st.button("Choose this", key="wizard_outcome_parcellation", type=(
+            "primary" if st.session_state[outcome_key] == "parcellation" else "secondary"
+        )):
+            st.session_state[outcome_key] = "parcellation"
+            st.session_state["wizard_step"] = 1
+            st.rerun()
+    with st.container(border=True):
+        if WIZARD_CREATE_INPUTS_THUMBNAIL.exists():
+            _render_wizard_thumbnail(WIZARD_CREATE_INPUTS_THUMBNAIL)
+        st.subheader("Create MRSIprep inputs")
+        st.write("Scan, name, and migrate a batch of raw T1w/MRSI data into the BIDS layout MRSIPrep expects.")
+        if st.button("Choose this", key="wizard_outcome_create_inputs", type=(
+            "primary" if st.session_state[outcome_key] == "create_inputs" else "secondary"
+        )):
+            st.session_state[outcome_key] = "create_inputs"
+            st.session_state["wizard_step"] = 1
+            st.session_state["wizard_import_step"] = 0
+            st.rerun()
 
     if st.session_state[outcome_key]:
         outcome_titles = {
