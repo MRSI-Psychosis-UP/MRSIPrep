@@ -236,105 +236,341 @@ class WizardValidationGatingTests(unittest.TestCase):
         self.assertIn("--fs-license /tmp/license.txt", codes[0].value)
 
 
-class CreateInputsOutcomeTests(unittest.TestCase):
-    """The third Analysis card ("Create MRSIprep inputs") routes to its own
-    2-step mini-flow that generates a `mrsiprep-import` command -- a
-    different tool entirely from the mrsiprep-docker processing commands
-    the other two outcomes produce (see
-    _render_wizard_create_inputs_outcome's docstring)."""
+def _choose_create_inputs(at: AppTest) -> AppTest:
+    at.button(key="wizard_outcome_create_inputs").click().run()
+    return at
 
-    def _choose_create_inputs(self, at: AppTest) -> AppTest:
-        at.button(key="wizard_outcome_create_inputs").click().run()
-        return at
 
-    def _fill_step_0(self, at: AppTest, source="/data/Results_S001_V1", bids_dir="/data/bids") -> AppTest:
-        at.text_input(key="wizard_import_source").set_value(source).run()
-        at.text_input(key="wizard_import_bids_dir").set_value(bids_dir).run()
-        return at
+class BatchImportProjectStepTests(unittest.TestCase):
+    """The third Analysis card ("Create MRSIprep inputs") now routes to a
+    7-step batch-import flow that scans/names/matches/migrates real files,
+    replacing the old single-pair 2-step mrsiprep-import-command
+    generator (see _render_wizard_create_inputs_outcome's docstring)."""
 
-    def test_choosing_the_card_routes_to_the_mini_flow(self):
-        at = self._choose_create_inputs(_new_app())
+    def test_choosing_the_card_routes_to_the_batch_flow(self):
+        at = _choose_create_inputs(_new_app())
         self.assertEqual(list(at.exception), [])
         self.assertEqual(at.session_state["wizard_outcome"], "create_inputs")
         headers = [h.value for h in at.header]
         self.assertIn("Create MRSIprep inputs", headers)
 
-    def test_subject_session_are_guessed_from_source_folder_name(self):
-        at = self._choose_create_inputs(_new_app())
-        at.text_input(key="wizard_import_source").set_value("/data/Results_S001_V1").run()
-        self.assertEqual(at.text_input(key="wizard_import_subject").value, "S001")
-        self.assertEqual(at.text_input(key="wizard_import_session").value, "V1")
-
-    def test_next_disabled_until_required_fields_are_filled(self):
-        at = self._choose_create_inputs(_new_app())
-        next_buttons = [b for b in at.button if b.key == "wizard_import_next_btn"]
-        self.assertTrue(next_buttons[0].disabled)
-        at = self._fill_step_0(at)
-        next_buttons = [b for b in at.button if b.key == "wizard_import_next_btn"]
-        self.assertFalse(next_buttons[0].disabled)
-
-    def test_review_generates_mrsiprep_import_command_not_mrsiprep_docker(self):
-        at = self._choose_create_inputs(_new_app())
-        at = self._fill_step_0(at)
-        [b for b in at.button if b.key == "wizard_import_next_btn"][0].click().run()
-        codes = [c.value for c in at.code]
-        self.assertTrue(codes[0].startswith("mrsiprep-import"))
-        self.assertIn("/data/Results_S001_V1", codes[0])
-        self.assertIn("/data/bids", codes[0])
-        self.assertIn("--subject S001", codes[0])
-        self.assertIn("--session V1", codes[0])
-        self.assertNotIn("mrsiprep-docker", codes[0])
-
-    def test_advanced_flags_included_when_set(self):
-        at = self._choose_create_inputs(_new_app())
-        at = self._fill_step_0(at)
-        at.text_input(key="wizard_import_input_subdir").set_value("export").run()
-        at.checkbox(key="wizard_import_overwrite").set_value(True).run()
-        [b for b in at.button if b.key == "wizard_import_next_btn"][0].click().run()
-        codes = [c.value for c in at.code]
-        self.assertIn("--input-subdir export", codes[0])
-        self.assertIn("--overwrite", codes[0])
-
-    def test_new_project_shows_dataset_description_snippet(self):
-        at = self._choose_create_inputs(_new_app())
-        at = self._fill_step_0(at)
-        at.checkbox(key="wizard_import_is_new").set_value(True).run()
-        [b for b in at.button if b.key == "wizard_import_next_btn"][0].click().run()
-        codes = [c.value for c in at.code]
-        self.assertTrue(any("DatasetType" in c for c in codes))
-
-    def test_review_always_shows_mrsinmrs_reminder(self):
-        at = self._choose_create_inputs(_new_app())
-        at = self._fill_step_0(at)
-        [b for b in at.button if b.key == "wizard_import_next_btn"][0].click().run()
-        codes = [c.value for c in at.code]
-        self.assertTrue(any("QuantificationTool" in c for c in codes))
-
-    def test_back_preserves_every_field(self):
-        at = self._choose_create_inputs(_new_app())
-        at = self._fill_step_0(at)
-        at.checkbox(key="wizard_import_is_new").set_value(True).run()
-        at.checkbox(key="wizard_import_overwrite").set_value(True).run()
-        at.text_input(key="wizard_import_input_subdir").set_value("export").run()
-        [b for b in at.button if b.key == "wizard_import_next_btn"][0].click().run()
-        [b for b in at.button if b.key == "wizard_import_back_btn"][0].click().run()
-
-        self.assertEqual(at.session_state["wizard_import_step"], 0)
-        self.assertEqual(at.text_input(key="wizard_import_source").value, "/data/Results_S001_V1")
-        self.assertEqual(at.text_input(key="wizard_import_bids_dir").value, "/data/bids")
-        self.assertEqual(at.text_input(key="wizard_import_subject").value, "S001")
-        self.assertEqual(at.text_input(key="wizard_import_session").value, "V1")
-        self.assertEqual(at.text_input(key="wizard_import_input_subdir").value, "export")
-        self.assertTrue(at.checkbox(key="wizard_import_overwrite").value)
-        self.assertTrue(at.checkbox(key="wizard_import_is_new").value)
-
     def test_back_to_analysis_resets_outcome(self):
-        at = self._choose_create_inputs(_new_app())
+        at = _choose_create_inputs(_new_app())
         [b for b in at.button if b.label == "← Back to Analysis"][0].click().run()
         self.assertIsNone(at.session_state["wizard_outcome"])
         self.assertEqual(at.session_state["wizard_step"], 0)
         headers = [h.value for h in at.header]
         self.assertIn("What would you like to do?", headers)
+
+    def test_next_disabled_until_bids_dir_filled(self):
+        at = _choose_create_inputs(_new_app())
+        next_btn = next(b for b in at.button if b.key == "wizard_batch_next_0")
+        self.assertTrue(next_btn.disabled)
+        at.text_input(key="wizard_batch_bids_dir").set_value("/data/bids").run()
+        next_btn = next(b for b in at.button if b.key == "wizard_batch_next_0")
+        self.assertFalse(next_btn.disabled)
+
+    def test_reusing_existing_project_shown_when_dataset_description_present(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "dataset_description.json").write_text("{}")
+            at = _choose_create_inputs(_new_app())
+            at.text_input(key="wizard_batch_bids_dir").set_value(tmp).run()
+            successes = [s.value for s in at.success]
+            self.assertTrue(any("Reusing existing project" in s for s in successes))
+
+    def test_new_project_shows_dataset_description_snippet(self):
+        at = _choose_create_inputs(_new_app())
+        at.text_input(key="wizard_batch_bids_dir").set_value("/data/new_bids").run()
+        codes = [c.value for c in at.code]
+        self.assertTrue(any("DatasetType" in c for c in codes))
+
+
+class BatchImportAnatScanStepTests(unittest.TestCase):
+    def _goto_anat_scan(self, at: AppTest, bids_dir="/tmp") -> AppTest:
+        at = _choose_create_inputs(at)
+        at.text_input(key="wizard_batch_bids_dir").set_value(bids_dir).run()
+        [b for b in at.button if b.key == "wizard_batch_next_0"][0].click().run()
+        return at
+
+    def test_scan_finds_matching_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            import nibabel as nib
+            import numpy as np
+
+            (Path(tmp) / "scan_mprage.nii.gz").write_bytes(b"")
+            nib.save(nib.Nifti1Image(np.ones((2, 2, 2), dtype=np.float32), np.eye(4)), Path(tmp) / "scan_mprage.nii.gz")
+            at = self._goto_anat_scan(_new_app())
+            at.text_input(key="wizard_batch_t1_root").set_value(tmp).run()
+            at.button(key="wizard_batch_t1_scan_btn").click().run()
+            checkboxes = [c for c in at.checkbox if c.key and c.key.startswith("wizard_batch_t1_row_")]
+            self.assertEqual(len(checkboxes), 1)
+
+    def test_next_disabled_until_a_row_is_selected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            import nibabel as nib
+            import numpy as np
+
+            nib.save(nib.Nifti1Image(np.ones((2, 2, 2), dtype=np.float32), np.eye(4)), Path(tmp) / "scan_mprage.nii.gz")
+            at = self._goto_anat_scan(_new_app())
+            at.text_input(key="wizard_batch_t1_root").set_value(tmp).run()
+            at.button(key="wizard_batch_t1_scan_btn").click().run()
+            next_btn = next(b for b in at.button if b.key == "wizard_batch_next_1")
+            self.assertFalse(next_btn.disabled)
+            at.button(key="wizard_batch_t1_clear_all").click().run()
+            next_btn = next(b for b in at.button if b.key == "wizard_batch_next_1")
+            self.assertTrue(next_btn.disabled)
+
+    def test_warns_when_mrsinmrs_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            at = self._goto_anat_scan(_new_app(), bids_dir=tmp)
+            warnings = [w.value for w in at.warning]
+            self.assertTrue(any("mrsinmrs.json" in w for w in warnings))
+
+
+class BatchImportAnatNamingStepTests(unittest.TestCase):
+    def _goto_naming_step(self, tmp_t1_dir: str) -> AppTest:
+        at = _choose_create_inputs(_new_app())
+        at.text_input(key="wizard_batch_bids_dir").set_value("/tmp/bids").run()
+        [b for b in at.button if b.key == "wizard_batch_next_0"][0].click().run()
+        at.text_input(key="wizard_batch_t1_root").set_value(tmp_t1_dir).run()
+        at.button(key="wizard_batch_t1_scan_btn").click().run()
+        [b for b in at.button if b.key == "wizard_batch_next_1"][0].click().run()
+        return at
+
+    def _make_t1_file(self, tmp: str, name: str) -> None:
+        import nibabel as nib
+        import numpy as np
+
+        nib.save(nib.Nifti1Image(np.ones((2, 2, 2), dtype=np.float32), np.eye(4)), Path(tmp) / name)
+
+    def test_sequential_pattern_fills_subject_and_session(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._make_t1_file(tmp, "scan_mprage.nii.gz")
+            at = self._goto_naming_step(tmp)
+            at.text_input(key="wizard_batch_naming_pattern").set_value("CHUVUP$i").run()
+            self.assertEqual(at.text_input(key="wizard_batch_anat_sub_0").value, "CHUVUP0001")
+            self.assertEqual(at.text_input(key="wizard_batch_anat_ses_0").value, "V1")
+
+    def test_detect_mode_parses_filename_markers(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._make_t1_file(tmp, "T105_V1_mprage.nii.gz")
+            at = self._goto_naming_step(tmp)
+            at.radio(key="wizard_batch_naming_mode").set_value("detect").run()
+            at.text_input(key="wizard_batch_detect_sub_marker").set_value("T").run()
+            at.text_input(key="wizard_batch_detect_ses_marker").set_value("V").run()
+            self.assertEqual(at.text_input(key="wizard_batch_anat_sub_0").value, "105")
+            self.assertEqual(at.text_input(key="wizard_batch_anat_ses_0").value, "V1")
+
+    def test_next_blocked_when_subject_or_session_empty(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._make_t1_file(tmp, "scan_mprage.nii.gz")
+            at = self._goto_naming_step(tmp)
+            at.text_input(key="wizard_batch_anat_sub_0").set_value("").run()
+            next_btn = next(b for b in at.button if b.key == "wizard_batch_next_2")
+            self.assertTrue(next_btn.disabled)
+
+    def test_duplicate_destination_blocks_next(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._make_t1_file(tmp, "scan_a_mprage.nii.gz")
+            self._make_t1_file(tmp, "scan_b_mprage.nii.gz")
+            at = self._goto_naming_step(tmp)
+            at.text_input(key="wizard_batch_anat_sub_0").set_value("S001").run()
+            at.text_input(key="wizard_batch_anat_ses_0").set_value("V1").run()
+            at.text_input(key="wizard_batch_anat_sub_1").set_value("S001").run()
+            at.text_input(key="wizard_batch_anat_ses_1").set_value("V1").run()
+            next_btn = next(b for b in at.button if b.key == "wizard_batch_next_2")
+            self.assertTrue(next_btn.disabled)
+
+
+class BatchImportMrsiScanStepTests(unittest.TestCase):
+    def _goto_mrsi_scan_step(self) -> AppTest:
+        import nibabel as nib
+        import numpy as np
+
+        at = _choose_create_inputs(_new_app())
+        at.text_input(key="wizard_batch_bids_dir").set_value("/tmp/bids").run()
+        [b for b in at.button if b.key == "wizard_batch_next_0"][0].click().run()
+        with tempfile.TemporaryDirectory() as tmp:
+            nib.save(nib.Nifti1Image(np.ones((2, 2, 2), dtype=np.float32), np.eye(4)), Path(tmp) / "scan_mprage.nii.gz")
+            at.text_input(key="wizard_batch_t1_root").set_value(tmp).run()
+            at.button(key="wizard_batch_t1_scan_btn").click().run()
+        [b for b in at.button if b.key == "wizard_batch_next_1"][0].click().run()
+        at.text_input(key="wizard_batch_anat_sub_0").set_value("S001").run()
+        at.text_input(key="wizard_batch_anat_ses_0").set_value("V1").run()
+        [b for b in at.button if b.key == "wizard_batch_next_2"][0].click().run()
+        return at
+
+    def test_scan_classifies_files_and_reports_unmatched(self):
+        import nibabel as nib
+        import numpy as np
+
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp) / "FolderA"
+            folder.mkdir()
+            nib.save(nib.Nifti1Image(np.ones((2, 2, 2), dtype=np.float32), np.eye(4)), folder / "NAA_signal.nii.gz")
+            nib.save(nib.Nifti1Image(np.ones((2, 2, 2), dtype=np.float32), np.eye(4)), folder / "junk.nii.gz")
+            at = self._goto_mrsi_scan_step()
+            at.text_input(key="wizard_batch_mrsi_root").set_value(tmp).run()
+            at.multiselect(key="wizard_batch_mrsi_metabolites").set_value(["NAA"]).run()
+            at.text_input(key="wizard_batch_mrsi_signal_pattern").set_value("signal").run()
+            at.button(key="wizard_batch_mrsi_scan_btn").click().run()
+            expander_labels = [e.label for e in at.expander]
+            self.assertTrue(any("unmatched" in label for label in expander_labels))
+
+    def test_next_blocked_with_no_matches(self):
+        at = self._goto_mrsi_scan_step()
+        next_btn = next(b for b in at.button if b.key == "wizard_batch_next_3")
+        self.assertTrue(next_btn.disabled)
+
+
+class BatchImportMrsinmrsStepTests(unittest.TestCase):
+    def _goto_mrsinmrs_step(self, bids_dir: str) -> AppTest:
+        at = _choose_create_inputs(_new_app())
+        at.text_input(key="wizard_batch_bids_dir").set_value(bids_dir).run()
+        at.session_state["wizard_import_step"] = 4
+        at.run()
+        return at
+
+    def test_create_mode_writes_file_and_round_trips_through_load_mrsinmrs(self):
+        from mrsiprep.io.mrsinmrs import load_mrsinmrs
+
+        with tempfile.TemporaryDirectory() as tmp:
+            at = self._goto_mrsinmrs_step(tmp)
+            at.button(key="wizard_batch_mrsinmrs_save_btn").click().run()
+            write_path = Path(tmp) / "derivatives" / "mrsi-orig" / "mrsinmrs.json"
+            self.assertTrue(write_path.is_file())
+            parsed = load_mrsinmrs(bids_dir=tmp, required=True)
+            self.assertIn("QuantificationTool", parsed["CommonMetadata"])
+
+    def test_existing_mode_validates_via_real_loader(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            existing = Path(tmp) / "custom_mrsinmrs.json"
+            existing.write_text('{"CommonMetadata": {"QuantificationTool": "lcmodel", "LinewidthUnit": "Hz", "CRLBUnit": "percent"}}')
+            at = self._goto_mrsinmrs_step(tmp)
+            at.radio(key="wizard_batch_mrsinmrs_mode").set_value("existing").run()
+            at.text_input(key="wizard_batch_mrsinmrs_existing_path").set_value(str(existing)).run()
+            successes = [s.value for s in at.success]
+            self.assertTrue(any("parses cleanly" in s for s in successes))
+
+    def test_existing_mode_shows_error_for_invalid_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bad = Path(tmp) / "bad.json"
+            bad.write_text("not json")
+            at = self._goto_mrsinmrs_step(tmp)
+            at.radio(key="wizard_batch_mrsinmrs_mode").set_value("existing").run()
+            at.text_input(key="wizard_batch_mrsinmrs_existing_path").set_value(str(bad)).run()
+            errors = [e.value for e in at.error]
+            self.assertTrue(errors)
+
+    def test_linewidth_ppm_requires_field_strength(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            at = self._goto_mrsinmrs_step(tmp)
+            at.selectbox(key="wizard_batch_mrsinmrs_linewidth_unit").set_value("ppm").run()
+            next_btn = next(b for b in at.button if b.key == "wizard_batch_next_4")
+            self.assertTrue(next_btn.disabled)
+
+
+class BatchImportMatchingStepTests(unittest.TestCase):
+    def _goto_matching_step(self) -> AppTest:
+        import nibabel as nib
+        import numpy as np
+
+        at = _choose_create_inputs(_new_app())
+        at.text_input(key="wizard_batch_bids_dir").set_value("/tmp/bids").run()
+        [b for b in at.button if b.key == "wizard_batch_next_0"][0].click().run()
+        with tempfile.TemporaryDirectory() as t1_dir, tempfile.TemporaryDirectory() as mrsi_dir:
+            affine = np.eye(4)
+            nib.save(nib.Nifti1Image(np.ones((2, 2, 2), dtype=np.float32), affine), Path(t1_dir) / "a_mprage.nii.gz")
+            nib.save(nib.Nifti1Image(np.ones((2, 2, 2), dtype=np.float32), affine), Path(t1_dir) / "b_mprage.nii.gz")
+            at.text_input(key="wizard_batch_t1_root").set_value(t1_dir).run()
+            at.button(key="wizard_batch_t1_scan_btn").click().run()
+            [b for b in at.button if b.key == "wizard_batch_next_1"][0].click().run()
+            at.text_input(key="wizard_batch_anat_sub_0").set_value("S001").run()
+            at.text_input(key="wizard_batch_anat_ses_0").set_value("V1").run()
+            at.text_input(key="wizard_batch_anat_sub_1").set_value("S002").run()
+            at.text_input(key="wizard_batch_anat_ses_1").set_value("V1").run()
+            [b for b in at.button if b.key == "wizard_batch_next_2"][0].click().run()
+
+            (Path(mrsi_dir) / "FolderA").mkdir()
+            (Path(mrsi_dir) / "FolderB").mkdir()
+            nib.save(nib.Nifti1Image(np.ones((2, 2, 2), dtype=np.float32), affine), Path(mrsi_dir) / "FolderA" / "NAA_signal.nii.gz")
+            nib.save(nib.Nifti1Image(np.ones((2, 2, 2), dtype=np.float32), affine), Path(mrsi_dir) / "FolderB" / "NAA_signal.nii.gz")
+            at.text_input(key="wizard_batch_mrsi_root").set_value(mrsi_dir).run()
+            at.multiselect(key="wizard_batch_mrsi_metabolites").set_value(["NAA"]).run()
+            at.text_input(key="wizard_batch_mrsi_signal_pattern").set_value("signal").run()
+            at.button(key="wizard_batch_mrsi_scan_btn").click().run()
+        [b for b in at.button if b.key == "wizard_batch_next_3"][0].click().run()
+        at.session_state["wizard_import_step"] = 5
+        at.run()
+        return at
+
+    def test_mismatched_row_counts_block_next(self):
+        at = self._goto_matching_step()
+        at.session_state["wizard_batch_import"]["anat_rows"] = at.session_state["wizard_batch_import"]["anat_rows"][:1]
+        at.run()
+        errors = [e.value for e in at.error]
+        self.assertTrue(any("must have" in e for e in errors))
+
+    def test_reorder_swaps_adjacent_entries(self):
+        at = self._goto_matching_step()
+        initial_order = list(at.session_state["wizard_batch_match_order"])
+        down_buttons = [b for b in at.button if b.key == "wizard_batch_match_down_0"]
+        down_buttons[0].click().run()
+        self.assertEqual(at.session_state["wizard_batch_match_order"], [initial_order[1], initial_order[0]])
+
+    def test_confirm_advances_to_migrate_step(self):
+        at = self._goto_matching_step()
+        at.button(key="wizard_batch_match_confirm_btn").click().run()
+        self.assertEqual(at.session_state["wizard_import_step"], 6)
+
+
+class BatchImportMigrateStepTests(unittest.TestCase):
+    def test_migrate_writes_real_files_to_bids_tree(self):
+        import nibabel as nib
+        import numpy as np
+
+        with tempfile.TemporaryDirectory() as tmp:
+            t1_dir = Path(tmp) / "t1"
+            mrsi_dir = Path(tmp) / "mrsi"
+            bids_dir = Path(tmp) / "bids"
+            t1_dir.mkdir()
+            (mrsi_dir / "FolderA").mkdir(parents=True)
+            affine = np.eye(4)
+            nib.save(nib.Nifti1Image(np.ones((2, 2, 2), dtype=np.float32), affine), t1_dir / "scan_mprage.nii.gz")
+            nib.save(nib.Nifti1Image(np.ones((2, 2, 2), dtype=np.float32), affine), mrsi_dir / "FolderA" / "NAA_signal.nii.gz")
+
+            at = _choose_create_inputs(_new_app())
+            at.text_input(key="wizard_batch_bids_dir").set_value(str(bids_dir)).run()
+            [b for b in at.button if b.key == "wizard_batch_next_0"][0].click().run()
+            at.text_input(key="wizard_batch_t1_root").set_value(str(t1_dir)).run()
+            at.button(key="wizard_batch_t1_scan_btn").click().run()
+            [b for b in at.button if b.key == "wizard_batch_next_1"][0].click().run()
+            at.text_input(key="wizard_batch_anat_sub_0").set_value("S001").run()
+            at.text_input(key="wizard_batch_anat_ses_0").set_value("V1").run()
+            [b for b in at.button if b.key == "wizard_batch_next_2"][0].click().run()
+            at.text_input(key="wizard_batch_mrsi_root").set_value(str(mrsi_dir)).run()
+            at.multiselect(key="wizard_batch_mrsi_metabolites").set_value(["NAA"]).run()
+            at.text_input(key="wizard_batch_mrsi_signal_pattern").set_value("signal").run()
+            at.button(key="wizard_batch_mrsi_scan_btn").click().run()
+            [b for b in at.button if b.key == "wizard_batch_next_3"][0].click().run()
+            at.session_state["wizard_import_step"] = 6
+            at.run()
+            at.button(key="wizard_batch_migrate_btn").click().run()
+
+            self.assertTrue((bids_dir / "sub-S001" / "ses-V1" / "anat").glob("*_T1w.nii.gz"))
+            mrsi_out = list((bids_dir / "derivatives" / "mrsi-orig" / "sub-S001" / "ses-V1").glob("*_mrsi.nii.gz"))
+            self.assertEqual(len(mrsi_out), 1)
+            successes = [s.value for s in at.success]
+            self.assertTrue(any("Migrated successfully" in s for s in successes))
+
+    def test_start_another_batch_resets_state(self):
+        at = _choose_create_inputs(_new_app())
+        at.text_input(key="wizard_batch_bids_dir").set_value("/tmp/bids").run()
+        at.session_state["wizard_import_step"] = 6
+        at.run()
+        at.button(key="wizard_batch_restart_btn").click().run()
+        self.assertEqual(at.session_state["wizard_import_step"], 0)
+        self.assertEqual(at.session_state["wizard_batch_import"]["bids_dir"], "")
 
 
 class VersionBarUpdateButtonTests(unittest.TestCase):

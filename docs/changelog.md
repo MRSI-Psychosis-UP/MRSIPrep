@@ -1,5 +1,41 @@
 # Changelog
 
+## 2.2.9
+
+### Command Builder GUI
+
+- "Create MRSIprep inputs" is now a 7-step **batch** import flow instead of
+  a single-pair `mrsiprep-import` command generator: Project (BIDS root,
+  new or existing) -> Anatomical scan (pick sequence tokens such as
+  mprage/memprage/Bravo/MP2RAGE/UNIT1/pTx/1Tx/sTx, scan a shared T1 root,
+  select which files to import) -> Anatomical naming (a sequential pattern
+  like `CHUVUP$i`, or detect subject/session from filename markers like
+  `T`/`V` for `T105_V1`; per-row acq-/run- editing with duplicate-
+  destination detection) -> MRSI scan (metabolite list plus
+  signal/crlb/snr/fwhm filename patterns, scanned one level down per
+  sub-ses subfolder, with unmatched files listed rather than dropped) ->
+  Acquisition metadata (author a new `mrsinmrs.json` interactively --
+  quantification tool, linewidth/CRLB units, nucleus, sequence name, TE,
+  TR, flip angle, field strength -- or point at an existing one, validated
+  through the real loader) -> Matching (pair anatomical rows against MRSI
+  subfolders, reordered with up/down buttons) -> Migrate (recap table,
+  then a real migration of every matched pair into the BIDS/derivatives
+  layout, reusing the per-file migration helpers directly). This is the
+  first part of the command builder that writes real files to disk,
+  rather than only ever generating a copyable command.
+
+### Import helpers
+
+- Added `find_t1w_candidates`, `detect_sub_ses_from_marker`,
+  `classify_mrsi_filename`, `scan_mrsi_subfolders`, and `migrate_batch` to
+  `mrsiprep/interfaces/bids_import.py`, backing the batch-import flow
+  above. `migrate_session_folder` and the `mrsiprep-import`/
+  `mrsiprep-import-gui` CLIs are unchanged.
+- Fixed `build_mrsi_destination` calling `parse_mrsi_filename` even when
+  both `met_override`/`desc_override` were already supplied, which could
+  raise on a filename outside the fixed `ACQ_MAPPING` vocabulary despite
+  the caller having already resolved both fields.
+
 ## 2.2.8
 
 ### Import helpers

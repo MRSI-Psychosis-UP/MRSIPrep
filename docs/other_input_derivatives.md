@@ -254,3 +254,21 @@ mrsiprep-import-gui
 
 It prompts for the source folder, BIDS root, subject, and session, then runs
 the same `migrate_session_folder` import as the CLI.
+
+### Batch import (Command builder)
+
+For a whole batch of subjects/sessions at once -- where T1w files for many
+subjects live together under one shared root (named inconsistently, with
+varied sequence names) and MRSI files live under a *separate* root, already
+grouped one sub-ses pair per subfolder but with folder names that don't
+necessarily match the T1w side -- use the "Create MRSIprep inputs" mode in
+the [Command builder](installation.md#option-a-command-builder-recommended)
+instead. It scans both roots, lets you choose BIDS-compliant naming (a
+sequential pattern like `CHUVUP$i`, or detect subject/session from filename
+markers), author or point to an existing `mrsinmrs.json`, explicitly match
+the anatomical and MRSI sides, and migrates everything for real -- the only
+part of the command builder that writes files to disk directly, rather than
+only generating a command to copy and run. Internally it calls the same
+per-file migration helpers as `mrsiprep-import` (`migrate_anatomical_file`,
+`migrate_mrsi_file`), via a separate `migrate_batch` orchestrator;
+`migrate_session_folder` and the CLI/GUI above are unaffected.

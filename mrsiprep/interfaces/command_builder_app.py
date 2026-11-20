@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import base64
 import html
+import json
 import mimetypes
 import re
 import shlex
@@ -33,8 +34,22 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-from mrsiprep.cli.parser import build_parser
-from mrsiprep.interfaces.bids_import import parse_subject_session_folder
+from mrsiprep.cli.parser import (
+    SUPPORTED_CRLB_UNITS,
+    SUPPORTED_LINEWIDTH_UNITS,
+    SUPPORTED_QUANTIFICATION_TOOLS,
+    build_parser,
+)
+from mrsiprep.interfaces.bids_import import (
+    classify_mrsi_filename,
+    detect_sub_ses_from_marker,
+    find_t1w_candidates,
+    infer_anat_acq,
+    migrate_batch,
+    parse_subject_session_folder,
+    scan_mrsi_subfolders,
+)
+from mrsiprep.io.mrsinmrs import load_mrsinmrs
 from mrsiprep.utils.version import mrsiprep_version
 from mrsiprep.config.chimera_schemes import (
     SUPRA_REGION_LABELS,
@@ -42,7 +57,7 @@ from mrsiprep.config.chimera_schemes import (
     build_scheme_code,
     valid_letters,
 )
-from mrsiprep.config.nuclei import DEFAULT_NUCLEUS, NucleusError, metabolite_aliases
+from mrsiprep.config.nuclei import DEFAULT_NUCLEUS, NucleusError, available_nuclei, metabolite_aliases
 from mrsiprep.workflows.nipype_engine.steps_registry import STEP_DEPENDENCIES, validate_step_order
 
 # Debug/internal flags not useful in a user-facing form.
@@ -1603,8 +1618,8 @@ def _render_wizard_analysis_step() -> None:
         "The two processing options run the same full MRSIPrep pipeline end-to-end (loading, "
         "spike filtering, T1 correction, registration, tissue correction, and the final QC "
         "report) -- the choice below only decides which processing options are highlighted on "
-        "the next screens. The third option is a separate, lightweight tool for getting raw data "
-        "into the layout MRSIPrep expects in the first place."
+        "the next screens. The third option is a separate, lightweight tool for scanning, naming, "
+        "and migrating raw data into the layout MRSIPrep expects in the first place."
     )
 
     outcome_key = "wizard_outcome"
@@ -1646,10 +1661,10 @@ def _render_wizard_analysis_step() -> None:
         with st.container(border=True):
             st.subheader("Create MRSIprep inputs")
             st.write(
-                "Starting a brand-new BIDS-style project, or dropping in a subject/session that just "
-                "came off the scanner? Generates a `mrsiprep-import` command to migrate a source "
-                "export folder into the layout MRSIPrep expects -- a separate, lightweight step "
-                "before any of the processing above."
+                "Starting a brand-new BIDS-style project, or importing a batch of subjects/sessions "
+                "that just came off the scanner? Scans your raw T1w and MRSI export folders, guides "
+                "you through BIDS-compliant naming, acquisition metadata, and matching, then migrates "
+                "everything for real -- a separate, lightweight step before any of the processing above."
             )
             if st.button("Choose this", key="wizard_outcome_create_inputs", type=(
                 "primary" if st.session_state[outcome_key] == "create_inputs" else "secondary"
@@ -2055,188 +2070,683 @@ DATASET_DESCRIPTION_EXAMPLE_JSON = """{
 }"""
 
 
+T1W_SEQUENCE_TOKENS = [
+    "mprage", "memprage", "MPRAGE", "Bravo", "MP2RAGE", "UNIT1", "pTx", "t1w",
+    "MP2RAGE_pTx", "1Tx", "sTx",
+]
+
+BATCH_IMPORT_STEP_TITLES = [
+    "Project",
+    "Anatomical scan",
+    "Anatomical naming",
+    "MRSI scan",
+    "Acquisition metadata",
+    "Matching",
+    "Migrate",
+]
+
+BATCH_IMPORT_DEFAULTS: dict = {
+    "bids_dir": "", "project_name": "",
+    "t1_root": "", "t1_tokens": list(T1W_SEQUENCE_TOKENS), "t1_scan_results": [],
+    "naming_mode": "sequential", "naming_pattern": "", "naming_start": 1,
+    "detect_sub_marker": "", "detect_ses_marker": "",
+    "anat_rows": [],
+    "mrsi_root": "", "mrsi_metabolites": [],
+    "mrsi_signal_pattern": "", "mrsi_crlb_pattern": "crlb", "mrsi_snr_pattern": "snr", "mrsi_fwhm_pattern": "fwhm",
+    "mrsi_subfolders": [],
+    "mrsinmrs_mode": "create", "mrsinmrs_existing_path": "",
+    "mrsinmrs_quantification_tool": SUPPORTED_QUANTIFICATION_TOOLS[0] if SUPPORTED_QUANTIFICATION_TOOLS else "",
+    "mrsinmrs_linewidth_unit": SUPPORTED_LINEWIDTH_UNITS[0] if SUPPORTED_LINEWIDTH_UNITS else "",
+    "mrsinmrs_crlb_unit": SUPPORTED_CRLB_UNITS[0] if SUPPORTED_CRLB_UNITS else "",
+    "mrsinmrs_nucleus": DEFAULT_NUCLEUS, "mrsinmrs_sequence_name": "",
+    "mrsinmrs_te": None, "mrsinmrs_tr": None, "mrsinmrs_flip_angle": None, "mrsinmrs_field_strength": None,
+    "mrsinmrs_write_path": None,
+    "match_order": [],
+    "migrate_summary": None,
+}
+
+
+def _batch_import_state() -> dict:
+    st.session_state.setdefault("wizard_batch_import", dict(BATCH_IMPORT_DEFAULTS))
+    state = st.session_state["wizard_batch_import"]
+    for key, default in BATCH_IMPORT_DEFAULTS.items():
+        state.setdefault(key, default)
+    return state
+
+
 def _render_wizard_create_inputs_outcome() -> None:
-    """The "Create MRSIprep inputs" outcome's own self-contained 2-step
-    mini-flow, routed to by _render_wizard_page's early-return branch.
+    """The "Create MRSIprep inputs" outcome's own self-contained 7-step
+    batch-import flow, routed to by _render_wizard_page's early-return
+    branch. This is the one part of the whole app that writes real files
+    to disk (mrsinmrs.json in step 4, the migrated BIDS tree in step 6) --
+    everywhere else only ever generates a copyable command.
 
-    This never emits a `mrsiprep-docker ...` processing command -- it wraps
-    `mrsiprep-import` instead (mrsiprep/interfaces/bids_import.py's
-    migrate_session_folder, already used by the standalone mrsiprep-import
-    CLI/mrsiprep-import-gui), a separate, lightweight, host-side tool (no
-    Docker, no pipeline config) that migrates one source export folder's
-    MRSI/T1w/CAT12 files into the BIDS/derivatives layout MRSIPrep expects.
-    It deliberately does not touch dataset_description.json or
-    mrsinmrs.json (see docs/other_input_derivatives.md) -- this mini-flow
-    only reminds the user about both with copyable starter snippets, it
-    never writes them.
+    State lives in one dict, st.session_state["wizard_batch_import"]
+    (BATCH_IMPORT_DEFAULTS), written to directly by each step on every
+    render -- not via widget `value=` -- so it survives navigating between
+    steps despite Streamlit deleting a widget-backed session_state entry
+    the instant that widget isn't rendered on a rerun (see
+    WIZARD_SHADOW_PREFIX's module comment); this mirrors the simpler
+    "write the whole dict back every render" idiom this file's old 2-step
+    create-inputs mini-flow already used (now superseded) rather than the
+    main wizard's own per-field shadow-state mechanism, since this flow's
+    data is row-structured (lists of dicts), not flat scalar fields.
 
-    Step 0's widgets are only instantiated while step == 0; Streamlit
-    deletes a widget-backed session_state entry the instant its widget
-    isn't rendered on a rerun (see WIZARD_SHADOW_PREFIX's module comment),
-    so step 0 copies every field into the plain (non-widget) dict
-    `wizard_import_values` on every render, and step 1 (Review) reads
-    only from that dict, never from the widget keys directly."""
+    Reuses mrsiprep.interfaces.bids_import's existing per-file helpers
+    (find_t1w_candidates, infer_anat_acq, detect_sub_ses_from_marker,
+    scan_mrsi_subfolders, migrate_batch) -- migrate_session_folder itself
+    (the single-shared-folder, single-sub-ses CLI/mrsiprep-import-gui path)
+    is untouched."""
     step_key = "wizard_import_step"
     st.session_state.setdefault(step_key, 0)
-    st.session_state.setdefault("wizard_import_values", {})
+    state = _batch_import_state()
     step = st.session_state[step_key]
 
     st.header("Create MRSIprep inputs")
     st.caption(
-        "Generates a `mrsiprep-import` command -- a separate, host-side tool (no Docker needed) "
-        "that migrates one subject/session's raw export folder into the BIDS/derivatives layout "
-        "MRSIPrep expects. Run it once per new subject/session, whether starting a brand-new "
-        "project or adding to one that already exists."
+        "Scan raw T1w/MRSI export folders, choose BIDS-compliant naming, author the acquisition "
+        "metadata file, match the two sides, and migrate everything into the BIDS/derivatives "
+        "layout MRSIPrep expects -- for a whole batch of subjects/sessions at once."
+    )
+    st.caption(f"Step {step + 1} of {len(BATCH_IMPORT_STEP_TITLES)}: **{BATCH_IMPORT_STEP_TITLES[step]}**")
+
+    steps = [
+        _render_batch_import_project_step,
+        _render_batch_import_anat_scan_step,
+        _render_batch_import_anat_naming_step,
+        _render_batch_import_mrsi_scan_step,
+        _render_batch_import_mrsinmrs_step,
+        _render_batch_import_matching_step,
+        _render_batch_import_migrate_step,
+    ]
+    steps[step](state)
+
+
+def _render_batch_import_nav(step_key: str, step: int, last_step: int, blocking: list[str]) -> None:
+    """Back/Next row shared by every batch-import step except the last
+    (Migrate renders its own terminal actions instead of a Next button)."""
+    st.divider()
+    col_back, col_spacer, col_next = st.columns([1, 3, 1])
+    with col_back:
+        if step > 0 and st.button("Back", key=f"wizard_batch_back_{step}"):
+            st.session_state[step_key] = step - 1
+            st.rerun()
+    if step < last_step:
+        with col_next:
+            if st.button("Next", key=f"wizard_batch_next_{step}", disabled=bool(blocking), type="primary"):
+                st.session_state[step_key] = step + 1
+                st.rerun()
+    if blocking:
+        st.caption(f":red[Still need: {', '.join(blocking)}.]")
+
+
+def _render_batch_import_project_step(state: dict) -> None:
+    st.subheader("1. Project")
+    bids_dir_key = "wizard_batch_bids_dir"
+    st.session_state.setdefault(bids_dir_key, state.get("bids_dir", ""))
+    bids_dir = st.text_input(
+        "BIDS project root",
+        key=bids_dir_key,
+        help="The BIDS dataset root to migrate into, new or existing. Created automatically on Migrate "
+        "if it doesn't exist yet.",
+    )
+    has_dataset_description = bool(bids_dir) and (Path(bids_dir) / "dataset_description.json").is_file()
+    if bids_dir and has_dataset_description:
+        st.success("Reusing existing project -- `dataset_description.json` already found at this path.")
+    else:
+        project_name_key = "wizard_batch_project_name"
+        st.session_state.setdefault(project_name_key, state.get("project_name", ""))
+        project_name = st.text_input(
+            "Project name (for the snippet below only -- not written anywhere by this step)",
+            key=project_name_key,
+        )
+        state["project_name"] = project_name
+        st.info(
+            "No `dataset_description.json` found yet at this path. This step never writes it -- "
+            "create it yourself alongside your first import:"
+        )
+        snippet = DATASET_DESCRIPTION_EXAMPLE_JSON
+        if project_name:
+            snippet = snippet.replace("YOUR_DATASET_NAME", project_name)
+        st.code(snippet, language="json")
+
+    state["bids_dir"] = bids_dir
+    blocking = [] if bids_dir else ["a BIDS project root"]
+    _render_batch_import_nav(step_key="wizard_import_step", step=0, last_step=6, blocking=blocking)
+
+
+def _render_batch_import_anat_scan_step(state: dict) -> None:
+    st.subheader("2. Anatomical scan")
+    t1_root_key = "wizard_batch_t1_root"
+    st.session_state.setdefault(t1_root_key, state.get("t1_root", ""))
+    t1_root = st.text_input(
+        "T1 root folder",
+        key=t1_root_key,
+        help="The folder containing every subject's raw T1w files (may be nested in subfolders of "
+        "any depth, with inconsistent names).",
+    )
+    state["t1_root"] = t1_root
+    _render_check(_path_check(t1_root), "T1 root folder not found yet")
+
+    tokens_key = "wizard_batch_t1_tokens"
+    st.session_state.setdefault(tokens_key, state.get("t1_tokens", list(T1W_SEQUENCE_TOKENS)))
+    custom_tokens_key = "wizard_batch_t1_custom_tokens"
+    st.session_state.setdefault(custom_tokens_key, [])
+    options = sorted(set(T1W_SEQUENCE_TOKENS) | set(st.session_state[custom_tokens_key]))
+    tokens = st.multiselect(
+        "Sequence tokens to look for (filename must contain at least one)",
+        options,
+        key=tokens_key,
+        help="Known T1w sequence-name tokens. All are selected by default; narrow this down, or add "
+        "a custom token below, if your export uses a different spelling.",
+    )
+    col_custom, col_add = st.columns([3, 1])
+    with col_custom:
+        custom_token = st.text_input("Add a custom token", key="wizard_batch_t1_custom_token_input")
+    with col_add:
+        st.write("")
+        if st.button("Add", key="wizard_batch_t1_add_custom_token") and custom_token:
+            if custom_token not in st.session_state[custom_tokens_key]:
+                st.session_state[custom_tokens_key].append(custom_token)
+            if custom_token not in st.session_state[tokens_key]:
+                st.session_state[tokens_key].append(custom_token)
+            st.rerun()
+    state["t1_tokens"] = tokens
+
+    results_key = "wizard_batch_t1_scan_results"
+    if st.button("Scan", key="wizard_batch_t1_scan_btn", disabled=not Path(t1_root).is_dir() if t1_root else True):
+        found = find_t1w_candidates(t1_root, tokens)
+        st.session_state[results_key] = [{"path": str(p), "selected": True} for p in found]
+        state["t1_scan_results"] = st.session_state[results_key]
+
+    results = st.session_state.get(results_key, state.get("t1_scan_results", []))
+    if results:
+        col_all, col_none = st.columns(2)
+        with col_all:
+            if st.button("Select all", key="wizard_batch_t1_select_all"):
+                for i, row in enumerate(results):
+                    row["selected"] = True
+                    st.session_state[f"wizard_batch_t1_row_{i}"] = True
+                st.rerun()
+        with col_none:
+            if st.button("Clear all", key="wizard_batch_t1_clear_all"):
+                for i, row in enumerate(results):
+                    row["selected"] = False
+                    st.session_state[f"wizard_batch_t1_row_{i}"] = False
+                st.rerun()
+        st.write(f"Found {len(results)} file(s):")
+        for i, row in enumerate(results):
+            checkbox_key = f"wizard_batch_t1_row_{i}"
+            st.session_state.setdefault(checkbox_key, row["selected"])
+            row["selected"] = st.checkbox(
+                Path(row["path"]).relative_to(t1_root) if t1_root else row["path"],
+                key=checkbox_key,
+            )
+    else:
+        st.caption("No scan results yet -- enter a T1 root folder and click Scan.")
+    state["t1_scan_results"] = results
+
+    mrsinmrs_default_path = Path(state["bids_dir"]) / "derivatives" / "mrsi-orig" / "mrsinmrs.json" if state.get("bids_dir") else None
+    if mrsinmrs_default_path is not None and not mrsinmrs_default_path.is_file():
+        st.warning(
+            f"No `mrsinmrs.json` found yet at `{mrsinmrs_default_path}` -- required before processing "
+            "(BIDS standard acquisition metadata). Step 5 of this flow (Acquisition metadata) can "
+            "create it for you."
+        )
+
+    selected_count = sum(1 for row in results if row.get("selected"))
+    blocking = [] if selected_count else ["at least one selected T1 file"]
+    _render_batch_import_nav(step_key="wizard_import_step", step=1, last_step=6, blocking=blocking)
+
+
+def _render_batch_import_anat_naming_step(state: dict) -> None:
+    st.subheader("3. Anatomical naming")
+    selected_paths = [row["path"] for row in state.get("t1_scan_results", []) if row.get("selected")]
+    if not selected_paths:
+        st.warning("No T1 files were selected in the previous step. Go back and select at least one.")
+        _render_batch_import_nav(step_key="wizard_import_step", step=2, last_step=6, blocking=["selected T1 files"])
+        return
+
+    rows_key = "wizard_batch_anat_rows"
+    existing_by_path = {row["t1_path"]: row for row in state.get("anat_rows", [])}
+    rows = [
+        existing_by_path.get(
+            path,
+            {
+                "t1_path": path, "subject": "", "session": "", "acq": infer_anat_acq(Path(path).name), "run": None,
+                "subject_touched": False, "session_touched": False, "subject_auto": "", "session_auto": "",
+            },
+        )
+        for path in selected_paths
+    ]
+
+    mode_key = "wizard_batch_naming_mode"
+    st.session_state.setdefault(mode_key, state.get("naming_mode", "sequential"))
+    mode = st.radio(
+        "Naming mode",
+        ["sequential", "detect"],
+        format_func=lambda m: "Sequential pattern (e.g. CHUVUP$i)" if m == "sequential" else "Detect from filename (e.g. T105_V1)",
+        key=mode_key,
+    )
+    state["naming_mode"] = mode
+
+    # Auto-fill writes straight into each text_input's own session_state
+    # key (below) rather than via `value=` -- `value=` only seeds a `key`'d
+    # widget's first-ever render; every later rerun is governed entirely by
+    # session_state[key] (see the module's WIZARD_SHADOW_PREFIX comment and
+    # the create-inputs flow's own `last_source_key` guard for the same
+    # gotcha elsewhere in this file). A row is "touched" the moment the
+    # live widget value diverges from the last value *this function itself
+    # wrote* there -- tracked per row via "subject_auto"/"session_auto" --
+    # so a real user edit permanently stops future auto-fill for that row,
+    # while an auto-fill-caused change never looks like a user edit.
+    if mode == "sequential":
+        col_pattern, col_start = st.columns([3, 1])
+        with col_pattern:
+            pattern_key = "wizard_batch_naming_pattern"
+            st.session_state.setdefault(pattern_key, state.get("naming_pattern", ""))
+            pattern = st.text_input(
+                "Subject pattern (use $i as the counter placeholder)",
+                key=pattern_key,
+                help="e.g. 'CHUVUP$i' with a starting number of 1 produces CHUVUP0001, CHUVUP0002, ...",
+            )
+        with col_start:
+            start_key = "wizard_batch_naming_start"
+            st.session_state.setdefault(start_key, state.get("naming_start", 1))
+            start = st.number_input("Starting number", min_value=0, step=1, key=start_key)
+        state["naming_pattern"] = pattern
+        state["naming_start"] = start
+        width = max(len(str(start)), 4)
+        for i, row in enumerate(rows):
+            if pattern:
+                row["subject"] = pattern.replace("$i", str(int(start) + i).zfill(width))
+            row["session"] = row.get("session") or "V1"
+    else:
+        col_sub_marker, col_ses_marker = st.columns(2)
+        with col_sub_marker:
+            sub_marker_key = "wizard_batch_detect_sub_marker"
+            st.session_state.setdefault(sub_marker_key, state.get("detect_sub_marker", ""))
+            sub_marker = st.text_input("Subject marker", key=sub_marker_key, help="e.g. 'T' for a filename like T105_V1")
+        with col_ses_marker:
+            ses_marker_key = "wizard_batch_detect_ses_marker"
+            st.session_state.setdefault(ses_marker_key, state.get("detect_ses_marker", ""))
+            ses_marker = st.text_input("Session marker", key=ses_marker_key, help="e.g. 'V' for a filename like T105_V1")
+        state["detect_sub_marker"] = sub_marker
+        state["detect_ses_marker"] = ses_marker
+        for row in rows:
+            if sub_marker and ses_marker:
+                detected = detect_sub_ses_from_marker(Path(row["t1_path"]).name, sub_marker, ses_marker)
+                if detected:
+                    row["subject"] = detected["sub"]
+                    row["session"] = detected["ses"]
+
+    st.caption("Known acquisition tokens: " + ", ".join(sorted(set(T1W_SEQUENCE_TOKENS))))
+    seen_destinations: dict[tuple, int] = {}
+    row_errors: list[str] = []
+    for i, row in enumerate(rows):
+        with st.container(border=True):
+            st.caption(Path(row["t1_path"]).name)
+            col_sub, col_ses, col_acq, col_run = st.columns(4)
+            sub_key, ses_key = f"wizard_batch_anat_sub_{i}", f"wizard_batch_anat_ses_{i}"
+            # "touched" means the live widget value differs from the value
+            # *this function itself last auto-wrote* there (row["subject_auto"]),
+            # not from the freshly recomputed target -- comparing against the
+            # fresh target would always look "touched" the instant the target
+            # itself changes (e.g. the counter pattern was just typed),
+            # since the widget's on-disk value hasn't caught up yet this
+            # same render (see the module's WIZARD_SHADOW_PREFIX comment on
+            # why `value=` can't be used for this either).
+            if not row.get("subject_touched") and sub_key in st.session_state and st.session_state[sub_key] != row.get("subject_auto", ""):
+                row["subject_touched"] = True
+            if not row.get("subject_touched"):
+                st.session_state[sub_key] = row["subject"]
+                row["subject_auto"] = row["subject"]
+            if not row.get("session_touched") and ses_key in st.session_state and st.session_state[ses_key] != row.get("session_auto", ""):
+                row["session_touched"] = True
+            if not row.get("session_touched"):
+                st.session_state[ses_key] = row["session"]
+                row["session_auto"] = row["session"]
+            with col_sub:
+                sub_val = st.text_input("Subject", key=sub_key)
+                if row.get("subject_touched") or sub_val != row.get("subject_auto", ""):
+                    row["subject_touched"] = True
+                row["subject"] = sub_val
+            with col_ses:
+                ses_val = st.text_input("Session", key=ses_key)
+                if row.get("session_touched") or ses_val != row.get("session_auto", ""):
+                    row["session_touched"] = True
+                row["session"] = ses_val
+            with col_acq:
+                acq_key = f"wizard_batch_anat_acq_{i}"
+                st.session_state.setdefault(acq_key, row.get("acq", ""))
+                row["acq"] = st.text_input("Acquisition (acq-)", key=acq_key)
+            with col_run:
+                run_key = f"wizard_batch_anat_run_{i}"
+                st.session_state.setdefault(run_key, row.get("run") or "")
+                row["run"] = st.text_input("Run (run-), optional", key=run_key) or None
+
+            if not row["subject"] or not row["session"]:
+                row_errors.append(f"Row {i + 1}: subject and session are both required.")
+            else:
+                dest_key = (row["subject"], row["session"], row["acq"], row["run"])
+                if dest_key in seen_destinations:
+                    row_errors.append(f"Row {i + 1} collides with row {seen_destinations[dest_key] + 1} (same subject/session/acq/run).")
+                else:
+                    seen_destinations[dest_key] = i
+
+    state["anat_rows"] = rows
+    for error in row_errors:
+        st.caption(f":red[{error}]")
+
+    _render_batch_import_nav(step_key="wizard_import_step", step=2, last_step=6, blocking=row_errors)
+
+
+def _render_batch_import_mrsi_scan_step(state: dict) -> None:
+    st.subheader("4. MRSI scan")
+    mrsi_root_key = "wizard_batch_mrsi_root"
+    st.session_state.setdefault(mrsi_root_key, state.get("mrsi_root", ""))
+    mrsi_root = st.text_input(
+        "MRSI root folder",
+        key=mrsi_root_key,
+        help="Each sub-ses pair's MRSI files are expected in their own, differently-named "
+        "subfolder one level down from this root.",
+    )
+    state["mrsi_root"] = mrsi_root
+    _render_check(_path_check(mrsi_root), "MRSI root folder not found yet")
+
+    met_key = "wizard_batch_mrsi_metabolites"
+    nucleus = state.get("mrsinmrs_nucleus") or DEFAULT_NUCLEUS
+    try:
+        met_options = sorted(metabolite_aliases(nucleus))
+    except NucleusError:
+        met_options = sorted(metabolite_aliases(DEFAULT_NUCLEUS))
+    st.session_state.setdefault(met_key, state.get("mrsi_metabolites", []))
+    metabolites = st.multiselect(
+        "Metabolites to scan for",
+        sorted(set(met_options) | set(st.session_state[met_key])),
+        key=met_key,
+        accept_new_options=True,
+        help="Type a name and press Enter to add one not in this list.",
+    )
+    state["mrsi_metabolites"] = metabolites
+
+    col_signal, col_crlb, col_snr, col_fwhm = st.columns(4)
+    with col_signal:
+        signal_key = "wizard_batch_mrsi_signal_pattern"
+        st.session_state.setdefault(signal_key, state.get("mrsi_signal_pattern", ""))
+        signal_pattern = st.text_input("Signal pattern (blank = default)", key=signal_key)
+    with col_crlb:
+        crlb_key = "wizard_batch_mrsi_crlb_pattern"
+        st.session_state.setdefault(crlb_key, state.get("mrsi_crlb_pattern", "crlb"))
+        crlb_pattern = st.text_input("CRLB pattern", key=crlb_key)
+    with col_snr:
+        snr_key = "wizard_batch_mrsi_snr_pattern"
+        st.session_state.setdefault(snr_key, state.get("mrsi_snr_pattern", "snr"))
+        snr_pattern = st.text_input("SNR pattern", key=snr_key)
+    with col_fwhm:
+        fwhm_key = "wizard_batch_mrsi_fwhm_pattern"
+        st.session_state.setdefault(fwhm_key, state.get("mrsi_fwhm_pattern", "fwhm"))
+        fwhm_pattern = st.text_input("FWHM pattern", key=fwhm_key)
+    state.update(
+        mrsi_signal_pattern=signal_pattern, mrsi_crlb_pattern=crlb_pattern,
+        mrsi_snr_pattern=snr_pattern, mrsi_fwhm_pattern=fwhm_pattern,
     )
 
-    if step == 0:
-        st.subheader("1. Source and destination")
-        saved = st.session_state["wizard_import_values"]
-
-        source_key = "wizard_import_source"
-        st.session_state.setdefault(source_key, saved.get("source", ""))
-        source = st.text_input(
-            "Source folder",
-            key=source_key,
-            help="The per-subject/session export folder to migrate from (e.g. a lab-internal "
-            "'Results_S001_V1' folder containing an MRSI_NIFTI subfolder, CAT12 outputs, and/or "
-            "a T1w anatomical).",
+    if st.button("Scan", key="wizard_batch_mrsi_scan_btn", disabled=not Path(mrsi_root).is_dir() if mrsi_root else True):
+        state["mrsi_subfolders"] = scan_mrsi_subfolders(
+            mrsi_root, metabolites, signal_pattern, crlb_pattern, snr_pattern, fwhm_pattern
         )
 
-        st.session_state.setdefault("wizard_import_is_new", saved.get("is_new_project", False))
-        is_new_project = st.checkbox(
-            "This is a brand-new project (bids_dir doesn't exist yet, or is still empty)",
-            key="wizard_import_is_new",
-            help="Shows a starter dataset_description.json snippet to create alongside your "
-            "first import -- mrsiprep-import does not write this file itself.",
-        )
-
-        st.session_state.setdefault("wizard_import_bids_dir", saved.get("bids_dir", ""))
-        bids_dir = st.text_input(
-            "BIDS root (bids_dir)",
-            key="wizard_import_bids_dir",
-            help="The BIDS dataset root to migrate into. Created automatically if it doesn't "
-            "exist yet.",
-        )
-
-        guessed = parse_subject_session_folder(Path(source).name) if source else None
-        guessed_sub = guessed["sub"] if guessed else ""
-        guessed_ses = guessed["new_session"] or "" if guessed else ""
-        if guessed:
-            st.caption(f"Guessed from the source folder name: subject `{guessed_sub}`, session `{guessed_ses}`.")
-
-        # Re-guess subject/session from the source folder name each time
-        # `source` itself changes, but only overwrite a field the user
-        # hasn't already typed something different into -- st.text_input's
-        # own `value=` kwarg only seeds a widget's *first* render; once a
-        # `key`'d widget exists, session_state[key] (not `value=`) governs
-        # every later rerun, so a freshly computed guess must be written
-        # there directly.
-        last_source_key = "wizard_import_last_guessed_source"
-        if guessed and st.session_state.get(last_source_key) != source:
-            st.session_state["wizard_import_subject"] = guessed_sub
-            st.session_state["wizard_import_session"] = guessed_ses
-            st.session_state[last_source_key] = source
-        else:
-            st.session_state.setdefault("wizard_import_subject", saved.get("subject", ""))
-            st.session_state.setdefault("wizard_import_session", saved.get("session", ""))
-
-        col_sub, col_ses = st.columns(2)
-        with col_sub:
-            subject = st.text_input("Subject label (without 'sub-')", key="wizard_import_subject")
-        with col_ses:
-            session = st.text_input("Session label (without 'ses-')", key="wizard_import_session")
-
-        with st.expander("Advanced", expanded=False):
-            st.session_state.setdefault("wizard_import_input_subdir", saved.get("input_subdir", ""))
-            input_subdir = st.text_input(
-                "--input-subdir",
-                key="wizard_import_input_subdir",
-                help="An extra subdirectory level to look for the source's own MRSI_NIFTI folder "
-                "under, for export layouts that nest it one level deeper than <source>/MRSI_NIFTI.",
-            )
-            st.session_state.setdefault("wizard_import_overwrite", saved.get("overwrite", False))
-            overwrite = st.checkbox(
-                "--overwrite (replace existing destination files instead of skipping them)",
-                key="wizard_import_overwrite",
-            )
-
-        if is_new_project:
-            st.info("New project: create `dataset_description.json` at the BIDS root alongside your first import.")
-            st.code(DATASET_DESCRIPTION_EXAMPLE_JSON, language="json")
-
-        st.session_state["wizard_import_values"] = {
-            "source": source, "bids_dir": bids_dir, "subject": subject, "session": session,
-            "input_subdir": input_subdir, "overwrite": overwrite, "is_new_project": is_new_project,
-        }
-
-        blocking = []
-        if not source:
-            blocking.append("a source folder")
-        if not bids_dir:
-            blocking.append("a BIDS root (bids_dir)")
-        if not subject:
-            blocking.append("a subject label")
-        if not session:
-            blocking.append("a session label")
-
-        st.divider()
-        col_spacer, col_next = st.columns([4, 1])
-        with col_next:
-            if st.button("Next", key="wizard_import_next_btn", disabled=bool(blocking), type="primary"):
-                st.session_state[step_key] = 1
-                st.rerun()
-        if blocking:
-            st.caption(f":red[Still need: {', '.join(blocking)}.]")
-
+    subfolders = state.get("mrsi_subfolders", [])
+    if subfolders:
+        st.write(f"Found {len(subfolders)} subfolder(s):")
+        for sf in subfolders:
+            with st.container(border=True):
+                st.write(f"**{sf['folder_name']}**")
+                counts = sf["counts"]
+                st.caption(f"signal: {counts['signal']} | crlb: {counts['crlb']} | snr: {counts['snr']} | fwhm: {counts['fwhm']}")
+                if sf["unmatched"]:
+                    with st.expander(f"{len(sf['unmatched'])} unmatched file(s)"):
+                        for name in sf["unmatched"]:
+                            st.caption(name)
     else:
-        st.subheader("2. Review")
-        saved = st.session_state["wizard_import_values"]
+        st.caption("No scan results yet -- enter an MRSI root folder and click Scan.")
 
-        source = saved.get("source", "")
-        bids_dir = saved.get("bids_dir", "")
-        subject = saved.get("subject", "")
-        session = saved.get("session", "")
-        input_subdir = saved.get("input_subdir", "")
-        overwrite = saved.get("overwrite", False)
-        is_new_project = saved.get("is_new_project", False)
+    has_any_match = any(sf["files"] for sf in subfolders)
+    blocking = [] if has_any_match else ["at least one subfolder with a matched MRSI file"]
+    _render_batch_import_nav(step_key="wizard_import_step", step=3, last_step=6, blocking=blocking)
 
-        groups: list[list[str]] = [
-            ["mrsiprep-import"],
-            [shlex.quote(source)],
-            [shlex.quote(bids_dir)],
-            ["--subject", shlex.quote(subject)],
-            ["--session", shlex.quote(session)],
-        ]
-        if input_subdir:
-            groups.append(["--input-subdir", shlex.quote(input_subdir)])
-        if overwrite:
-            groups.append(["--overwrite"])
-        command = " \\\n    ".join(" ".join(group) for group in groups)
 
-        st.success("Ready to copy.")
-        st.code(command, language="bash")
-        st.caption(
-            "Runs on the host directly (no Docker needed) -- requires `pip install mrsiprep` "
-            "(mrsiprep-import is installed alongside the main package)."
+def _render_batch_import_mrsinmrs_step(state: dict) -> None:
+    st.subheader("5. Acquisition metadata (mrsinmrs.json)")
+    mode_key = "wizard_batch_mrsinmrs_mode"
+    st.session_state.setdefault(mode_key, state.get("mrsinmrs_mode", "create"))
+    mode = st.radio(
+        "mrsinmrs.json",
+        ["create", "existing"],
+        format_func=lambda m: "Create a new mrsinmrs.json" if m == "create" else "Use an existing file",
+        key=mode_key,
+    )
+    state["mrsinmrs_mode"] = mode
+
+    blocking: list[str] = []
+    if mode == "existing":
+        path_key = "wizard_batch_mrsinmrs_existing_path"
+        st.session_state.setdefault(path_key, state.get("mrsinmrs_existing_path", ""))
+        existing_path = st.text_input("Path to existing mrsinmrs.json", key=path_key)
+        state["mrsinmrs_existing_path"] = existing_path
+        if existing_path:
+            try:
+                load_mrsinmrs(bids_dir=state.get("bids_dir", ""), metadata_file=existing_path, required=False)
+                st.success("File parses cleanly.")
+            except (ValueError, FileNotFoundError) as exc:
+                st.error(str(exc))
+                blocking.append("a valid existing mrsinmrs.json")
+        else:
+            blocking.append("a path to an existing mrsinmrs.json")
+    else:
+        col_tool, col_lw, col_crlb = st.columns(3)
+        with col_tool:
+            tool_key = "wizard_batch_mrsinmrs_tool"
+            st.session_state.setdefault(tool_key, state.get("mrsinmrs_quantification_tool", ""))
+            tool = st.selectbox("Quantification tool", list(SUPPORTED_QUANTIFICATION_TOOLS), key=tool_key)
+        with col_lw:
+            lw_key = "wizard_batch_mrsinmrs_linewidth_unit"
+            st.session_state.setdefault(lw_key, state.get("mrsinmrs_linewidth_unit", ""))
+            linewidth_unit = st.selectbox("Linewidth unit", list(SUPPORTED_LINEWIDTH_UNITS), key=lw_key)
+        with col_crlb:
+            crlb_unit_key = "wizard_batch_mrsinmrs_crlb_unit"
+            st.session_state.setdefault(crlb_unit_key, state.get("mrsinmrs_crlb_unit", ""))
+            crlb_unit = st.selectbox("CRLB unit", list(SUPPORTED_CRLB_UNITS), key=crlb_unit_key)
+
+        col_nucleus, col_seq = st.columns(2)
+        with col_nucleus:
+            nucleus_key = "wizard_batch_mrsinmrs_nucleus"
+            st.session_state.setdefault(nucleus_key, state.get("mrsinmrs_nucleus", DEFAULT_NUCLEUS))
+            nucleus = st.selectbox("Nucleus", available_nuclei(), key=nucleus_key)
+        with col_seq:
+            seq_key = "wizard_batch_mrsinmrs_sequence_name"
+            st.session_state.setdefault(seq_key, state.get("mrsinmrs_sequence_name", ""))
+            sequence_name = st.text_input("Sequence name (optional)", key=seq_key)
+
+        col_te, col_tr, col_flip, col_field = st.columns(4)
+        with col_te:
+            te_key = "wizard_batch_mrsinmrs_te"
+            st.session_state.setdefault(te_key, state.get("mrsinmrs_te") or 0.0)
+            te = st.number_input("TE (s)", min_value=0.0, step=0.001, format="%.3f", key=te_key)
+        with col_tr:
+            tr_key = "wizard_batch_mrsinmrs_tr"
+            st.session_state.setdefault(tr_key, state.get("mrsinmrs_tr") or 0.0)
+            tr = st.number_input("TR (s)", min_value=0.0, step=0.001, format="%.3f", key=tr_key)
+        with col_flip:
+            flip_key = "wizard_batch_mrsinmrs_flip_angle"
+            st.session_state.setdefault(flip_key, state.get("mrsinmrs_flip_angle") or 0.0)
+            flip_angle = st.number_input("Flip angle (deg)", min_value=0.0, step=1.0, key=flip_key)
+        with col_field:
+            field_key = "wizard_batch_mrsinmrs_field_strength"
+            st.session_state.setdefault(field_key, state.get("mrsinmrs_field_strength") or 0.0)
+            field_strength = st.number_input("Field strength (T)", min_value=0.0, step=0.5, key=field_key)
+
+        met_key = "wizard_batch_mrsinmrs_metabolites"
+        shared_metabolites = state.get("mrsi_metabolites", [])
+        st.session_state.setdefault(met_key, shared_metabolites)
+        try:
+            met_options = sorted(metabolite_aliases(nucleus))
+        except NucleusError:
+            met_options = sorted(metabolite_aliases(DEFAULT_NUCLEUS))
+        metabolites = st.multiselect(
+            "Metabolites scanned (convenience only -- not written to mrsinmrs.json)",
+            sorted(set(met_options) | set(st.session_state[met_key])),
+            key=met_key,
+            accept_new_options=True,
+        )
+        state["mrsi_metabolites"] = metabolites
+
+        state.update(
+            mrsinmrs_quantification_tool=tool, mrsinmrs_linewidth_unit=linewidth_unit, mrsinmrs_crlb_unit=crlb_unit,
+            mrsinmrs_nucleus=nucleus, mrsinmrs_sequence_name=sequence_name,
+            mrsinmrs_te=te or None, mrsinmrs_tr=tr or None, mrsinmrs_flip_angle=flip_angle or None,
+            mrsinmrs_field_strength=field_strength or None,
         )
 
-        if is_new_project:
-            with st.expander("New project: dataset_description.json", expanded=False):
-                st.caption(f"Create this file at `{bids_dir or '<bids_dir>'}/dataset_description.json`:")
-                st.code(DATASET_DESCRIPTION_EXAMPLE_JSON, language="json")
+        if linewidth_unit == "ppm" and not field_strength:
+            blocking.append("field strength (required when linewidth unit is ppm)")
 
-        with st.expander("Acquisition metadata: mrsinmrs.json (required before processing)", expanded=False):
-            st.caption(
-                "mrsiprep-import does not touch mrsinmrs.json -- write or edit it separately. Required "
-                "at `<bids_dir>/derivatives/mrsi-orig/mrsinmrs.json` (or pass --mrsinmrs-file "
-                "elsewhere). See docs/mrsinmrs.md for the full field reference."
-            )
-            st.code(MRSINMRS_EXAMPLE_JSON, language="json")
+        common_metadata = {"QuantificationTool": tool, "LinewidthUnit": linewidth_unit, "CRLBUnit": crlb_unit, "Nucleus": nucleus}
+        if sequence_name:
+            common_metadata["SequenceName"] = sequence_name
+        if te:
+            common_metadata["EchoTime"] = te
+        if tr:
+            common_metadata["RepetitionTime"] = tr
+        if flip_angle:
+            common_metadata["FlipAngle"] = flip_angle
+        if field_strength:
+            common_metadata["MagneticFieldStrength"] = field_strength
+        document = {"CommonMetadata": common_metadata, "Recordings": []}
+        st.code(json.dumps(document, indent=2), language="json")
 
-        st.divider()
-        if st.button("Back", key="wizard_import_back_btn"):
-            st.session_state[step_key] = 0
+        write_path = Path(state.get("bids_dir", "")) / "derivatives" / "mrsi-orig" / "mrsinmrs.json" if state.get("bids_dir") else None
+        already_exists = write_path is not None and write_path.is_file()
+        overwrite_confirmed = True
+        if already_exists:
+            st.warning(f"`{write_path}` already exists.")
+            overwrite_confirmed = st.checkbox("Overwrite the existing file", key="wizard_batch_mrsinmrs_overwrite_confirm")
+        if st.button("Save mrsinmrs.json", key="wizard_batch_mrsinmrs_save_btn", disabled=write_path is None or (already_exists and not overwrite_confirmed)):
+            write_path.parent.mkdir(parents=True, exist_ok=True)
+            write_path.write_text(json.dumps(document, indent=2))
+            state["mrsinmrs_write_path"] = str(write_path)
+            st.success(f"Wrote `{write_path}`.")
+        if not state.get("mrsinmrs_write_path") and not already_exists:
+            blocking.append("a saved mrsinmrs.json")
+        elif already_exists and not state.get("mrsinmrs_write_path"):
+            state["mrsinmrs_write_path"] = str(write_path)
+
+    _render_batch_import_nav(step_key="wizard_import_step", step=4, last_step=6, blocking=blocking)
+
+
+def _render_batch_import_matching_step(state: dict) -> None:
+    st.subheader("6. Matching")
+    anat_rows = state.get("anat_rows", [])
+    subfolders = state.get("mrsi_subfolders", [])
+    if len(anat_rows) != len(subfolders):
+        st.error(
+            f"Anatomical rows ({len(anat_rows)}) and MRSI subfolders ({len(subfolders)}) must have "
+            "the same count before matching. Go back and adjust your scan/selection."
+        )
+        _render_batch_import_nav(step_key="wizard_import_step", step=5, last_step=6, blocking=["matching row counts"])
+        return
+
+    order_key = "wizard_batch_match_order"
+    if order_key not in st.session_state or len(st.session_state[order_key]) != len(subfolders):
+        st.session_state[order_key] = state.get("match_order") or list(range(len(subfolders)))
+    order = st.session_state[order_key]
+
+    for position, idx in enumerate(order):
+        anat_row = anat_rows[position]
+        mrsi_folder = subfolders[idx]
+        with st.container(border=True):
+            col_anat, col_arrows, col_mrsi = st.columns([3, 1, 3])
+            with col_anat:
+                st.write(f"`sub-{anat_row['subject']}_ses-{anat_row['session']}`")
+            with col_arrows:
+                sub_up, sub_down = st.columns(2)
+                with sub_up:
+                    if st.button("▲", key=f"wizard_batch_match_up_{position}", disabled=position == 0):
+                        order[position - 1], order[position] = order[position], order[position - 1]
+                        st.session_state[order_key] = order
+                        st.rerun()
+                with sub_down:
+                    if st.button("▼", key=f"wizard_batch_match_down_{position}", disabled=position == len(order) - 1):
+                        order[position + 1], order[position] = order[position], order[position + 1]
+                        st.session_state[order_key] = order
+                        st.rerun()
+            with col_mrsi:
+                st.write(f"`{mrsi_folder['folder_name']}`")
+
+    state["match_order"] = order
+    if st.button("Confirm", key="wizard_batch_match_confirm_btn", type="primary"):
+        st.session_state["wizard_import_step"] = 6
+        st.rerun()
+    _render_batch_import_nav(step_key="wizard_import_step", step=5, last_step=6, blocking=[])
+
+
+def _render_batch_import_migrate_step(state: dict) -> None:
+    st.subheader("7. Migrate")
+    anat_rows = state.get("anat_rows", [])
+    subfolders_all = state.get("mrsi_subfolders", [])
+    order = state.get("match_order") or list(range(len(subfolders_all)))
+    ordered_subfolders = [subfolders_all[idx] for idx in order]
+
+    rows = []
+    for anat_row, mrsi_folder in zip(anat_rows, ordered_subfolders):
+        rows.append(
+            {
+                "Subject": anat_row["subject"],
+                "Session": anat_row["session"],
+                "T1 source": Path(anat_row["t1_path"]).name,
+                "Acq/Run": f"{anat_row.get('acq', '')}" + (f" / run-{anat_row['run']}" if anat_row.get("run") else ""),
+                "MRSI folder": mrsi_folder["folder_name"],
+                "signal": mrsi_folder["counts"]["signal"], "crlb": mrsi_folder["counts"]["crlb"],
+                "snr": mrsi_folder["counts"]["snr"], "fwhm": mrsi_folder["counts"]["fwhm"],
+            }
+        )
+    st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+
+    mrsinmrs_status = state.get("mrsinmrs_write_path") or state.get("mrsinmrs_existing_path")
+    if mrsinmrs_status:
+        st.caption(f"mrsinmrs.json: `{mrsinmrs_status}`")
+    else:
+        st.caption(":orange[mrsinmrs.json not yet in place -- required before processing, but Migrate does not block on it.]")
+
+    overwrite_key = "wizard_batch_migrate_overwrite"
+    st.session_state.setdefault(overwrite_key, False)
+    overwrite = st.checkbox("Overwrite existing destination files", key=overwrite_key)
+
+    if st.button("Migrate", key="wizard_batch_migrate_btn", type="primary"):
+        summary = migrate_batch(state["bids_dir"], anat_rows, ordered_subfolders, overwrite=overwrite)
+        state["migrate_summary"] = summary
+
+    summary = state.get("migrate_summary")
+    if summary is not None:
+        if summary["errors"]:
+            st.error(f"Migrated with {len(summary['errors'])} error(s). T1: {len(summary['t1'])}, MRSI: {len(summary['mrsi'])}, skipped: {len(summary['skipped'])}.")
+            with st.expander("Errors"):
+                for err in summary["errors"]:
+                    st.code(err)
+        else:
+            st.success(f"Migrated successfully. T1: {len(summary['t1'])}, MRSI: {len(summary['mrsi'])}, skipped: {len(summary['skipped'])}.")
+
+    st.divider()
+    col_back, col_restart = st.columns(2)
+    with col_back:
+        if st.button("Back", key="wizard_batch_migrate_back_btn"):
+            st.session_state["wizard_import_step"] = 5
+            st.rerun()
+    with col_restart:
+        if st.button("Start another batch", key="wizard_batch_restart_btn"):
+            st.session_state["wizard_batch_import"] = dict(BATCH_IMPORT_DEFAULTS)
+            st.session_state["wizard_import_step"] = 0
             st.rerun()
 
 
