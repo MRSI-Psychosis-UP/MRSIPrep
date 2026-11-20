@@ -1,5 +1,33 @@
 # Changelog
 
+## 2.2.10
+
+### Command Builder GUI
+
+- Batch import's Project step now takes a BIDS **projects root** (e.g.
+  `/media/you/NVME_BIDS_1`) and a separate **project name** (e.g.
+  `test-migrate`), joining them into `<root>/<project_name>` as the actual
+  BIDS directory used by every later step and by Migrate -- rather than
+  treating the typed path itself as the literal BIDS root. The joined
+  folder is created automatically (via the existing per-file migration
+  helpers' `mkdir(parents=True)`) if it doesn't exist yet.
+
+### Import helpers
+
+- Fixed `classify_mrsi_filename` reporting global, not-per-metabolite
+  SNR/linewidth maps (e.g. `SNR.nii.gz`, `Linewidth.nii.gz` -- one
+  whole-recording file per sub-ses, with no metabolite name in the
+  filename at all) as unmatched regardless of the snr/fwhm pattern given,
+  since it required a metabolite-name match before ever checking the
+  snr/fwhm patterns. The snr/fwhm patterns are now checked first,
+  independently of any metabolite match; a per-metabolite snr/fwhm file
+  (e.g. `Cr_snr.nii.gz`) still keeps its matched metabolite.
+- Fixed `build_mrsi_destination` still calling `parse_mrsi_filename` for
+  such a file, since its guard required both `met_override` and
+  `desc_override` truthy to skip parsing, but a global snr/fwhm map
+  legitimately has `met_override=None`. Skipping now only requires
+  `desc_override`.
+
 ## 2.2.9
 
 ### Command Builder GUI

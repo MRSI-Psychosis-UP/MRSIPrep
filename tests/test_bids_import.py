@@ -197,6 +197,27 @@ class ClassifyMrsiFilenameTests(unittest.TestCase):
         # default -- it must explicitly contain the signal token.
         self.assertIsNone(classify_mrsi_filename("NAA_raw.nii.gz", ["NAA"], signal_pattern="signal", crlb_pattern="crlb"))
 
+    def test_snr_pattern_matches_without_a_metabolite_name(self):
+        # Regression test: SNR/linewidth maps are often whole-recording
+        # files with no metabolite name in them at all (e.g. SNR.nii.gz),
+        # so requiring a metabolite match before checking the snr/fwhm
+        # patterns silently dropped them into "unmatched" no matter what
+        # pattern the user typed.
+        result = classify_mrsi_filename("SNR.nii.gz", ["NAA", "Cr"], snr_pattern="SNR")
+        self.assertEqual(result, {"met": None, "desc": "snr", "met_override": None, "desc_override": "snr"})
+
+    def test_fwhm_pattern_matches_without_a_metabolite_name(self):
+        result = classify_mrsi_filename("Linewidth.nii.gz", ["NAA", "Cr"], fwhm_pattern="Linewidth")
+        self.assertEqual(result, {"met": None, "desc": "fwhm", "met_override": None, "desc_override": "fwhm"})
+
+    def test_snr_pattern_checked_before_requiring_a_metabolite_match(self):
+        # A per-metabolite snr file (contains both a metabolite name and the
+        # snr pattern) is still classified as snr, not signal, and keeps its
+        # matched metabolite.
+        result = classify_mrsi_filename("NAA_snr.nii.gz", ["NAA"], snr_pattern="snr")
+        self.assertEqual(result["desc"], "snr")
+        self.assertEqual(result["met"], "NAA")
+
 
 class ScanMrsiSubfoldersTests(unittest.TestCase):
     def setUp(self):
@@ -235,6 +256,21 @@ class ScanMrsiSubfoldersTests(unittest.TestCase):
     def test_nonexistent_root_returns_empty(self):
         self.assertEqual(scan_mrsi_subfolders(self.tmp / "missing", ["NAA"]), [])
 
+    def test_global_snr_and_fwhm_files_with_no_metabolite_name_are_matched(self):
+        # Regression test: SNR.nii.gz/Linewidth.nii.gz (one whole-recording
+        # map per sub-ses, no metabolite name in the filename) used to be
+        # reported as unmatched no matter what snr_pattern/fwhm_pattern was
+        # given, since classify_mrsi_filename required a metabolite match
+        # first.
+        self._save("root/FolderA/NAA_signal.nii.gz")
+        self._save("root/FolderA/SNR.nii.gz")
+        self._save("root/FolderA/Linewidth.nii.gz")
+        result = scan_mrsi_subfolders(
+            self.tmp / "root", ["NAA"], signal_pattern="signal", snr_pattern="SNR", fwhm_pattern="Linewidth"
+        )
+        self.assertEqual(result[0]["counts"], {"signal": 1, "crlb": 0, "snr": 1, "fwhm": 1})
+        self.assertEqual(result[0]["unmatched"], [])
+
 
 class BuildMrsiDestinationOverrideTests(unittest.TestCase):
     def test_both_overrides_skip_filename_parsing(self):
@@ -253,6 +289,16 @@ class BuildMrsiDestinationOverrideTests(unittest.TestCase):
         dest = build_mrsi_destination("NAA_crlb.nii.gz", "/bids", "S001", "V1", met_override="Custom")
         self.assertIn("met-Custom", dest.name)
         self.assertIn("desc-crlb", dest.name)
+
+    def test_desc_override_alone_skips_parsing_even_with_no_met_override(self):
+        # Regression test: a global, not-per-metabolite snr/fwhm file (e.g.
+        # SNR.nii.gz) has met_override=None but a real desc_override --
+        # build_mrsi_destination used to require BOTH overrides truthy to
+        # skip parse_mrsi_filename, so this filename (outside ACQ_MAPPING's
+        # fixed vocabulary) raised despite desc already being resolved.
+        dest = build_mrsi_destination("SNR.nii.gz", "/bids", "S001", "V1", met_override=None, desc_override="snr")
+        self.assertNotIn("met-", dest.name)
+        self.assertIn("desc-snr", dest.name)
 
 
 class MigrateBatchTests(unittest.TestCase):

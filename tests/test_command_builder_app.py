@@ -241,6 +241,16 @@ def _choose_create_inputs(at: AppTest) -> AppTest:
     return at
 
 
+def _fill_project_step(at: AppTest, bids_dir: str) -> AppTest:
+    """Fills the Project step's root + name inputs so the joined
+    `<root>/<project_name>` path equals the given `bids_dir`, matching how
+    _render_batch_import_project_step builds state["bids_dir"]."""
+    root, name = str(Path(bids_dir).parent), Path(bids_dir).name
+    at.text_input(key="wizard_batch_bids_root").set_value(root).run()
+    at.text_input(key="wizard_batch_project_name").set_value(name).run()
+    return at
+
+
 class BatchImportProjectStepTests(unittest.TestCase):
     """The third Analysis card ("Create MRSIprep inputs") now routes to a
     7-step batch-import flow that scans/names/matches/migrates real files,
@@ -266,29 +276,40 @@ class BatchImportProjectStepTests(unittest.TestCase):
         at = _choose_create_inputs(_new_app())
         next_btn = next(b for b in at.button if b.key == "wizard_batch_next_0")
         self.assertTrue(next_btn.disabled)
-        at.text_input(key="wizard_batch_bids_dir").set_value("/data/bids").run()
+        at = _fill_project_step(at, "/data/bids/test-migrate")
         next_btn = next(b for b in at.button if b.key == "wizard_batch_next_0")
         self.assertFalse(next_btn.disabled)
 
+    def test_project_name_is_joined_onto_the_root(self):
+        at = _choose_create_inputs(_new_app())
+        at.text_input(key="wizard_batch_bids_root").set_value("/media/flucchetti/NVME_BIDS_1").run()
+        at.text_input(key="wizard_batch_project_name").set_value("test-migrate").run()
+        self.assertEqual(
+            at.session_state["wizard_batch_import"]["bids_dir"],
+            str(Path("/media/flucchetti/NVME_BIDS_1") / "test-migrate"),
+        )
+
     def test_reusing_existing_project_shown_when_dataset_description_present(self):
         with tempfile.TemporaryDirectory() as tmp:
-            (Path(tmp) / "dataset_description.json").write_text("{}")
+            project_dir = Path(tmp) / "test-migrate"
+            project_dir.mkdir()
+            (project_dir / "dataset_description.json").write_text("{}")
             at = _choose_create_inputs(_new_app())
-            at.text_input(key="wizard_batch_bids_dir").set_value(tmp).run()
+            at = _fill_project_step(at, str(project_dir))
             successes = [s.value for s in at.success]
             self.assertTrue(any("Reusing existing project" in s for s in successes))
 
     def test_new_project_shows_dataset_description_snippet(self):
         at = _choose_create_inputs(_new_app())
-        at.text_input(key="wizard_batch_bids_dir").set_value("/data/new_bids").run()
+        at = _fill_project_step(at, "/data/new_bids/test-migrate")
         codes = [c.value for c in at.code]
         self.assertTrue(any("DatasetType" in c for c in codes))
 
 
 class BatchImportAnatScanStepTests(unittest.TestCase):
-    def _goto_anat_scan(self, at: AppTest, bids_dir="/tmp") -> AppTest:
+    def _goto_anat_scan(self, at: AppTest, bids_dir="/tmp/bids/test-migrate") -> AppTest:
         at = _choose_create_inputs(at)
-        at.text_input(key="wizard_batch_bids_dir").set_value(bids_dir).run()
+        at = _fill_project_step(at, bids_dir)
         [b for b in at.button if b.key == "wizard_batch_next_0"][0].click().run()
         return at
 
@@ -330,7 +351,7 @@ class BatchImportAnatScanStepTests(unittest.TestCase):
 class BatchImportAnatNamingStepTests(unittest.TestCase):
     def _goto_naming_step(self, tmp_t1_dir: str) -> AppTest:
         at = _choose_create_inputs(_new_app())
-        at.text_input(key="wizard_batch_bids_dir").set_value("/tmp/bids").run()
+        at = _fill_project_step(at, "/tmp/bids/test-migrate")
         [b for b in at.button if b.key == "wizard_batch_next_0"][0].click().run()
         at.text_input(key="wizard_batch_t1_root").set_value(tmp_t1_dir).run()
         at.button(key="wizard_batch_t1_scan_btn").click().run()
@@ -388,7 +409,7 @@ class BatchImportMrsiScanStepTests(unittest.TestCase):
         import numpy as np
 
         at = _choose_create_inputs(_new_app())
-        at.text_input(key="wizard_batch_bids_dir").set_value("/tmp/bids").run()
+        at = _fill_project_step(at, "/tmp/bids/test-migrate")
         [b for b in at.button if b.key == "wizard_batch_next_0"][0].click().run()
         with tempfile.TemporaryDirectory() as tmp:
             nib.save(nib.Nifti1Image(np.ones((2, 2, 2), dtype=np.float32), np.eye(4)), Path(tmp) / "scan_mprage.nii.gz")
@@ -426,7 +447,7 @@ class BatchImportMrsiScanStepTests(unittest.TestCase):
 class BatchImportMrsinmrsStepTests(unittest.TestCase):
     def _goto_mrsinmrs_step(self, bids_dir: str) -> AppTest:
         at = _choose_create_inputs(_new_app())
-        at.text_input(key="wizard_batch_bids_dir").set_value(bids_dir).run()
+        at = _fill_project_step(at, bids_dir)
         at.session_state["wizard_import_step"] = 4
         at.run()
         return at
@@ -435,18 +456,19 @@ class BatchImportMrsinmrsStepTests(unittest.TestCase):
         from mrsiprep.io.mrsinmrs import load_mrsinmrs
 
         with tempfile.TemporaryDirectory() as tmp:
-            at = self._goto_mrsinmrs_step(tmp)
+            bids_dir = Path(tmp) / "test-migrate"
+            at = self._goto_mrsinmrs_step(str(bids_dir))
             at.button(key="wizard_batch_mrsinmrs_save_btn").click().run()
-            write_path = Path(tmp) / "derivatives" / "mrsi-orig" / "mrsinmrs.json"
+            write_path = bids_dir / "derivatives" / "mrsi-orig" / "mrsinmrs.json"
             self.assertTrue(write_path.is_file())
-            parsed = load_mrsinmrs(bids_dir=tmp, required=True)
+            parsed = load_mrsinmrs(bids_dir=str(bids_dir), required=True)
             self.assertIn("QuantificationTool", parsed["CommonMetadata"])
 
     def test_existing_mode_validates_via_real_loader(self):
         with tempfile.TemporaryDirectory() as tmp:
             existing = Path(tmp) / "custom_mrsinmrs.json"
             existing.write_text('{"CommonMetadata": {"QuantificationTool": "lcmodel", "LinewidthUnit": "Hz", "CRLBUnit": "percent"}}')
-            at = self._goto_mrsinmrs_step(tmp)
+            at = self._goto_mrsinmrs_step(str(Path(tmp) / "test-migrate"))
             at.radio(key="wizard_batch_mrsinmrs_mode").set_value("existing").run()
             at.text_input(key="wizard_batch_mrsinmrs_existing_path").set_value(str(existing)).run()
             successes = [s.value for s in at.success]
@@ -456,7 +478,7 @@ class BatchImportMrsinmrsStepTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             bad = Path(tmp) / "bad.json"
             bad.write_text("not json")
-            at = self._goto_mrsinmrs_step(tmp)
+            at = self._goto_mrsinmrs_step(str(Path(tmp) / "test-migrate"))
             at.radio(key="wizard_batch_mrsinmrs_mode").set_value("existing").run()
             at.text_input(key="wizard_batch_mrsinmrs_existing_path").set_value(str(bad)).run()
             errors = [e.value for e in at.error]
@@ -476,7 +498,7 @@ class BatchImportMatchingStepTests(unittest.TestCase):
         import numpy as np
 
         at = _choose_create_inputs(_new_app())
-        at.text_input(key="wizard_batch_bids_dir").set_value("/tmp/bids").run()
+        at = _fill_project_step(at, "/tmp/bids/test-migrate")
         [b for b in at.button if b.key == "wizard_batch_next_0"][0].click().run()
         with tempfile.TemporaryDirectory() as t1_dir, tempfile.TemporaryDirectory() as mrsi_dir:
             affine = np.eye(4)
@@ -540,7 +562,7 @@ class BatchImportMigrateStepTests(unittest.TestCase):
             nib.save(nib.Nifti1Image(np.ones((2, 2, 2), dtype=np.float32), affine), mrsi_dir / "FolderA" / "NAA_signal.nii.gz")
 
             at = _choose_create_inputs(_new_app())
-            at.text_input(key="wizard_batch_bids_dir").set_value(str(bids_dir)).run()
+            at = _fill_project_step(at, str(bids_dir))
             [b for b in at.button if b.key == "wizard_batch_next_0"][0].click().run()
             at.text_input(key="wizard_batch_t1_root").set_value(str(t1_dir)).run()
             at.button(key="wizard_batch_t1_scan_btn").click().run()
@@ -565,7 +587,7 @@ class BatchImportMigrateStepTests(unittest.TestCase):
 
     def test_start_another_batch_resets_state(self):
         at = _choose_create_inputs(_new_app())
-        at.text_input(key="wizard_batch_bids_dir").set_value("/tmp/bids").run()
+        at = _fill_project_step(at, "/tmp/bids/test-migrate")
         at.session_state["wizard_import_step"] = 6
         at.run()
         at.button(key="wizard_batch_restart_btn").click().run()

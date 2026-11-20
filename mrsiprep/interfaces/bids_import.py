@@ -142,21 +142,30 @@ def classify_mrsi_filename(
     signal/crlb/snr/fwhm type patterns, for the batch-import wizard's
     user-driven MRSI scan step (as opposed to :func:`parse_mrsi_filename`'s
     fixed ``ACQ_MAPPING`` vocabulary). Returns ``None`` if the filename
-    matches no metabolite name, else a dict with the matched metabolite,
-    the detected type (``"signal"``/``"crlb"``/``"snr"``/``"fwhm"``), and
+    matches neither a metabolite name nor the snr/fwhm patterns, else a dict
+    with the matched metabolite (``None`` for a global, not-per-metabolite
+    snr/fwhm map such as ``SNR.nii.gz``/``Linewidth.nii.gz``), the detected
+    type (``"signal"``/``"crlb"``/``"snr"``/``"fwhm"``), and
     ``met_override``/``desc_override`` ready to pass to
     :func:`migrate_mrsi_file`."""
     lower = filename.lower()
     met = next((name for name in metabolites if name and name.lower() in lower), None)
+
+    # snr/fwhm maps are often whole-recording files with no metabolite name
+    # in them at all (e.g. SNR.nii.gz, Linewidth.nii.gz) -- checked before
+    # requiring a metabolite match, so they aren't swallowed by the
+    # "no metabolite name found" case below. A per-metabolite snr/fwhm file
+    # (e.g. Cr_snr.nii.gz) still carries its matched metabolite through.
+    if snr_pattern and snr_pattern.lower() in lower:
+        return {"met": met, "desc": "snr", "met_override": met, "desc_override": "snr"}
+    if fwhm_pattern and fwhm_pattern.lower() in lower:
+        return {"met": met, "desc": "fwhm", "met_override": met, "desc_override": "fwhm"}
+
     if met is None:
         return None
     desc = "signal"
     if crlb_pattern and crlb_pattern.lower() in lower:
         desc = "crlb"
-    elif snr_pattern and snr_pattern.lower() in lower:
-        desc = "snr"
-    elif fwhm_pattern and fwhm_pattern.lower() in lower:
-        desc = "fwhm"
     elif signal_pattern and signal_pattern.lower() not in lower:
         return None
     return {"met": met, "desc": desc, "met_override": met, "desc_override": desc}
@@ -252,7 +261,13 @@ def parse_mrsi_filename(path: str | Path) -> dict[str, str | None]:
 
 
 def build_mrsi_destination(path: str | Path, bids_dir: str | Path, subject: str, session: str, met_override=None, desc_override=None) -> Path:
-    parsed = parse_mrsi_filename(path) if not (met_override and desc_override) else {"met": None, "desc": None}
+    # desc_override alone is enough to skip parse_mrsi_filename -- met_override
+    # is legitimately None for a global, not-per-metabolite map (e.g. a
+    # whole-recording SNR.nii.gz/Linewidth.nii.gz with no metabolite name in
+    # the filename at all), so requiring both would send those through the
+    # fixed ACQ_MAPPING vocabulary and raise on them despite desc already
+    # being resolved by the caller.
+    parsed = parse_mrsi_filename(path) if not desc_override else {"met": None, "desc": None}
     met = str(met_override).strip() if met_override else parsed["met"]
     desc = str(desc_override).strip() if desc_override else parsed["desc"]
     if not desc:

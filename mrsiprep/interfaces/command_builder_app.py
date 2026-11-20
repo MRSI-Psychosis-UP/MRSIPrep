@@ -2086,7 +2086,7 @@ BATCH_IMPORT_STEP_TITLES = [
 ]
 
 BATCH_IMPORT_DEFAULTS: dict = {
-    "bids_dir": "", "project_name": "",
+    "bids_root": "", "project_name": "", "bids_dir": "",
     "t1_root": "", "t1_tokens": list(T1W_SEQUENCE_TOKENS), "t1_scan_results": [],
     "naming_mode": "sequential", "naming_pattern": "", "naming_start": 1,
     "detect_sub_marker": "", "detect_ses_marker": "",
@@ -2182,36 +2182,46 @@ def _render_batch_import_nav(step_key: str, step: int, last_step: int, blocking:
 
 def _render_batch_import_project_step(state: dict) -> None:
     st.subheader("1. Project")
-    bids_dir_key = "wizard_batch_bids_dir"
-    st.session_state.setdefault(bids_dir_key, state.get("bids_dir", ""))
-    bids_dir = st.text_input(
-        "BIDS project root",
-        key=bids_dir_key,
-        help="The BIDS dataset root to migrate into, new or existing. Created automatically on Migrate "
-        "if it doesn't exist yet.",
+    bids_root_key = "wizard_batch_bids_root"
+    st.session_state.setdefault(bids_root_key, state.get("bids_root", ""))
+    bids_root = st.text_input(
+        "BIDS projects root",
+        key=bids_root_key,
+        help="The folder that holds your BIDS projects, e.g. /media/you/NVME_BIDS_1 -- "
+        "the project itself is created as a subfolder of this path.",
     )
+    state["bids_root"] = bids_root
+
+    project_name_key = "wizard_batch_project_name"
+    st.session_state.setdefault(project_name_key, state.get("project_name", ""))
+    project_name = st.text_input(
+        "Project name",
+        key=project_name_key,
+        help="Subfolder created under the projects root above, e.g. test-migrate -- "
+        "reuse an existing project's name to migrate into it instead.",
+    )
+    state["project_name"] = project_name
+
+    bids_dir = str(Path(bids_root) / project_name) if bids_root and project_name else ""
+    state["bids_dir"] = bids_dir
+
     has_dataset_description = bool(bids_dir) and (Path(bids_dir) / "dataset_description.json").is_file()
     if bids_dir and has_dataset_description:
-        st.success("Reusing existing project -- `dataset_description.json` already found at this path.")
-    else:
-        project_name_key = "wizard_batch_project_name"
-        st.session_state.setdefault(project_name_key, state.get("project_name", ""))
-        project_name = st.text_input(
-            "Project name (for the snippet below only -- not written anywhere by this step)",
-            key=project_name_key,
-        )
-        state["project_name"] = project_name
-        st.info(
-            "No `dataset_description.json` found yet at this path. This step never writes it -- "
-            "create it yourself alongside your first import:"
-        )
-        snippet = DATASET_DESCRIPTION_EXAMPLE_JSON
-        if project_name:
-            snippet = snippet.replace("YOUR_DATASET_NAME", project_name)
+        st.success(f"Reusing existing project at `{bids_dir}` -- `dataset_description.json` already found.")
+    elif bids_dir:
+        if Path(bids_dir).is_dir():
+            st.info(f"Existing folder `{bids_dir}` found, but no `dataset_description.json` yet.")
+        else:
+            st.info(f"`{bids_dir}` doesn't exist yet -- created automatically on Migrate.")
+        st.caption("This step never writes `dataset_description.json` -- create it yourself, e.g.:")
+        snippet = DATASET_DESCRIPTION_EXAMPLE_JSON.replace("YOUR_DATASET_NAME", project_name or "YOUR_DATASET_NAME")
         st.code(snippet, language="json")
 
-    state["bids_dir"] = bids_dir
-    blocking = [] if bids_dir else ["a BIDS project root"]
+    blocking = []
+    if not bids_root:
+        blocking.append("a BIDS projects root")
+    if not project_name:
+        blocking.append("a project name")
     _render_batch_import_nav(step_key="wizard_import_step", step=0, last_step=6, blocking=blocking)
 
 
