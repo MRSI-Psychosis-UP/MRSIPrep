@@ -443,6 +443,37 @@ class BatchImportMrsiScanStepTests(unittest.TestCase):
         next_btn = next(b for b in at.button if b.key == "wizard_batch_next_3")
         self.assertTrue(next_btn.disabled)
 
+    def test_nucleus_picker_present_and_defaults_to_1h(self):
+        at = self._goto_mrsi_scan_step()
+        nucleus_select = at.selectbox(key="wizard_batch_mrsinmrs_nucleus")
+        self.assertEqual(nucleus_select.value, "1H")
+        self.assertIn("31P", nucleus_select.options)
+
+    def test_metabolite_candidates_come_from_the_curated_preset_file(self):
+        at = self._goto_mrsi_scan_step()
+        options = at.multiselect(key="wizard_batch_mrsi_metabolites").options
+        self.assertIn("NAA", options)
+        self.assertIn("Glu", options)
+
+    def test_switching_nucleus_changes_metabolite_candidates(self):
+        at = self._goto_mrsi_scan_step()
+        at.selectbox(key="wizard_batch_mrsinmrs_nucleus").set_value("31P").run()
+        options = at.multiselect(key="wizard_batch_mrsi_metabolites").options
+        self.assertIn("ATP", options)
+        self.assertNotIn("NAA", options)
+
+    def test_nucleus_choice_is_remembered_for_the_mrsinmrs_step(self):
+        at = self._goto_mrsi_scan_step()
+        at.selectbox(key="wizard_batch_mrsinmrs_nucleus").set_value("31P").run()
+        at.session_state["wizard_import_step"] = 4
+        at.run()
+        captions = [c.value for c in at.caption]
+        self.assertTrue(any("31P" in c for c in captions))
+        # The mrsinmrs step must not render its own independent nucleus
+        # selectbox -- the choice from the MRSI scan step is remembered
+        # (shown read-only via the caption above), not re-asked.
+        self.assertFalse(any(s.key == "wizard_batch_mrsinmrs_nucleus" for s in at.selectbox))
+
 
 class BatchImportMrsinmrsStepTests(unittest.TestCase):
     def _goto_mrsinmrs_step(self, bids_dir: str) -> AppTest:

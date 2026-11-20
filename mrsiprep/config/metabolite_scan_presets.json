@@ -1,0 +1,479 @@
+{
+  "scope": "Curated in vivo brain spectroscopy targets from the preceding list, including targeted disease and tracer studies. Biological relevance to brain does not imply tissue exclusivity. Labels are importer suggestions.",
+  "nucleus_definition": "Nucleus whose resonance is identified. For indirect proton-detected carbon editing, record the detection nucleus separately.",
+  "nuclei": [
+    {
+      "nucleus": "1H",
+      "metabolites": [
+        {
+          "label": "2HG",
+          "name": "2-Hydroxyglutarate",
+          "aliases": [],
+          "context": "Targeted brain metabolic or disease study"
+        },
+        {
+          "label": "Ala",
+          "name": "Alanine",
+          "aliases": []
+        },
+        {
+          "label": "Asc",
+          "name": "Ascorbate",
+          "aliases": []
+        },
+        {
+          "label": "Asp",
+          "name": "Aspartate",
+          "aliases": []
+        },
+        {
+          "label": "bHB",
+          "name": "Beta-hydroxybutyrate",
+          "aliases": [
+            "bHb"
+          ],
+          "context": "Targeted brain metabolic or disease study"
+        },
+        {
+          "label": "Cho",
+          "name": "Free choline",
+          "aliases": [],
+          "note": "Use only when free choline is explicitly identified in the basis set. A map labeled Cho may instead represent total choline."
+        },
+        {
+          "label": "Cr",
+          "name": "Creatine",
+          "aliases": []
+        },
+        {
+          "label": "GABA",
+          "name": "Gamma-aminobutyric acid",
+          "aliases": []
+        },
+        {
+          "label": "Glc",
+          "name": "Glucose",
+          "aliases": []
+        },
+        {
+          "label": "Gln",
+          "name": "Glutamine",
+          "aliases": []
+        },
+        {
+          "label": "Glu",
+          "name": "Glutamate",
+          "aliases": []
+        },
+        {
+          "label": "Gly",
+          "name": "Glycine",
+          "aliases": []
+        },
+        {
+          "label": "GPC",
+          "name": "Glycerophosphocholine",
+          "aliases": []
+        },
+        {
+          "label": "GSH",
+          "name": "Glutathione",
+          "aliases": []
+        },
+        {
+          "label": "Gua",
+          "name": "Guanidinoacetate",
+          "aliases": [],
+          "context": "Targeted brain metabolic or disease study"
+        },
+        {
+          "label": "Lac",
+          "name": "Lactate",
+          "aliases": []
+        },
+        {
+          "label": "mI",
+          "name": "myo-Inositol",
+          "aliases": [
+            "Ins",
+            "mIns",
+            "m-Ins"
+          ]
+        },
+        {
+          "label": "NAA",
+          "name": "N-Acetylaspartate",
+          "aliases": []
+        },
+        {
+          "label": "NAAG",
+          "name": "N-Acetylaspartylglutamate",
+          "aliases": []
+        },
+        {
+          "label": "PCho",
+          "name": "Phosphocholine",
+          "aliases": [
+            "PCh",
+            "PC"
+          ]
+        },
+        {
+          "label": "PCr",
+          "name": "Phosphocreatine",
+          "aliases": []
+        },
+        {
+          "label": "PE",
+          "name": "Phosphoethanolamine",
+          "aliases": []
+        },
+        {
+          "label": "Phe",
+          "name": "Phenylalanine",
+          "aliases": [
+            "Phenyl"
+          ],
+          "context": "Targeted brain metabolic or disease study"
+        },
+        {
+          "label": "sI",
+          "name": "scyllo-Inositol",
+          "aliases": [
+            "sIns",
+            "Scyllo",
+            "Scy"
+          ]
+        },
+        {
+          "label": "Tau",
+          "name": "Taurine",
+          "aliases": []
+        },
+        {
+          "label": "Thr",
+          "name": "Threonine",
+          "aliases": []
+        }
+      ],
+      "combined_signals": [
+        {
+          "label": "GABA+",
+          "name": "Edited GABA with co-edited contributions",
+          "aliases": []
+        },
+        {
+          "label": "Glx",
+          "name": "Glutamate + glutamine",
+          "aliases": [
+            "Glu+Gln"
+          ]
+        },
+        {
+          "label": "tCho",
+          "name": "Total choline-containing signal",
+          "aliases": [],
+          "common_fit_labels": [
+            "GPC+PCh",
+            "GPC+PCho"
+          ]
+        },
+        {
+          "label": "tCr",
+          "name": "Creatine + phosphocreatine",
+          "aliases": [
+            "Cr+PCr"
+          ]
+        },
+        {
+          "label": "tNAA",
+          "name": "N-Acetylaspartate + N-acetylaspartylglutamate",
+          "aliases": [
+            "NAA+NAAG"
+          ]
+        }
+      ]
+    },
+    {
+      "nucleus": "13C",
+      "metabolites": [
+        {
+          "label": "Ace",
+          "name": "Acetate",
+          "resonances": [
+            {
+              "site": "C1",
+              "label": "AceC1"
+            }
+          ]
+        },
+        {
+          "label": "Ala",
+          "name": "Alanine",
+          "resonances": [
+            {
+              "site": "C1",
+              "label": "AlaC1"
+            },
+            {
+              "site": "C3",
+              "label": "AlaC3"
+            }
+          ]
+        },
+        {
+          "label": "Asp",
+          "name": "Aspartate",
+          "resonances": [
+            {
+              "site": "C2",
+              "label": "AspC2"
+            },
+            {
+              "site": "C3",
+              "label": "AspC3"
+            }
+          ]
+        },
+        {
+          "label": "GABA",
+          "name": "Gamma-aminobutyric acid",
+          "resonances": [
+            {
+              "site": "C2",
+              "label": "GABAC2"
+            },
+            {
+              "site": "C3",
+              "label": "GABAC3"
+            },
+            {
+              "site": "C4",
+              "label": "GABAC4"
+            }
+          ]
+        },
+        {
+          "label": "Glc",
+          "name": "Glucose",
+          "resonances": [
+            {
+              "site": "C1",
+              "label": "GlcC1"
+            },
+            {
+              "site": "C6",
+              "label": "GlcC6"
+            }
+          ]
+        },
+        {
+          "label": "Gln",
+          "name": "Glutamine",
+          "resonances": [
+            {
+              "site": "C1",
+              "label": "GlnC1"
+            },
+            {
+              "site": "C2",
+              "label": "GlnC2"
+            },
+            {
+              "site": "C3",
+              "label": "GlnC3"
+            },
+            {
+              "site": "C4",
+              "label": "GlnC4"
+            },
+            {
+              "site": "C5",
+              "label": "GlnC5"
+            }
+          ]
+        },
+        {
+          "label": "Glu",
+          "name": "Glutamate",
+          "resonances": [
+            {
+              "site": "C1",
+              "label": "GluC1"
+            },
+            {
+              "site": "C2",
+              "label": "GluC2"
+            },
+            {
+              "site": "C3",
+              "label": "GluC3"
+            },
+            {
+              "site": "C4",
+              "label": "GluC4"
+            },
+            {
+              "site": "C5",
+              "label": "GluC5"
+            }
+          ]
+        },
+        {
+          "label": "HCO3",
+          "name": "Bicarbonate",
+          "resonances": [
+            {
+              "site": "sole carbon",
+              "label": "HCO3"
+            }
+          ]
+        },
+        {
+          "label": "Lac",
+          "name": "Lactate",
+          "resonances": [
+            {
+              "site": "C1",
+              "label": "LacC1"
+            },
+            {
+              "site": "C3",
+              "label": "LacC3"
+            }
+          ]
+        },
+        {
+          "label": "Pyr",
+          "name": "Pyruvate",
+          "resonances": [
+            {
+              "site": "C1",
+              "label": "PyrC1"
+            }
+          ]
+        }
+      ],
+      "combined_signals": [
+        {
+          "label": "GlnC1+GluC1",
+          "name": "Unresolved glutamine C1 and glutamate C1"
+        }
+      ]
+    },
+    {
+      "nucleus": "31P",
+      "metabolites": [
+        {
+          "label": "ATP",
+          "name": "Adenosine triphosphate",
+          "aliases": [],
+          "resonances": [
+            {
+              "site": "alpha",
+              "label": "alphaATP",
+              "aliases": [
+                "α-ATP"
+              ]
+            },
+            {
+              "site": "beta",
+              "label": "betaATP",
+              "aliases": [
+                "β-ATP"
+              ]
+            },
+            {
+              "site": "gamma",
+              "label": "gammaATP",
+              "aliases": [
+                "γ-ATP"
+              ]
+            }
+          ]
+        },
+        {
+          "label": "GPC",
+          "name": "Glycerophosphocholine",
+          "aliases": []
+        },
+        {
+          "label": "GPE",
+          "name": "Glycerophosphoethanolamine",
+          "aliases": []
+        },
+        {
+          "label": "NAD+",
+          "name": "Oxidized nicotinamide adenine dinucleotide",
+          "aliases": []
+        },
+        {
+          "label": "NADH",
+          "name": "Reduced nicotinamide adenine dinucleotide",
+          "aliases": []
+        },
+        {
+          "label": "PCho",
+          "name": "Phosphocholine",
+          "aliases": [
+            "PC",
+            "PCh"
+          ]
+        },
+        {
+          "label": "PCr",
+          "name": "Phosphocreatine",
+          "aliases": []
+        },
+        {
+          "label": "PE",
+          "name": "Phosphoethanolamine",
+          "aliases": []
+        },
+        {
+          "label": "Pi",
+          "name": "Inorganic phosphate",
+          "aliases": [],
+          "compartment_labels": {
+            "Pi_in": "intracellular",
+            "Pi_ex": "extracellular"
+          }
+        },
+        {
+          "label": "UDPG",
+          "name": "UDP-glucose",
+          "aliases": [
+            "UDPGlc"
+          ]
+        }
+      ],
+      "combined_signals": [
+        {
+          "label": "NAD(H)",
+          "name": "Combined oxidized and reduced NAD signal",
+          "aliases": []
+        },
+        {
+          "label": "PDE",
+          "name": "Phosphodiester pool",
+          "aliases": []
+        },
+        {
+          "label": "PME",
+          "name": "Phosphomonoester pool",
+          "aliases": []
+        }
+      ]
+    }
+  ],
+  "sources": [
+    "https://lcmodel.com/pub/LCModel/manual/manual.pdf",
+    "https://doi.org/10.1002/nbm.4347",
+    "https://pmc.ncbi.nlm.nih.gov/articles/PMC3788805/",
+    "https://doi.org/10.1038/jcbfm.2014.251",
+    "https://pmc.ncbi.nlm.nih.gov/articles/PMC2993807/",
+    "https://doi.org/10.1002/mrm.30570",
+    "https://pmc.ncbi.nlm.nih.gov/articles/PMC7971532/",
+    "https://pmc.ncbi.nlm.nih.gov/articles/PMC7396304/"
+  ]
+}

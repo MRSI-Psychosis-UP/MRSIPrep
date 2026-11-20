@@ -58,6 +58,7 @@ from mrsiprep.config.chimera_schemes import (
     valid_letters,
 )
 from mrsiprep.config.nuclei import DEFAULT_NUCLEUS, NucleusError, available_nuclei, metabolite_aliases
+from mrsiprep.config.metabolite_scan_presets import available_preset_nuclei, scan_candidates
 from mrsiprep.workflows.nipype_engine.steps_registry import STEP_DEPENDENCIES, validate_step_order
 
 # Debug/internal flags not useful in a user-facing form.
@@ -2451,12 +2452,21 @@ def _render_batch_import_mrsi_scan_step(state: dict) -> None:
     state["mrsi_root"] = mrsi_root
     _render_check(_path_check(mrsi_root), "MRSI root folder not found yet")
 
+    nucleus_key = "wizard_batch_mrsinmrs_nucleus"
+    st.session_state.setdefault(nucleus_key, state.get("mrsinmrs_nucleus", DEFAULT_NUCLEUS))
+    nucleus = st.selectbox(
+        "Which nucleus/resonance are you importing?",
+        available_nuclei(),
+        key=nucleus_key,
+        help="Remembered for the acquisition metadata (mrsinmrs.json) step, and used below to "
+        "suggest metabolite names for this nucleus.",
+    )
+    state["mrsinmrs_nucleus"] = nucleus
+
     met_key = "wizard_batch_mrsi_metabolites"
-    nucleus = state.get("mrsinmrs_nucleus") or DEFAULT_NUCLEUS
-    try:
-        met_options = sorted(metabolite_aliases(nucleus))
-    except NucleusError:
-        met_options = sorted(metabolite_aliases(DEFAULT_NUCLEUS))
+    met_options = scan_candidates(nucleus)
+    if not met_options:
+        st.caption(f"No curated metabolite suggestions for {nucleus} yet -- type names directly below.")
     st.session_state.setdefault(met_key, state.get("mrsi_metabolites", []))
     metabolites = st.multiselect(
         "Metabolites to scan for",
@@ -2556,11 +2566,10 @@ def _render_batch_import_mrsinmrs_step(state: dict) -> None:
             st.session_state.setdefault(crlb_unit_key, state.get("mrsinmrs_crlb_unit", ""))
             crlb_unit = st.selectbox("CRLB unit", list(SUPPORTED_CRLB_UNITS), key=crlb_unit_key)
 
-        col_nucleus, col_seq = st.columns(2)
-        with col_nucleus:
-            nucleus_key = "wizard_batch_mrsinmrs_nucleus"
-            st.session_state.setdefault(nucleus_key, state.get("mrsinmrs_nucleus", DEFAULT_NUCLEUS))
-            nucleus = st.selectbox("Nucleus", available_nuclei(), key=nucleus_key)
+        nucleus = state.get("mrsinmrs_nucleus", DEFAULT_NUCLEUS)
+        st.caption(f"Nucleus: **{nucleus}** (chosen in the MRSI scan step).")
+
+        col_seq, _col_spacer = st.columns(2)
         with col_seq:
             seq_key = "wizard_batch_mrsinmrs_sequence_name"
             st.session_state.setdefault(seq_key, state.get("mrsinmrs_sequence_name", ""))
@@ -2587,10 +2596,7 @@ def _render_batch_import_mrsinmrs_step(state: dict) -> None:
         met_key = "wizard_batch_mrsinmrs_metabolites"
         shared_metabolites = state.get("mrsi_metabolites", [])
         st.session_state.setdefault(met_key, shared_metabolites)
-        try:
-            met_options = sorted(metabolite_aliases(nucleus))
-        except NucleusError:
-            met_options = sorted(metabolite_aliases(DEFAULT_NUCLEUS))
+        met_options = scan_candidates(nucleus)
         metabolites = st.multiselect(
             "Metabolites scanned (convenience only -- not written to mrsinmrs.json)",
             sorted(set(met_options) | set(st.session_state[met_key])),

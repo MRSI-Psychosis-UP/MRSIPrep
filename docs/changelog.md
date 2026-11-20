@@ -1,6 +1,24 @@
 # Changelog
 
-## 2.2.12
+## 2.2.13
+
+### Command Builder GUI
+
+- Batch import's MRSI scan step now asks which nucleus/resonance is being
+  imported up front (remembered for the acquisition metadata step later),
+  and suggests metabolite names for that nucleus from a new curated
+  preset file (`mrsiprep/config/metabolite_scan_presets.json`) instead of
+  the pipeline-facing alias table in `nuclei.json`. The acquisition
+  metadata step no longer asks for the nucleus a second time -- it shows
+  the already-chosen one read-only instead.
+
+### Config
+
+- Added `mrsiprep/config/metabolite_scan_presets.json` (and its loader,
+  `mrsiprep/config/metabolite_scan_presets.py`): curated per-nucleus
+  metabolite/combined-signal name suggestions for the batch-import
+  wizard's MRSI scan step, kept separate from `nuclei.json`'s
+  pipeline-facing quality thresholds and map-locating alias table.
 
 ### Command Builder GUI
 
