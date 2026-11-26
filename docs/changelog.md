@@ -1,5 +1,32 @@
 # Changelog
 
+## 2.2.14
+
+### CLI
+
+- When a `--nproc` worker is killed outright (almost always the OS
+  out-of-memory killer), MRSIPrep now exits with a clear error suggesting a
+  lower `--nproc` instead of a bare `BrokenProcessPool` traceback.
+
+### Docker wrapper (`mrsiprep-docker` 1.2.0)
+
+- The container's RAM is capped at 75% of host memory by default
+  (`docker run --memory`), so a run that exhausts memory is killed inside
+  the container instead of the host killing desktop applications. Override
+  with `--memory 32g`, or disable with `--memory none`.
+
+### Command Builder GUI
+
+- The participants file preview now shows up to 500 rows (with a caption
+  when the file is longer) instead of only the first 20.
+- Fixed a Streamlit warning in the wizard's `--atlas` step: the saved atlas
+  choice now seeds the dropdown's default instead of writing to the
+  widget's session state on the same run.
+
+### Atlases
+
+- Bundled the `gm_mesh_20mm` and `gm_mesh_42mm` grey-matter mesh atlases.
+
 ## 2.2.13
 
 ### Command Builder GUI

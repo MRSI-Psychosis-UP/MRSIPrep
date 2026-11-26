@@ -77,5 +77,10 @@ container's own permission-fixing entrypoint means output files are owned by
 the invoking user, not root. `-e TZ=...` (skip with `--no-tz`) keeps console
 and logbook timestamps in sync with the host clock.
 
+The container's RAM is capped at 75% of host memory by default
+(`docker run --memory`), so a run that exhausts memory is killed inside the
+container instead of the host killing your desktop applications. Override
+with `--memory 32g`, or disable with `--memory none`.
+
 See the main repository's documentation for the full MRSIPrep CLI reference:
 https://mrsiprep.readthedocs.io/

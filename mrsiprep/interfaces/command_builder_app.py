@@ -742,7 +742,10 @@ def _render_participants_widget(
         else:
             try:
                 sep = "\t" if path.suffix.lower() == ".tsv" else None
-                preview = pd.read_csv(path, sep=sep, engine="python", nrows=20)
+                preview = pd.read_csv(path, sep=sep, engine="python")
+                if len(preview) > 500:
+                    st.caption(f"Showing the first 500 of {len(preview)} rows.")
+                    preview = preview.head(500)
                 st.dataframe(preview)
             except UnicodeDecodeError:
                 st.warning(
@@ -826,7 +829,12 @@ def _render_chimera_scheme_picker(
     return code, scale_value, grow_value
 
 
-def _render_atlas_widget(action: argparse.Action, key_prefix: str = "field_", label: str | None = None):
+def _render_atlas_widget(
+    action: argparse.Action,
+    key_prefix: str = "field_",
+    label: str | None = None,
+    default_override: str | None = None,
+):
     """Dropdown of every bundled atlas actually found under mrsiprep/data/atlas/
     (instead of a free-text field defaulting to one hardcoded name), plus the
     parameterized synthetic choices --atlas also accepts (custom/schaefer<N>/
@@ -835,14 +843,22 @@ def _render_atlas_widget(action: argparse.Action, key_prefix: str = "field_", la
     `key_prefix` isolates this widget's session-state keys from another
     caller rendering the same flag elsewhere (see _render_participants_widget).
     `label` optionally overrides the displayed label (defaults to
-    `_dest_label(action)`, preserving every existing call site's behavior)."""
+    `_dest_label(action)`, preserving every existing call site's behavior).
+
+    `default_override` seeds the selectbox's `index=` directly (e.g. from the
+    wizard's shadow copy) instead of the caller writing to this widget's
+    session_state key before calling in -- Streamlit forbids setting a
+    widget's session_state key on the same run it's also given an `index=`
+    default, which raised exactly this warning/error when the wizard's
+    --atlas handling did that."""
     from mrsiprep.parcellation.atlas_registry import available_bundled_atlases
 
     label = label if label is not None else _dest_label(action)
     bundled = available_bundled_atlases()
     synthetic = ["custom", "schaefer100", "schaefer400", "schaefer1000", "mist197", "cubic10mm"]
     options = bundled + synthetic + ["(custom value...)"]
-    default = action.default if action.default in options else options[0]
+    fallback_default = action.default if action.default in options else options[0]
+    default = default_override if default_override in options else fallback_default
     key = f"{key_prefix}{action.dest}"
     selected = st.selectbox(
         label, options, index=options.index(default),
@@ -1864,11 +1880,15 @@ def _render_wizard_flag_group(
             # never shadow-syncs on its own (see WIZARD_SHADOW_PREFIX's
             # module comment) -- do it explicitly here, or --atlas would
             # silently never reach Review/_collect_wizard_values.
-            if f"{WIZARD_KEY_PREFIX}atlas" not in st.session_state:
-                shadow_atlas = _wizard_shadow_get("atlas")
-                if shadow_atlas is not None:
-                    st.session_state[f"{WIZARD_KEY_PREFIX}atlas"] = shadow_atlas
-            atlas_value = _render_atlas_widget(action, key_prefix=WIZARD_KEY_PREFIX)
+            #
+            # Seed via default_override (an index=/default seed), never by
+            # writing st.session_state[f"{WIZARD_KEY_PREFIX}atlas"] directly:
+            # Streamlit forbids setting a widget's session_state key on the
+            # same run it's also instantiated with an index= default, and
+            # raised exactly that warning here.
+            atlas_value = _render_atlas_widget(
+                action, key_prefix=WIZARD_KEY_PREFIX, default_override=_wizard_shadow_get("atlas")
+            )
             _wizard_shadow_set("atlas", atlas_value)
             rendered_flags.add(flag)
             continue

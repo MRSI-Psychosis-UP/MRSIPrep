@@ -65,5 +65,31 @@ class UpdateFlagTests(unittest.TestCase):
         run.assert_not_called()
 
 
+class MemoryLimitTests(unittest.TestCase):
+    def _run_command(self, *extra):
+        with patch("mrsiprep_docker.__main__.check_docker", return_value=1), patch(
+            "mrsiprep_docker.__main__.check_image", return_value=True
+        ), patch("mrsiprep_docker.__main__.subprocess.run") as run, patch(
+            "mrsiprep_docker.__main__.os.makedirs"
+        ), patch("builtins.print"), patch("sys.argv", ["mrsiprep-docker", "/bids", "/out", *extra]):
+            run.return_value.returncode = 0
+            main()
+        return run.call_args.args[0]
+
+    def test_defaults_to_a_fraction_of_host_ram(self):
+        with patch("mrsiprep_docker.__main__.default_memory_limit", return_value="1000m"):
+            command = self._run_command()
+        self.assertIn("--memory=1000m", command)
+
+    def test_explicit_limit_overrides_default(self):
+        command = self._run_command("--memory", "32g")
+        self.assertIn("--memory=32g", command)
+        self.assertNotIn("--memory", command[command.index("mrsiup/mrsiprep:cpu"):])
+
+    def test_none_disables_the_limit(self):
+        command = self._run_command("--memory", "none")
+        self.assertFalse(any(arg.startswith("--memory") for arg in command))
+
+
 if __name__ == "__main__":
     unittest.main()

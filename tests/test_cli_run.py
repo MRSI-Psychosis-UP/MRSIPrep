@@ -15,6 +15,7 @@ def _config(**overrides):
         check_external_libs=False,
         validate_only=False,
         reports_only=False,
+        parcellation_mode="synthseg",
         nproc=1,
         nthreads=1,
     )
@@ -116,6 +117,40 @@ class MainParticipantRunTests(unittest.TestCase):
         with patch("mrsiprep.cli.run.parse_args", return_value=config), patch("mrsiprep.cli.run.run_participant_workflow", return_value=statuses):
             code = main([])
         self.assertEqual(code, 0)
+
+
+class MainBrokenProcessPoolTests(unittest.TestCase):
+    """A --nproc worker killed outright by the OS (almost always OOM) raises
+    BrokenProcessPool at the pool level -- it never becomes a per-recording
+    RecordingStatus.failed, so it needs its own catch with an actionable
+    message instead of crashing out with a bare traceback."""
+
+    def test_participant_run_reports_nproc_hint_instead_of_crashing(self):
+        from concurrent.futures.process import BrokenProcessPool
+
+        config = _config(nproc=3)
+        logger = MagicMock()
+        with patch("mrsiprep.cli.run.parse_args", return_value=config), patch(
+            "mrsiprep.cli.run.setup_logging", return_value=logger
+        ), patch("mrsiprep.cli.run.run_participant_workflow", side_effect=BrokenProcessPool()):
+            code = main([])
+        self.assertEqual(code, 1)
+        logger.error.assert_called_once()
+        args = logger.error.call_args.args
+        self.assertIn("--nproc", args[0])
+        self.assertIn(3, args)
+
+    def test_reports_only_run_also_catches_it(self):
+        from concurrent.futures.process import BrokenProcessPool
+
+        config = _config(reports_only=True, nproc=2)
+        logger = MagicMock()
+        with patch("mrsiprep.cli.run.parse_args", return_value=config), patch(
+            "mrsiprep.cli.run.setup_logging", return_value=logger
+        ), patch("mrsiprep.cli.run.run_reports_only_workflow", side_effect=BrokenProcessPool()):
+            code = main([])
+        self.assertEqual(code, 1)
+        logger.error.assert_called_once()
 
 
 class NativeThreadLimitTests(unittest.TestCase):

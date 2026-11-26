@@ -34,6 +34,21 @@ Image '{}' is missing
 Would you like to download? [Y/n] """
 
 
+DEFAULT_MEMORY_FRACTION = 0.75
+
+
+def default_memory_limit() -> str | None:
+    """75% of host RAM as a docker --memory value, or None if it can't be read."""
+    try:
+        for line in Path("/proc/meminfo").read_text().splitlines():
+            if line.startswith("MemTotal:"):
+                total_kib = int(line.split()[1])
+                return f"{int(total_kib * DEFAULT_MEMORY_FRACTION) // 1024}m"
+    except (OSError, ValueError, IndexError):
+        pass
+    return None
+
+
 def check_docker() -> int:
     """-1 docker not found, 0 found but daemon unreachable, 1 OK."""
     try:
@@ -80,6 +95,16 @@ def get_parser() -> argparse.ArgumentParser:
     g_wrap.add_argument("--mrsi-input-dir", metavar="PATH", type=os.path.abspath, help="host folder with the raw MRSI derivatives, if different from bids_dir, mounted read-only")
     g_wrap.add_argument("-u", "--user", help="run container as USER[:GROUP] instead of root (default: root, which self-chowns outputs to your user afterward)")
     g_wrap.add_argument("--no-tz", action="store_true", help="do not forward the host timezone to the container")
+    g_wrap.add_argument(
+        "--memory",
+        metavar="LIMIT",
+        default=None,
+        help=(
+            "container RAM limit passed to `docker run --memory` (e.g. 32g); 'none' disables it.\n"
+            f"Default: {int(DEFAULT_MEMORY_FRACTION * 100)}%% of host RAM, so a runaway run is OOM-killed\n"
+            "inside the container instead of taking down the desktop session."
+        ),
+    )
     g_wrap.add_argument("--shell", action="store_true", help="open a shell in the image instead of running mrsiprep")
 
     return parser
@@ -168,6 +193,12 @@ def main() -> int:
         command.extend(["-u", opts.user])
     else:
         command.extend(["-e", f"HOST_UID={os.getuid()}", "-e", f"HOST_GID={os.getgid()}"])
+
+    # Cap container RAM so an out-of-memory event kills MRSIPrep's own workers
+    # rather than letting the host OOM killer pick desktop apps.
+    memory = opts.memory if opts.memory is not None else default_memory_limit()
+    if memory and memory.lower() != "none":
+        command.append(f"--memory={memory}")
 
     if not opts.no_tz:
         tz_file = Path("/etc/timezone")

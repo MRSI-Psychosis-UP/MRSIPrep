@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
+from concurrent.futures.process import BrokenProcessPool
 
 from mrsiprep.cli.parser import parse_args, print_presets
 from mrsiprep.interfaces.freesurfer import FreeSurferError, check_license
@@ -104,11 +105,25 @@ def main(argv: list[str] | None = None) -> int:
     if config.check_external_libs:
         ok = check_external_software(Debug(verbose=config.verbose), config)
         return 0 if ok else 1
-    if config.validate_only:
-        return _run_validate_only(config, logger)
-    if config.reports_only:
-        return _run_reports_only(config, logger)
-    return _run_participant(config, logger)
+    try:
+        if config.validate_only:
+            return _run_validate_only(config, logger)
+        if config.reports_only:
+            return _run_reports_only(config, logger)
+        return _run_participant(config, logger)
+    except BrokenProcessPool:
+        # A --nproc worker was killed outright (almost always the OS OOM
+        # killer under --nproc > 1, each worker holding a full MRSI/
+        # registration/connectivity buffer) rather than raising a Python
+        # exception, so it never became a per-recording RecordingStatus.failed
+        # and reaches here as a bare pool-level failure instead.
+        logger.error(
+            "A processing worker was killed unexpectedly (most likely the system ran out of "
+            "memory with --nproc %d parallel recordings). Try again with a lower --nproc, e.g. "
+            "--nproc 1.",
+            config.nproc,
+        )
+        return 1
 
 
 if __name__ == "__main__":
