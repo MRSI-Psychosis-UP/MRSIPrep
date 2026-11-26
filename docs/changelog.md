@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.2.15
+
+### Packaging
+
+- The `chimera-MFMIHIFIS_197` and `chimera-SFMIHIFIS_200` atlas volumes and
+  the `mrsiprep.qc` and `mrsiprep.workflows.nipype_engine` package
+  `__init__.py` files are now tracked in git. Builds from a clean checkout
+  previously shipped these atlases without their images.
+
 ## 2.2.14
 
 ### CLI
